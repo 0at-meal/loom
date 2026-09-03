@@ -1,0 +1,52 @@
+﻿# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+# Virtual Environment
+.venv/
+venv/
+ENV/
+# Testing & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+# Linters & Typing
+.mypy_cache/
+.ruff_cache/
+# Environment Variables & Secrets
+.env
+.env.local
+# SQLite Databases (Runtime Metrics Logs)
+*.db
+*.sqlite3
+# Node / React Dashboard (Phase 7)
+node_modules/
+dashboard/dist/
+dashboard/build/
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
