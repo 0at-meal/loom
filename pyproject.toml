@@ -85,6 +85,10 @@ warn_no_return = true
 warn_unreachable = true
 
 [[tool.mypy.overrides]]
+module = "acquirer_sim.app"
+disallow_untyped_decorators = false
+
+[[tool.mypy.overrides]]
 module = [
     "scipy.*",
     "fakeredis.*",

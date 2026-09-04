@@ -32,6 +32,14 @@ Format: `[Phase] Decision — alternatives considered — why this one won`
 
 - **[Phase 1 Review] State design approved for Phase 4 PID consumption without structural changes.** Alternatives considered: computing traffic allocation weights inside `AcquirerState`; coupling continuous wall-clock decay into `record_outcome`. Why this one won: The state module provides both the stochastic signal (`sample()`) needed for Thompson exploration and the monotonic signal (`health_score`) needed for damping. Traffic allocation tracking ($w_i$) belongs strictly to the routing layer (Phase 3/4), not individual acquirer state. Continuous time decay adds floating-point and lock overhead to the hot path without demonstrable benefit over discrete event decay.
 
+- **[Phase 2] Outage state defaults to hard on/off step function for v1, reserving schema for gradual curves.** Alternatives considered: built-in time-decay interpolation (linear or sigmoid ramp); separate mock server process per outage state. Why this one won: A hard step-function outage is the most rigorous stress-test possible for Loom's bandit + PID control loop — if the router can damp an instantaneous cliff without overshoot or oscillation ringing, it easily handles gradual degradation. Internal ticker loops or wall-clock interpolation within the simulator would introduce nondeterminism into unit tests and race conditions during benchmark runs. Any desired continuous curve can be orchestrated externally via `POST /admin/success-rate` without complicating the simulator daemon.
+
+- **[Phase 2] Authorization declines under outage return HTTP 200 with structured JSON (`authorized: false`, `decline_code: 'ACQUIRER_OUTAGE'`) by default.** Alternatives considered: returning HTTP 503 Service Unavailable exclusively; dropping connections or timing out. Why this one won: Real payment acquirers (Stripe, Adyen) distinguish between transport failures and authorization declines. Returning a structured decline payload on HTTP 200 prevents unhandled HTTP client exceptions from crashing downstream transaction generators and ensures deterministic evaluation, while an optional `outage_behavior: HTTP_503` setting remains available for transport-level resilience testing.
+
+- **[Phase 2] Application factory pattern (`create_app`) with multi-process isolation.** Alternatives considered: single monolithic FastAPI instance with multi-tenant sub-paths (`/acquirers/{id}/authorize`). Why this one won: Production payment routers target distinct network endpoints (different hostnames/ports) per acquirer. Running independent processes on separate ports provides real OS-level failure isolation (one acquirer crashing or hanging cannot block another's event loop) and matches the exact URL-based routing architecture Phase 3 requires.
+
+- **[Phase 2 Review] Simulator contract certified for Phase 3 router integration with authoritative URL-path routing and explicit payload boolean checking.** Alternatives considered: requiring transaction deduplication / idempotency table in simulator; returning HTTP 400 on mismatched body `acquirer_id`. Why this one won: The simulator's primary role is to serve as an external stochastic trial generator for the control loop, not a replicated banking ledger. Resolving acquirer identity by URL path (`/acquirers/{id}/authorize`) matches real-world gateway routing where acquirers reside at distinct endpoints, and requiring Phase 3's router to check `response.json()["authorized"]` rather than HTTP status code mirrors production payment gateway consumption patterns.
+
 ## Interface Contracts
 
 ### [Phase 1] Per-Acquirer State & Health Signal Contract
@@ -43,25 +51,29 @@ Format: `[Phase] Decision — alternatives considered — why this one won`
 ```python
 from dataclasses import dataclass
 
+
 @dataclass(frozen=True, slots=True)
 class AcquirerStateConfig:
     """Immutable configuration for an acquirer's bandit and health model."""
-    alpha_prior: float = 1.0       # Prior alpha > 0.0 (default uniform Bayes prior)
-    beta_prior: float = 1.0        # Prior beta > 0.0 (default uniform Bayes prior)
-    decay_factor: float = 0.98      # Per-outcome retention factor gamma in (0.0, 1.0)
-    initial_health: float = 1.0    # Initial health score in [0.0, 1.0] (optimistic start)
+
+    alpha_prior: float = 1.0  # Prior alpha > 0.0 (default uniform Bayes prior)
+    beta_prior: float = 1.0  # Prior beta > 0.0 (default uniform Bayes prior)
+    decay_factor: float = 0.98  # Per-outcome retention factor gamma in (0.0, 1.0)
+    initial_health: float = 1.0  # Initial health score in [0.0, 1.0] (optimistic start)
+
 
 @dataclass(frozen=True, slots=True)
 class AcquirerStateSnapshot:
     """Immutable point-in-time snapshot of acquirer state."""
-    acquirer_id: str               # Unique identifier for the acquirer
-    alpha: float                   # Current Beta distribution shape parameter alpha >= alpha_prior
-    beta: float                    # Current Beta distribution shape parameter beta >= beta_prior
-    health_score: float            # Current decayed EWMA health score in [0.0, 1.0]
-    success_count: int             # Cumulative unweighted lifetime successes (>= 0)
-    failure_count: int             # Cumulative unweighted lifetime failures (>= 0)
-    total_count: int               # Cumulative unweighted lifetime transactions (>= 0)
-    last_updated_at: float         # Unix epoch timestamp of last recorded outcome
+
+    acquirer_id: str  # Unique identifier for the acquirer
+    alpha: float  # Current Beta distribution shape parameter alpha >= alpha_prior
+    beta: float  # Current Beta distribution shape parameter beta >= beta_prior
+    health_score: float  # Current decayed EWMA health score in [0.0, 1.0]
+    success_count: int  # Cumulative unweighted lifetime successes (>= 0)
+    failure_count: int  # Cumulative unweighted lifetime failures (>= 0)
+    total_count: int  # Cumulative unweighted lifetime transactions (>= 0)
+    last_updated_at: float  # Unix epoch timestamp of last recorded outcome
 
     @property
     def expected_success_rate(self) -> float:
@@ -163,6 +175,115 @@ def calculate_gamma_from_half_life(half_life_seconds: float, expected_tps: float
     ...
 ```
 
+### [Phase 2] Simulated Acquirer Service & Admin API Contract
+
+**Module Target**: `acquirer_sim/models.py`, `acquirer_sim/simulator.py`, `acquirer_sim/app.py`
+**Detailed Specification**: `docs/phase2-simulator-spec.md`
+
+#### 1. Core Data Models (Pydantic v2)
+
+```python
+from enum import Enum
+from typing import Literal
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class OutageBehavior(str, Enum):
+    RETURN_DECLINE = "RETURN_DECLINE"
+    HTTP_503 = "HTTP_503"
+    LATENCY_SPIKE = "LATENCY_SPIKE"
+
+
+class LatencyConfig(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    base_ms: float = 20.0
+    jitter_ms: float = 5.0
+    outage_spike_ms: float = 500.0
+
+
+class AcquirerConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    acquirer_id: str = Field(..., min_length=1)
+    base_success_rate: float = Field(default=0.95, ge=0.0, le=1.0)
+    latency: LatencyConfig = Field(default_factory=LatencyConfig)
+
+
+class AuthorizeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    transaction_id: str = Field(..., min_length=1)
+    amount: float = Field(..., gt=0.0)
+    currency: str = Field(default="USD", pattern=r"^[A-Z]{3}$")
+    merchant_id: str = "merchant_loom_default"
+    payment_method: str = "card"
+    timestamp: float | None = None
+
+
+class AuthorizeResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    transaction_id: str
+    acquirer_id: str
+    status: Literal["AUTHORIZED", "DECLINED"]
+    authorized: bool
+    authorization_code: str | None = None
+    decline_code: str | None = None
+    decline_message: str | None = None
+    simulated_latency_ms: float
+    timestamp: float
+
+
+class SuccessRateUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    success_rate: float = Field(..., ge=0.0, le=1.0)
+    reason: str | None = None
+
+
+class OutageToggleRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    active: bool
+    behavior: OutageBehavior = OutageBehavior.RETURN_DECLINE
+    transition_seconds: float = Field(default=0.0, ge=0.0)
+
+
+class AdminStateResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    acquirer_id: str
+    base_success_rate: float
+    effective_success_rate: float
+    outage_active: bool
+    outage_behavior: OutageBehavior
+    latency: LatencyConfig
+    total_requests: int
+    authorized_count: int
+    declined_count: int
+    outage_declines: int
+    empirical_success_rate: float
+    uptime_seconds: float
+
+
+class ResetResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    acquirer_id: str
+    message: str
+    timestamp: float
+```
+
+#### 2. HTTP Endpoints Contract
+
+| Method | Path | Request Body | Response Body | HTTP Status | Behavior |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `POST` | `/authorize` | `AuthorizeRequest` | `AuthorizeResponse` | `200`, `422`, `503` | Evaluates authorization against effective success rate; returns authorized or declined. |
+| `POST` | `/admin/success-rate` | `SuccessRateUpdateRequest` | `AdminStateResponse` | `200`, `422` | Mutates base success rate $p \in [0.0, 1.0]$. |
+| `POST` | `/admin/outage` | `OutageToggleRequest` | `AdminStateResponse` | `200`, `422` | Toggles outage state (hard on/off for v1; reserves `transition_seconds`). |
+| `GET` | `/admin/state` | None | `AdminStateResponse` | `200` | Inspects live telemetry, counters, and effective PSR. |
+| `POST` | `/admin/reset` | None | `ResetResponse` | `200` | Clears cumulative counters for clean test runs. |
+
+#### 3. Client Interaction Rules for Phase 3 Router
+
+- **HTTP 200 & `authorized: true`**: Router records `record_outcome(acquirer_id, success=True)`.
+- **HTTP 200 & `authorized: false`**: Router records `record_outcome(acquirer_id, success=False)` (regardless of decline code).
+- **HTTP 503 or Transport Error / Timeout**: Router catches client exception and records `record_outcome(acquirer_id, success=False)`.
+- **HTTP 422**: Router logs validation bug without penalizing acquirer health.
+
 ## Open Risks
 
 *(Rolls forward from the PRD, then grows as QA/Tech Lead surface new ones per phase.)*
@@ -176,6 +297,10 @@ def calculate_gamma_from_half_life(half_life_seconds: float, expected_tps: float
 - **[Phase 1 QA] Cold-start divergence between operational health ($H=1.0$) and Bayesian prior ($\mathbb{E}[\theta]=0.50$):** On initialization, health reports 100% (optimistic operational assumption) while posterior mean is 50% with uniform dispersion ($\sigma \approx 0.289$). The dashboard and PID layer must treat these as different concepts (operational availability vs exploration state) to avoid confusing operators during initial startup.
 - **[Phase 1 QA] Decoupling of telemetry timestamp from event-driven decay:** In `record_outcome(success, timestamp)`, `timestamp` is recorded as point-in-time metadata for future SQLite logging, but does not dynamically compute continuous $\Delta t$ decay. An acquirer that sits idle for 15 minutes during an outage experiences zero decay while idle until probe traffic is dispatched.
 - **[Phase 1 Review] PID derivative kick from Thompson Sampling noise:** In Phase 4, if PID consumes raw Thompson Sampling targets ($w_i^{\text{target}} \propto \text{sample}_i$), the high-frequency variance inherent in Beta sampling could cause derivative ringing ($K_d \frac{de}{dt}$). Phase 4 design must apply a low-pass filter on the error signal or compute target allocations from the smoothed health signal while using sampling exclusively for exploration allocation. Owned by Tech Lead / Architect for Phase 4.
+- **[Phase 2] Asynchronous latency simulation under high concurrent load:** In-flight `asyncio.sleep` calls simulate gateway delays non-blockingly, but if transaction velocity exceeds uvicorn worker thread capacity, event-loop task queue buildup may introduce unintended queueing latency beyond `simulated_latency_ms`. Benchmark harness must monitor real wall-clock round-trip vs simulated delay.
+- **[Phase 2] Outage classification in multi-acquirer test harness:** When simulating an outage via `RETURN_DECLINE`, the router treats it as a binary failure identically to a normal decline. If Phase 4's PID or Phase 7's dashboard needs to differentiate between natural card declines (e.g. insufficient funds) and systemic gateway outages, the router outcome schema must preserve `decline_code`.
+- **[Phase 2 QA] Identifier precedence in multi-tenant authorization routing:** When using `/acquirers/{acquirer_id}/authorize`, the URL path takes precedence over any `acquirer_id` passed in the JSON body. Phase 3 router implementation must ensure client requests do not supply conflicting route identifiers.
+- **[Phase 2 QA] Absence of transaction idempotency deduplication in simulator:** The simulated acquirer service executes an independent probabilistic draw on every `POST /authorize` call, even if the same `transaction_id` is replayed. Router retries in Phase 3/4 will be evaluated as new random trials rather than returning cached idempotent responses.
 
 ---
 
