@@ -401,10 +401,7 @@ class BanditStateRegistry:
 
     def get_all_states(self) -> dict[str, AcquirerStateSnapshot]:
         """Return state snapshots for all registered acquirers."""
-        return {
-            acquirer_id: state.get_state()
-            for acquirer_id, state in self._acquirers.items()
-        }
+        return {acquirer_id: state.get_state() for acquirer_id, state in self._acquirers.items()}
 
     def list_acquirer_ids(self) -> list[str]:
         """Return list of all currently registered acquirer identifiers."""

@@ -7,6 +7,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from acquirer_sim.models import AuthorizeResponse
+from router_core.pid import PIDConfig, PIDDiagnostics
 from router_core.state import AcquirerStateConfig, AcquirerStateSnapshot
 
 
@@ -72,6 +73,13 @@ class RouterConfig(BaseModel):
     seed: int | None = Field(
         default=None,
         description="Optional seed for Thompson Sampling PRNG (for deterministic testing).",
+    )
+    pid_config: PIDConfig | None = Field(
+        default=None,
+        description=(
+            "Optional PID smoothing configuration. "
+            "If None, router uses raw Thompson hard-switching."
+        ),
     )
 
 
@@ -140,6 +148,18 @@ class RoutingResult(BaseModel):
     state_snapshot: AcquirerStateSnapshot = Field(
         ...,
         description="Updated snapshot of the selected acquirer immediately following the outcome.",
+    )
+    smoothed_allocation: dict[str, float] | None = Field(
+        default=None,
+        description="Smoothed traffic allocation vector calculated by PID layer.",
+    )
+    target_allocation: dict[str, float] | None = Field(
+        default=None,
+        description="Raw target allocation vector from bandit perception layer.",
+    )
+    pid_diagnostics: PIDDiagnostics | None = Field(
+        default=None,
+        description="Internal PID calculation diagnostics if PID layer was active.",
     )
     timestamp: float = Field(
         ...,

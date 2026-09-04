@@ -12,6 +12,7 @@ import numpy as np
 from acquirer_sim.models import AuthorizeRequest, AuthorizeResponse
 from router_core.bandit import BanditStateRegistry
 from router_core.models import AcquirerRouteConfig, RouterConfig, RoutingResult
+from router_core.pid import PIDConfig, PIDDiagnostics, PIDState, calculate_pid_step
 from router_core.state import AcquirerStateSnapshot
 
 logger = logging.getLogger("loom.router")
@@ -40,10 +41,40 @@ class BanditRouter:
         self._client = http_client
         self._owns_client = http_client is None
 
+        # Phase 4 PID state initialization
+        self._pid_config: PIDConfig | None = config.pid_config
+        self._pid_state: PIDState | None = None
+        self._current_allocation: dict[str, float] = {}
+        self._cumulative_target: dict[str, float] = {}
+        self._dispatched_count: dict[str, int] = {}
+        self._last_diagnostics: PIDDiagnostics | None = None
+
+        if self._pid_config is not None:
+            acquirer_ids = [r.acquirer_id for r in config.routes]
+            self._pid_state = PIDState.initialize(acquirer_ids)
+            self._current_allocation = dict(self._pid_state.previous_allocation)
+            self._cumulative_target = {aid: 0.0 for aid in acquirer_ids}
+            self._dispatched_count = {aid: 0 for aid in acquirer_ids}
+
     @property
     def config(self) -> RouterConfig:
         """Return the configuration parameters for this router."""
         return self._config
+
+    @property
+    def current_allocation(self) -> dict[str, float]:
+        """Return current actual smoothed allocation vector across acquirers."""
+        return dict(self._current_allocation)
+
+    @property
+    def pid_state(self) -> PIDState | None:
+        """Return internal snapshot of PID state if PID is configured."""
+        return self._pid_state
+
+    @property
+    def last_diagnostics(self) -> PIDDiagnostics | None:
+        """Return diagnostics from the most recent PID step."""
+        return self._last_diagnostics
 
     async def start(self) -> None:
         """Initialize pooled HTTP client if owned."""
@@ -86,15 +117,60 @@ class BanditRouter:
         """Execute end-to-end routing decision, acquirer dispatch, and state update."""
         t_start = time.perf_counter()
 
-        # 1. Thompson Sampling & Argmax Selection (100% hard-switch)
+        # 1. Perception, PID Smoothing & Selection
         t_sample_start = time.perf_counter()
-        selected_id, samples = self.select_route()
+        samples = self._registry.sample_all(rng=self._rng)
+        target_allocation: dict[str, float] | None = None
+        smoothed_allocation: dict[str, float] | None = None
+        diagnostics: PIDDiagnostics | None = None
+
+        if self._pid_config is not None and self._pid_state is not None:
+            # Thompson sampling target allocation
+            win_id = max(samples.keys(), key=lambda aid: (samples[aid], aid))
+            target_allocation = {aid: 1.0 if aid == win_id else 0.0 for aid in samples}
+
+            # PID smoothing step
+            step_result = calculate_pid_step(
+                target_allocation=target_allocation,
+                current_allocation=self._current_allocation,
+                state=self._pid_state,
+                config=self._pid_config,
+                dt=1.0,
+            )
+            self._current_allocation = step_result.smoothed_allocation
+            self._pid_state = step_result.next_state
+            self._last_diagnostics = step_result.diagnostics
+            smoothed_allocation = dict(self._current_allocation)
+            diagnostics = step_result.diagnostics
+
+            # Discrete Actuation (Stochastic or Deficit Round-Robin)
+            if self._pid_config.actuation_mode == "deficit":
+                for aid in self._routes:
+                    self._cumulative_target[aid] += self._current_allocation[aid]
+                selected_id = max(
+                    sorted(self._routes.keys()),
+                    key=lambda aid: (
+                        self._cumulative_target[aid] - self._dispatched_count[aid],
+                        aid,
+                    ),
+                )
+                self._dispatched_count[selected_id] += 1
+            else:
+                keys = sorted(self._current_allocation.keys())
+                probs = [self._current_allocation[k] for k in keys]
+                selected_id = str(self._rng.choice(keys, p=probs))
+        else:
+            # Winner-take-all argmax hard-switch (Phase 3 baseline)
+            selected_id = max(samples.keys(), key=lambda aid: (samples[aid], aid))
+            smoothed_allocation = {aid: 1.0 if aid == selected_id else 0.0 for aid in samples}
+            target_allocation = dict(smoothed_allocation)
+
         t_sample_end = time.perf_counter()
         routing_latency_ms = (t_sample_end - t_sample_start) * 1000.0
 
         sample_str = ", ".join(f"{k}={v:.4f}" for k, v in sorted(samples.items()))
         logger.info(
-            "Routing decision: tx_id=%s -> selected=%s (100%% hard-switch, samples: [%s])",
+            "Routing decision: tx_id=%s -> selected=%s (samples: [%s])",
             request.transaction_id,
             selected_id,
             sample_str,
@@ -196,6 +272,9 @@ class BanditRouter:
             acquirer_latency_ms=acquirer_latency_ms,
             total_latency_ms=total_latency_ms,
             state_snapshot=updated_snapshot,
+            smoothed_allocation=smoothed_allocation,
+            target_allocation=target_allocation,
+            pid_diagnostics=diagnostics,
             timestamp=time.time(),
         )
 

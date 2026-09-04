@@ -417,9 +417,7 @@ class BanditRouter:
     ) -> None:
         """Initialize router registry, HTTP client configuration, and PRNG."""
         self._config = config
-        self._routes: dict[str, AcquirerRouteConfig] = {
-            r.acquirer_id: r for r in config.routes
-        }
+        self._routes: dict[str, AcquirerRouteConfig] = {r.acquirer_id: r for r in config.routes}
         self._registry = BanditStateRegistry()
         for r in config.routes:
             self._registry.register_acquirer(
