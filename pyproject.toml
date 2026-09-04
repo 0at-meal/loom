@@ -72,6 +72,7 @@ indent-style = "space"
 [tool.mypy]
 python_version = "3.11"
 strict = true
+explicit_package_bases = true
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
@@ -83,6 +84,18 @@ warn_redundant_casts = true
 warn_unused_ignores = true
 warn_no_return = true
 warn_unreachable = true
+
+[[tool.mypy.overrides]]
+module = [
+    "acquirer_sim.app",
+    "router_core.app",
+]
+disallow_untyped_decorators = false
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_decorators = false
+disallow_subclassing_any = false
 
 [[tool.mypy.overrides]]
 module = "acquirer_sim.app"

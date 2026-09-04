@@ -40,6 +40,19 @@ Format: `[Phase] Decision — alternatives considered — why this one won`
 
 - **[Phase 2 Review] Simulator contract certified for Phase 3 router integration with authoritative URL-path routing and explicit payload boolean checking.** Alternatives considered: requiring transaction deduplication / idempotency table in simulator; returning HTTP 400 on mismatched body `acquirer_id`. Why this one won: The simulator's primary role is to serve as an external stochastic trial generator for the control loop, not a replicated banking ledger. Resolving acquirer identity by URL path (`/acquirers/{id}/authorize`) matches real-world gateway routing where acquirers reside at distinct endpoints, and requiring Phase 3's router to check `response.json()["authorized"]` rather than HTTP status code mirrors production payment gateway consumption patterns.
 
+- **[Phase 3] 100% hard-switching routing policy ($\arg\max_i \theta_i$) without interim heuristic smoothing.** Alternatives considered: Softmax / Boltzmann exploration; rolling-average probability split; fractional traffic allocation. Why this one won: Phase 3's explicit purpose in the PRD is to demonstrate the raw bandit's oscillation and herd migration failure modes under stress. Introducing ad-hoc smoothing or heuristics now would preempt Phase 4's PID controller, obscure the baseline comparison needed to prove PID damping, and violate PRD Build Order Step 3.
+
+- **[Phase 3] Single-shot authorization per transaction without inline multi-arm retries.** Alternatives considered: Cascading fallback retries across remaining arms on decline. Why this one won: Automatic cascading retry masks route failure from the bandit, distorts observed PSR, and violates the clean Bernoulli trial contract where each transaction evaluates the primary routing decision. Retries belong to a higher-level orchestrator or resilience layer, not the core bandit selection loop.
+
+- **[Phase 3] Dual-mode router architecture: in-process async engine (`BanditRouter`) with optional FastAPI HTTP daemon wrapper (`router_core/app.py`).** Alternatives considered: standalone HTTP-only microservice; pure in-process library only. Why this one won: The in-process async engine allows millisecond-scale, zero-network-overhead unit/integration testing and high-throughput benchmarks (>5,000 TPS), while the HTTP service wrapper matches production multi-process payment gateway topologies and prepares the interface for Phase 5 (data layer) and Phase 7 (WebSocket dashboard).
+
+- **[Phase 3] Rate-controlled synthetic transaction generator with dual arrival pacing (Fixed and Poisson).** Alternatives considered: unthrottled loop; external load-testing tools (Locust, k6). Why this one won: A native Python asyncio generator using token-bucket / sleep intervals adheres to the zero-external-dependency rule (`docs/CONSTITUTION.md`), provides precise control over target TPS and duration, and emits structured transaction records directly compatible with Phase 5's SQLite metrics logger.
+
+- **[Phase 3 Review] Tech Lead Gate Certification: Verification of Bandit Oscillation Baseline, Pathology Triage, and Phase 4 PID Requirements.** Alternatives considered: Rejecting baseline due to route starvation pathology; implementing interim ad-hoc smoothing in Phase 3. Why this one won: The inverted gate is passed — QA's scripted scenario proved that the 13 route flips, back-to-back chatter (Tx 53–57), and binary 0% $\leftrightarrow$ 100% hard-switching are the pure mathematical consequence of applying an argmax hard-switch to overlapping Beta posterior distributions, with zero pipeline artifact or transport defect. The quantitative baseline (13 flips, 19-tx crossover window, 7 failures absorbed) establishes the exact reference against which Phase 4 PID dampening will be judged. Tech Lead makes three binding architectural calls for Phase 4:
+  1. **Mandatory Exploration Floor ($w_{\text{min}} \ge 3\%$)**: To resolve the dormant route starvation vulnerability uncovered by QA (where recovered Alpha received 0/50 transactions under event-driven decay), Phase 4 routing allocation MUST guarantee an exploration floor to prevent permanent lockout of recovering acquirers.
+  2. **Decoupled PID Error Input**: Phase 4 PID controller MUST NOT take raw Thompson sample deltas as the process variable error signal $e(t)$, which would induce catastrophic derivative kick ($K_d \frac{de}{dt}$) from stochastic sampling jitter. PID error must be derived from the smoothed EWMA health signal ($H_i$) or posterior means ($\mathbb{E}[\theta_i]$), using Thompson Sampling exclusively for target setpoint weighting.
+  3. **Certified Go for Phase 4**: Phase 3 pipeline implementation, test suite (116 tests passing), and documentation are certified complete and ready for the Phase 4 PID smoothing engine.
+
 ## Interface Contracts
 
 ### [Phase 1] Per-Acquirer State & Health Signal Contract
@@ -284,7 +297,87 @@ class ResetResponse(BaseModel):
 - **HTTP 503 or Transport Error / Timeout**: Router catches client exception and records `record_outcome(acquirer_id, success=False)`.
 - **HTTP 422**: Router logs validation bug without penalizing acquirer health.
 
+### [Phase 3] Bandit-Only Router & End-to-End Simulation Pipeline Contract
+
+**Module Target**: `router_core/models.py`, `router_core/router.py`, `router_core/app.py`, `scripts/generate_transactions.py`
+**Detailed Specification**: `docs/phase3-router-spec.md`
+
+#### 1. Core Data Models (Pydantic v2)
+
+```python
+from typing import Any, Literal
+from pydantic import BaseModel, ConfigDict, Field
+
+from acquirer_sim.models import AuthorizeRequest, AuthorizeResponse
+from router_core.state import AcquirerStateConfig, AcquirerStateSnapshot
+
+
+class AcquirerRouteConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    acquirer_id: str = Field(..., min_length=1)
+    base_url: str
+    auth_path_template: str = "/acquirers/{acquirer_id}/authorize"
+    timeout_sec: float = Field(default=2.0, gt=0.0)
+    state_config: AcquirerStateConfig = Field(default_factory=AcquirerStateConfig)
+
+    def get_authorize_url(self) -> str:
+        path = self.auth_path_template.format(acquirer_id=self.acquirer_id)
+        return f"{self.base_url.rstrip('/')}/{path.lstrip('/')}"
+
+
+class RouterConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    routes: list[AcquirerRouteConfig] = Field(..., min_length=1)
+    max_connections: int = Field(default=100, gt=0)
+    max_keepalive_connections: int = Field(default=20, gt=0)
+    seed: int | None = None
+
+
+class RoutingResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    transaction_id: str
+    selected_acquirer: str
+    thompson_samples: dict[str, float]
+    status: Literal["AUTHORIZED", "DECLINED", "ERROR"]
+    authorized: bool
+    success: bool
+    response_payload: AuthorizeResponse | None = None
+    error_message: str | None = None
+    routing_latency_ms: float = Field(..., ge=0.0)
+    acquirer_latency_ms: float = Field(..., ge=0.0)
+    total_latency_ms: float = Field(..., ge=0.0)
+    state_snapshot: AcquirerStateSnapshot
+    timestamp: float
+```
+
+#### 2. Pipeline Execution Contract (`BanditRouter`)
+
+- **Thompson Sampling**: Draws $\theta_i \sim \text{Beta}(\alpha_i, \beta_i)$ across all candidate arms.
+- **Winner-Take-All Hard-Switch**: $A^* = \arg\max_i \theta_i$. Assigns 100% of the transaction to $A^*$ (no PID smoothing or fractional allocation in Phase 3).
+- **Network Dispatch**: Sends `POST {base_url}/acquirers/{A*}/authorize` with pooled `httpx.AsyncClient`.
+- **Outcome Classification & Feedback**:
+  - `HTTP 200` + `authorized: True` $\implies$ Success ($x = 1.0$)
+  - `HTTP 200` + `authorized: False` $\implies$ Business Decline ($x = 0.0$)
+  - `HTTP 503` or Gateway 5xx $\implies$ System Outage ($x = 0.0$)
+  - `httpx.TimeoutException` or `NetworkError` $\implies$ Network Failure ($x = 0.0$)
+  - `HTTP 422` $\implies$ Client schema bug (raise/log error; do NOT penalize acquirer)
+- **State Feedback**: Invokes `BanditStateRegistry.record_outcome(A*, success=(x == 1.0))` using Phase 1's mean-reverting offset decay.
+
+#### 3. Router Service HTTP Endpoints
+
+| Method | Path | Request Body | Response Body | HTTP Status | Description |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `POST` | `/route` | `AuthorizeRequest` | `RoutingResult` | `200`, `422` | Executes Thompson Sampling selection, calls acquirer, updates state, returns result. |
+| `GET` | `/health` | None | JSON | `200` | Health check reporting registered routes and engine uptime. |
+| `GET` | `/state` | None | `dict[str, AcquirerStateSnapshot]` | `200` | Inspects live bandit parameters across all routes. |
+
+#### 4. Transaction Generator CLI Contract
+
+- Command: `python -m scripts.generate_transactions --target-url http://127.0.0.1:8000/route --tps 20.0 --duration 60 --distribution poisson`
+- Supported Modes: HTTP Target mode (`--target-url`) and In-Process mode (`--in-process`).
+
 ## Open Risks
+
 
 *(Rolls forward from the PRD, then grows as QA/Tech Lead surface new ones per phase.)*
 
@@ -301,8 +394,15 @@ class ResetResponse(BaseModel):
 - **[Phase 2] Outage classification in multi-acquirer test harness:** When simulating an outage via `RETURN_DECLINE`, the router treats it as a binary failure identically to a normal decline. If Phase 4's PID or Phase 7's dashboard needs to differentiate between natural card declines (e.g. insufficient funds) and systemic gateway outages, the router outcome schema must preserve `decline_code`.
 - **[Phase 2 QA] Identifier precedence in multi-tenant authorization routing:** When using `/acquirers/{acquirer_id}/authorize`, the URL path takes precedence over any `acquirer_id` passed in the JSON body. Phase 3 router implementation must ensure client requests do not supply conflicting route identifiers.
 - **[Phase 2 QA] Absence of transaction idempotency deduplication in simulator:** The simulated acquirer service executes an independent probabilistic draw on every `POST /authorize` call, even if the same `transaction_id` is replayed. Router retries in Phase 3/4 will be evaluated as new random trials rather than returning cached idempotent responses.
+- **[Phase 3] Herd migration stampede under sudden route failure:** In a multi-acquirer setup, when the primary route dies, raw Thompson Sampling rapidly transfers 100% of volume to the second-best route within 5-10 transactions. If the backup route cannot handle the sudden traffic spike, cascading failures will occur — providing the primary motivation for Phase 4's PID damping.
+- **[Phase 3] Allocation oscillation / flapping near crossover thresholds:** When two acquirers have similar posterior distributions or when a route recovers, sample noise causes high-frequency alternating assignments between routes. Operators must be prepared to see chatter in Phase 3 logs before PID smoothing is applied.
+- **[Phase 3] HTTP connection starvation under high TPS:** If the transaction generator is run at high concurrency against the HTTP router daemon, uvicorn and httpx connection pool limits (`max_connections=100`) must be tuned to prevent socket exhaustion and artificial transport latency.
+- **[Phase 3 QA] Post-Outage Route Starvation under Event-Driven Decay:** Empirical validation confirmed that when a disabled leader (Alpha) recovers to 95% health, it receives 0 out of 50 subsequent transactions because unselected routes experience zero decay updates. The backup route (Beta) accumulates high $\alpha$ with tightly concentrated variance, permanently locking out the recovered arm. Phase 4 PID / routing policy must mandate an exploration floor or active probing mechanism to restore traffic to recovered acquirers.
+- **[Phase 3 QA] In-Flight Concurrency Feedback Lag:** Under concurrent transaction dispatch, multiple coroutines draw Thompson samples simultaneously before any HTTP round-trip returns or updates bandit state. During sudden acquirer failure, an entire concurrent batch can fail before the first error degrades the posterior distribution. Phase 4/5 design should track in-flight transaction count $N_{\text{in-flight}}$ and apply virtual loss or load-balancing penalties.
+- **[Phase 3 QA] Baseline Oscillation & Chatter Reference Captured:** Quantitative baseline established in `docs/phase3-qa-report.md`: 13 route flips across 50 transactions in the crossover zone, with discrete 100% hard-switching and hairline flips at sample differences $\le 0.0022$. Phase 4 acceptance criteria will measure dampening against this reference.
 
 ---
+
 
 ## How to use this file
 

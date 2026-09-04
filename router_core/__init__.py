@@ -1,6 +1,8 @@
 """Router core package for dynamic payment routing."""
 
 from router_core.bandit import BanditStateRegistry, calculate_gamma_from_half_life
+from router_core.models import AcquirerRouteConfig, RouterConfig, RoutingResult
+from router_core.router import BanditRouter
 from router_core.state import (
     AcquirerState,
     AcquirerStateConfig,
@@ -8,9 +10,13 @@ from router_core.state import (
 )
 
 __all__ = [
+    "AcquirerRouteConfig",
     "AcquirerState",
     "AcquirerStateConfig",
     "AcquirerStateSnapshot",
+    "BanditRouter",
     "BanditStateRegistry",
+    "RouterConfig",
+    "RoutingResult",
     "calculate_gamma_from_half_life",
 ]
