@@ -120,6 +120,7 @@ addopts = "-v --strict-markers --tb=short"
 filterwarnings = [
     "error",
     "ignore::DeprecationWarning",
+    "ignore::starlette.exceptions.StarletteDeprecationWarning",
 ]
 [[tool.mypy.overrides]]
 module = "tests.*"

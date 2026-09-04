@@ -1,0 +1,397 @@
+# Phase 4 First-Principles Explainer: The PID Control Layer
+
+Imagine steering a massive container ship through a narrow harbor. If the helmsman looks at a digital compass and jerks the steering wheel 100% hard-left whenever the ship drifts an inch off course, and then 100% hard-right an instant later, the ship will violent roll, throw shipping containers into the sea, and likely run aground. A seasoned captain applies gentle, proportional steering adjustments, maintains a steady counter-rudder to cancel out cross-winds, and relies on hydrodynamic water friction to prevent the ship from swinging wildly.
+
+In Phase 4 of Loom, we engineered that stabilizing nautical steering system for payment routing: **The PID (Proportional-Integral-Derivative) Control Layer**.
+
+Sitting directly between the multi-armed bandit's statistical perception engine (**Phase 1 & 3**) and the discrete network dispatch actuator (**Phase 2**), the PID layer converts noisy, jumpy Bayesian probability targets into a smooth, continuous, and damped traffic-allocation trajectory.
+
+This explainer walks through the first-principles mathematics, control theory design decisions, implementation architecture, QA stress findings, and system contracts that define Phase 4.
+
+---
+
+## 1. What Problem This Solves (And What Breaks Without It)
+
+In Phase 3, Loom achieved a fully functioning closed-loop routing pipeline: incoming transactions drew random samples from **Beta distributions**, selected the winning payment gateway using an **argmax hard-switch** (routing 100% of the transaction to whichever arm drew the highest sample), and updated beliefs upon response.
+
+While mathematically elegant, Phase 3 exposed three critical operational pathologies under stress:
+
+1. **Discontinuous Hard-Switching (The 100% Cliff)**:
+   When an acquirer (e.g., Acquirer Alpha) suffered an outage, traffic did not ramp down; it snapped instantaneously from 100% to 0%, while the backup (Acquirer Beta) snapped from 0% to 100%. In production payments, diverting thousands of transactions per second instantaneously onto a backup processor triggers a **herd migration stampede**, overloading downstream socket pools and causing cascading gateway failures.
+2. **Decision Boundary Flapping (Square-Wave Chatter)**:
+   When two acquirers have similar health (e.g., Alpha at 95% and Beta at 94%), their posterior belief curves overlap heavily. Thompson Sampling draws fluctuate slightly due to random sampling jitter. Near the decision boundary, tiny differences ($\Delta \theta \le 0.0022$) caused the router to violently alternate choices on consecutive transactions (e.g., Tx 53–57 alternating A $\to$ B $\to$ A $\to$ B $\to$ A).
+3. **Dormant Route Starvation (Post-Outage Lockout)**:
+   Loom uses **event-driven decay**: mathematical retention decay steps *only* when a transaction is dispatched to that specific route. When Alpha experienced an outage, routing severed 100% of its traffic. Once offline, Alpha received zero transactions, meaning its decay froze at a depressed score ($\mu = 0.617$). Meanwhile, Beta accumulated successful transactions, tightening its confidence near 90%. When Alpha recovered to 95% operational health, it received **0 out of 50 subsequent transactions**—it was permanently starved and locked out because the system never gave it a probe transaction to prove it was healthy.
+
+**What breaks without Phase 4**: Without PID smoothing, Loom is unviable in enterprise production. It either shocks backup payment networks with instantaneous load spikes, chatters violently across decision boundaries, or permanently abandons healthy payment routes after temporary hiccups.
+
+---
+
+## 2. Core Mechanism and Mathematical Derivation
+
+To fix these pathologies, we must transition from binary all-or-nothing routing to continuous probability allocation on the **probability simplex** (a mathematical space where a vector of non-negative fractions always sums to exactly 1.0).
+
+```
+                      THE CONTROL LOOP ARCHITECTURE
+
+    +-----------------------+                    +------------------------+
+    |   Bandit Perception   |  Target w*(t)      |   PID Control Engine   |
+    |  (Thompson Sampling)  | -----------------> |  (Pure Function Step)  |
+    +-----------------------+                    +------------------------+
+                                                             |
+                                                             | Smoothed w(t)
+                                                             v
+    +-----------------------+                    +------------------------+
+    |  Acquirer Gateways    | <----------------- |   Discrete Actuator    |
+    |  (Network Dispatch)   |   HTTP Transaction |  (Deficit Round-Robin) |
+    +-----------------------+                    +------------------------+
+```
+
+### 2.1 The Error Signal and Zero-Sum Invariant
+Let $\mathbf{w}_t^* = [w_1^*, \dots, w_K^*]^T$ be the raw target allocation vector generated by the bandit (where the winning arm from Thompson Sampling requests 1.0 and all other arms request 0.0).
+Let $\mathbf{w}_t = [w_1, \dots, w_K]^T$ be the current actual smoothed allocation vector.
+
+The **error signal** $e_i(t)$ represents how far the current traffic allocation is from where the bandit wants it to be:
+$$e_i(t) = w_i^*(t) - w_i(t)$$
+
+Because both the target and current allocations reside on the probability simplex:
+$$\sum_{i=1}^K w_i^*(t) = 1.0 \quad \text{and} \quad \sum_{i=1}^K w_i(t) = 1.0$$
+
+The sum of raw errors across all $K$ payment gateways must mathematically equal zero:
+$$\sum_{i=1}^K e_i(t) = \sum_{i=1}^K w_i^*(t) - \sum_{i=1}^K w_i(t) = 1.0 - 1.0 = 0.0$$
+
+To protect against floating-point numerical drift in software, we explicitly enforce **zero-sum mean centering** on every step:
+$$e_i(t) \leftarrow e_i(t) - \frac{1}{K}\sum_{j=1}^K e_j(t)$$
+
+---
+
+### 2.2 The Proportional Term ($P$)
+The **proportional term** provides immediate corrective force proportional to the current error:
+$$P_i(t) = K_p \cdot e_i(t)$$
+
+- **Physical Meaning**: If Alpha is allocated 80% of traffic ($w_A = 0.80$) but the bandit now demands 0% ($w_A^* = 0.0$), the error is $e_A = -0.80$. With $K_p = 0.12$, the proportional term immediately commands a $-0.096$ downward push on Alpha's traffic share.
+- **Tuning Limit**: If $K_p$ is set too high ($K_p = 0.50$), it over-amplifies stochastic sampling noise, causing the allocation to jump $48.5\%$ in a single transaction and ringing near boundaries. If $K_p$ is set too low ($K_p = 0.02$), shedding is sluggish, absorbing 13 failures over 50 transactions.
+
+---
+
+### 2.3 The Integral Term ($I$) and Anti-Windup Clamping
+The proportional term alone decreases in magnitude as the error shrinks, which can leave a small residual gap. The **integral term** accumulates past errors over time to eliminate persistent steady-state offsets:
+$$I_i(t) = K_i \cdot \int_0^t e_i(\tau) \, d\tau \approx K_i \cdot \sum_{\tau=1}^t e_i(\tau) \Delta t$$
+
+#### The Integrator Windup Pathology
+In a payment system, when an acquirer experiences a sustained outage, $w_i^* = 0.0$. However, because the router enforces an active exploration floor ($w_i \ge 0.03$), the error is persistently negative:
+$$e_i = 0.0 - 0.03 = -0.03$$
+Over a 200-transaction outage, an unconstrained accumulator sums $-0.03 \times 200 = -6.0$ (or worse, down to $-8.99$ during the transition).
+
+When the outage clears, the target jumps back to $w_i^* = 1.0$. The proportional term commands $+0.1164$. However, the accumulated integral term is $-0.38$. Because the negative integral debt vastly exceeds the positive proportional push ($P + I < 0$), **the router is paralyzed**: it cannot allocate extra volume to the recovered gateway until dozens of transactions slowly bleed off the negative debt.
+
+#### The Mathematical Solution: Symmetric Clamping
+Ticket A enforces strict **anti-windup clamping** bounded by $[-I_{\text{max}}, +I_{\text{max}}]$ and zero-sum re-centering:
+$$A_i(t) = \text{clamp}\left( \gamma_I \cdot A_i(t-1) + e_i(t) \Delta t, \; -I_{\text{max}}, \; +I_{\text{max}} \right)$$
+$$A_i(t) \leftarrow A_i(t) - \frac{1}{K}\sum_{j=1}^K A_j(t)$$
+$$I_i(t) = K_i \cdot A_i(t)$$
+
+With $I_{\text{max}} = 1.0$ and $K_i = 0.005$, the maximum possible integral drag is strictly capped at $|0.005 \times -1.0| = 0.005$, completely eliminating recovery paralysis.
+
+---
+
+### 2.4 The Derivative Term ($D$) and "Derivative-on-Measurement"
+The **derivative term** anticipates the future trajectory of the error by measuring its rate of change:
+$$D_{\text{classical}} = K_d \frac{de_i(t)}{dt} = K_d \left( \frac{dw_i^*(t)}{dt} - \frac{dw_i(t)}{dt} \right)$$
+
+#### The Derivative Kick Pathology
+In classical PID, differentiating the error signal differentiates the setpoint target $w_i^*(t)$. When a Thompson sample suddenly flips the target from 0.0 to 1.0, the instantaneous mathematical slope $\frac{dw^*}{dt} \to \infty$. This injects an explosive mathematical spike into the actuator called **derivative kick**, causing the controller to violently lurch and destabilize the routing weights.
+
+#### The Mathematical Solution: Derivative-on-Measurement
+Because the setpoint $w^*$ jumps discontinuously, we calculate the derivative solely on the rate of change of the **actual process variable** (the smoothed allocation $w_i$):
+$$D_i(t) = - K_d \frac{w_i(t) - w_i(t-1)}{\Delta t}$$
+
+- **Physical Meaning**: This acts exactly like a **hydraulic dashpot** or **viscous fluid damper** (such as shock absorbers on a car). It provides zero resistance when the target jumps, but applies resistance proportional to how fast the actual allocation is moving.
+- **First-Order Low-Pass Filter**: To filter out high-frequency discrete step jitter, the derivative rate is optionally smoothed via exponential moving average:
+  $$\tilde{D}_i(t) = \beta_d \tilde{D}_i(t-1) + (1 - \beta_d) D_i(t)$$
+
+---
+
+### 2.5 Total Actuation Delta & The Bounded Simplex Projection
+The raw proposed change in traffic allocation is the linear superposition of the three terms:
+$$\Delta w_i(t) = P_i(t) + I_i(t) + D_i(t)$$
+$$\tilde{w}_i(t+1) = w_i(t) + \Delta w_i(t)$$
+
+Because unconstrained PID arithmetic can output negative numbers or numbers exceeding 1.0, we must project $\tilde{\mathbf{w}}$ onto the **bounded probability simplex** $\mathcal{S}_{w_{\text{min}}}$:
+$$\mathcal{S}_{w_{\text{min}}} = \left\{ \mathbf{w} \in \mathbb{R}^K \;\middle|\; \sum_{i=1}^K w_i = 1.0, \quad w_i \ge w_{\text{min}} \; \forall i \right\}$$
+
+#### Simplex Projection Algorithm (`project_to_bounded_simplex`)
+1. **Floor Clamping**: Clamp every arm to at least $w_{\text{min}}$:
+   $$w_i^{(1)} = \max(w_{\text{min}}, \tilde{w}_i)$$
+2. **Summation & Excess/Deficit Calculation**:
+   $$S = \sum_{i=1}^K w_i^{(1)}$$
+   - If $S > 1.0$, excess mass $E = S - 1.0$ must be shaved off. Identify all arms above the floor ($w_i^{(1)} > w_{\text{min}}$), calculate total headroom $H = \sum (w_i^{(1)} - w_{\text{min}})$, and deduct excess proportionally:
+     $$w_i^{(2)} = w_i^{(1)} - E \cdot \frac{w_i^{(1)} - w_{\text{min}}}{H}$$
+   - If $S < 1.0$, add deficit mass proportionally across all arms.
+3. **Exact Normalization**: Normalize $w_i = w_i^{(2)} / \sum w_j^{(2)}$ to guarantee exact mathematical summation to $1.0$.
+
+---
+
+### 2.6 Discrete Transaction Actuation: Deficit Round-Robin
+While the PID layer produces a continuous allocation vector (e.g., Alpha: 70%, Beta: 30%), payment transactions are **indivisible discrete events**. A $100 payment cannot be split across gateways; each authorization must commit 100% to a single acquirer.
+
+To convert continuous percentages into discrete decisions without introducing random binomial sampling jitter, we implemented **Deficit Round-Robin** (a discrete pacing algorithm akin to Bresenham's line algorithm):
+
+1. On each transaction, add the smoothed fractional allocation to each arm's cumulative bucket:
+   $$C_i \leftarrow C_i + w_i(t)$$
+2. Calculate each arm's deficit (how much traffic it was owed minus how much it actually received):
+   $$\text{Deficit}_i = C_i - D_i$$
+   where $D_i$ is the cumulative count of transactions dispatched to acquirer $i$.
+3. Select the acquirer with the highest deficit:
+   $$A^* = \arg\max_i \left( C_i - D_i \right)$$
+4. Increment the dispatched counter for the selected arm:
+   $$D_{A^*} \leftarrow D_{A^*} + 1$$
+
+*Result*: If Alpha's allocation is 70% and Beta's is 30%, transactions dispatch in an exact, deterministic sequence (A, A, B, A, A, B, A...) with zero random clustering.
+
+---
+
+## 3. Decisions Made and Rejected Alternatives
+
+```
+                                KEY ARCHITECTURAL DECISIONS
+
+   1. State Architecture        [Pure Function + Immutable Snapshot]  WON
+                                [Mutating Stateful Controller Class]  LOST
+
+   2. Derivative Math           [Derivative on Measurement (-dw/dt)]  WON
+                                [Classical Derivative on Error (de/dt)] LOST
+
+   3. Anti-Windup Strategy      [Symmetric Clamping [-Imax, +Imax]]   WON
+                                [Unbounded Integration with Leak]     LOST
+
+   4. Starvation Solution       [Simplex Exploration Floor (w >= 3%)] WON
+                                [Background Wall-Clock Ticker Decay]  LOST
+```
+
+### Decision 1: Pure-Function Engine vs. Stateful Mutating Controller
+- **Alternative Considered**: A traditional OOP class (`class PIDController`) with internal state variables mutated in place (`self.accumulated_error += e`).
+- **Why It Lost**: Internal mutation makes concurrent async programming notoriously bug-prone. In multi-coroutine web routers, in-flight race conditions corrupt accumulators.
+- **Why Pure Function Won**: `calculate_pid_step(target, current, state, config, dt)` has zero side-effects. It takes an immutable `PIDState` and returns a new `PIDState`. It is 100% deterministic, trivially testable with exact mathematical assertions, and completely immune to async race conditions.
+
+### Decision 2: Derivative-on-Measurement vs. Derivative on Error
+- **Alternative Considered**: Differentiating the raw error signal ($K_d \frac{de}{dt}$) and applying a heavy low-pass filter to smooth the spikes.
+- **Why It Lost**: A low-pass filter merely blunts an infinite impulse; it does not eliminate it. Under rapid bandit switching, filtered spikes still induced audible ringing.
+- **Why Derivative-on-Measurement Won**: By differentiating the actual allocation change ($-K_d \frac{dw}{dt}$), the derivative term provides pure viscous resistance against actual movement while being mathematically blind to discontinuous setpoint jumps.
+
+### Decision 3: Symmetric Hard Clamping vs. Leaky Integration Alone
+- **Alternative Considered**: Relying solely on exponential decay of accumulated error ($\gamma_I = 0.95$) without a hard cap.
+- **Why It Lost**: During long outages (e.g. 200+ transactions), geometric decay asymptotes to an equilibrium that still accumulates substantial error, causing multiple transactions of recovery lag.
+- **Why Hard Clamping Won**: Hard clamping to $[-I_{\text{max}}, +I_{\text{max}}]$ enforces a mathematically proven ceiling on recovery lag. QA testing proved that with $I_{\text{max}} = 1.0$, recovery delay is **0 transactions (immediate response on Step 1)**.
+
+### Decision 4: Simplex Exploration Floor vs. Background Wall-Clock Ticker
+- **Alternative Considered**: Spawning a background thread or timer task to periodically decay dormant acquirers in real time.
+- **Why It Lost**: Introduces wall-clock non-determinism, threading locks, and clock-drift race conditions in unit tests.
+- **Why Simplex Floor Won**: Projecting allocation directly onto $\mathcal{S}_{w_{\text{min}}}$ ($w_i \ge 0.03$) guarantees that 3% of live traffic is continuously routed as operational probes. When an acquirer recovers, event-driven decay naturally detects it on the next probe, restoring state without any background daemon threads.
+
+---
+
+## 4. The Interface Contract Produced
+
+Phase 4 formalizes its interfaces in [`router_core/pid.py`](file:///D:/loom/router_core/pid.py) and integrates them into [`router_core/models.py`](file:///D:/loom/router_core/models.py).
+
+### 4.1 Data Structures (`router_core/pid.py`)
+
+```python
+from dataclasses import dataclass
+from typing import Literal
+from pydantic import BaseModel, Field
+
+class PIDConfig(BaseModel):
+    """Immutable configuration for the PID smoothing layer."""
+    kp: float = Field(default=0.12, ge=0.0)
+    ki: float = Field(default=0.005, ge=0.0)
+    kd: float = Field(default=0.25, ge=0.0)
+    integral_max: float = Field(default=1.0, gt=0.0)
+    integral_decay: float = Field(default=1.0, gt=0.0, le=1.0)
+    derivative_filter_alpha: float = Field(default=0.0, ge=0.0, lt=1.0)
+    derivative_on_measurement: bool = Field(default=True)
+    min_allocation: float = Field(default=0.03, ge=0.0, lt=0.20)
+    actuation_mode: Literal["stochastic", "deficit"] = Field(default="stochastic")
+
+@dataclass(frozen=True, slots=True)
+class PIDState:
+    """Immutable point-in-time snapshot of internal PID state."""
+    accumulated_error: dict[str, float]
+    previous_error: dict[str, float]
+    previous_allocation: dict[str, float]
+    filtered_derivative: dict[str, float]
+    step_count: int = 0
+
+@dataclass(frozen=True, slots=True)
+class PIDDiagnostics:
+    """Telemetry envelope exposing intermediate control math for observability."""
+    error: dict[str, float]
+    p_term: dict[str, float]
+    i_term: dict[str, float]
+    d_term: dict[str, float]
+    raw_delta: dict[str, float]
+    pre_projection_allocation: dict[str, float]
+
+@dataclass(frozen=True, slots=True)
+class PIDStepResult:
+    """Output envelope of a single PID step calculation."""
+    smoothed_allocation: dict[str, float]
+    next_state: PIDState
+    diagnostics: PIDDiagnostics
+```
+
+### 4.2 Integration Contract with Downstream Layers (`RoutingResult`)
+To prepare for Phase 5's SQLite persistence and Phase 7's real-time dashboard, [`RoutingResult`](file:///D:/loom/router_core/models.py#L83) was extended with three typed telemetry fields:
+- `smoothed_allocation: dict[str, float] | None`: The actual probability weights applied to the decision.
+- `target_allocation: dict[str, float] | None`: The raw setpoint commanded by the bandit.
+- `pid_diagnostics: PIDDiagnostics | None`: The exact $P$, $I$, and $D$ component forces for live dashboard charting.
+
+---
+
+## 5. Logic-Level Implementation Walkthrough
+
+Here is how the control pipeline executes step-by-step during a single live transaction call to `BanditRouter.route()`:
+
+```
+[Incoming Transaction]
+         │
+         ▼
+1. Sample Thompson Beliefs across all arms: samples = registry.sample_all()
+         │
+         ▼
+2. Determine Winning Arm: win_id = argmax(samples)
+   Target Allocation: w*[win_id] = 1.0, all other w* = 0.0
+         │
+         ▼
+3. Call calculate_pid_step(target_allocation, current_allocation, pid_state, pid_config):
+   ├── a. Compute Error: raw_error = w* - w
+   │      Zero-Sum Center: error = raw_error - mean(raw_error)
+   ├── b. Proportional Term: p_term = Kp * error
+   ├── c. Integral Term: accum = clamp(decay * prev + error * dt, -I_max, +I_max)
+   │      Zero-Sum Center: accum = accum - mean(accum)
+   │      i_term = Ki * accum
+   ├── d. Derivative Term (on measurement): rate = -(w_curr - w_prev) / dt
+   │      Low-pass filter: filt = beta * prev_filt + (1 - beta) * rate
+   │      d_term = Kd * filt
+   ├── e. Raw Delta: raw_delta = p_term + i_term + d_term
+   │      Pre-projection: w_raw = w_curr + raw_delta
+   └── f. Project to Simplex: smoothed_allocation = project_to_bounded_simplex(w_raw, floor=0.03)
+         │
+         ▼
+4. Advance State:
+   self._current_allocation = step_result.smoothed_allocation
+   self._pid_state = step_result.next_state
+         │
+         ▼
+5. Discrete Actuator (Deficit Round-Robin):
+   ├── Update cumulative credits: cum_target[aid] += smoothed_allocation[aid]
+   └── Select arm with max deficit: selected_id = argmax(cum_target[aid] - dispatched[aid])
+   └── Increment dispatch counter: dispatched[selected_id] += 1
+         │
+         ▼
+6. Network Dispatch over HTTP: resp = client.post(selected_route_url, json=req)
+         │
+         ▼
+7. Record Closed-Loop Outcome: registry.record_outcome(selected_id, success=resp.authorized)
+         │
+         ▼
+8. Return RoutingResult(selected, samples, smoothed_allocation, pid_diagnostics, ...)
+```
+
+---
+
+## 6. Edge Cases QA Found and What They Revealed
+
+During Ticket B tuning and QA verification, four critical edge cases were discovered, audited, and resolved:
+
+### Finding 1: Integrator Windup Paralysis under 200-Transaction Outage
+- **The Test**: QA simulated an extended 200-transaction outage on Alpha followed by recovery.
+- **The Finding**: When anti-windup clamping was removed ($I_{\text{max}} = \infty$), the accumulator drifted to **$-8.99$**. Upon recovery, the massive negative integral term overpowered proportional control, **paralyzing the router for 5 to 6 transactions** where allocation remained frozen at the 3% floor.
+- **The Fix**: Ticket A's $I_{\text{max}} = 1.0$ clamping strictly limited the accumulator to $-1.0000$. Recovery was **immediate on Step 1 (0 steps delay)** with **$0.0000\%$ overshoot**.
+
+### Finding 2: The Steady-State Exploration Drift Phenomenon
+- **The Finding**: QA discovered that during normal, healthy steady-state operation, the 3% exploration floor creates a permanent $+0.03$ steady-state error on the dominant route ($e_A = 1.0 - 0.97 = +0.03$). Without anti-windup clamping, the integrator drifted infinitely positive ($+2.1 \to +2.4 \to +3.6 \dots$) even when no outage was occurring.
+- **Significance**: Ticket A's $I_{\text{max}} = 1.0$ clamping is not just an outage protection mechanism; it is an **indispensable architectural safeguard** that prevents normal steady-state drift from destabilizing the controller.
+
+### Finding 3: The Operational Failure Trade-off
+- **The Finding**: In Phase 3's raw baseline, Alpha absorbed 7 failures during an outage. Under tuned PID smoothing, Alpha absorbed 11 failures (+4 failures).
+- **Justification**: A gradual ramp-down inevitably routes a few extra transactions to a degrading route during the transition window. Absorbing 4 extra failures across 50 transactions is an intentional, defensible trade-off: an instantaneous 100% cutoff triggers herd migration stampedes that overwhelm downstream backup acquirers.
+
+### Finding 4: Bernoulli PRNG Crosstalk Across Test Isolation
+- **The Finding**: When comparing baseline and PID in automated tests, reusing the same simulated acquirer app instance caused random number generator drift (the second run consumed trials starting from step 151 instead of step 1).
+- **The Fix**: Test harnesses now instantiate completely isolated simulator instances per run, guaranteeing 100% identical Bernoulli trial sequences for scientific comparison.
+
+---
+
+## 7. Dependencies and Contract with Phase 5
+
+```
++-----------------------------------------------------------------------------------+
+| PREVIOUS PHASES                                                                   |
+|   Phase 1: AcquirerState, BanditStateRegistry, Beta Prior Math, Decay Offsets    |
+|   Phase 2: Simulated Acquirer HTTP Daemon, Outage Injection Admin API             |
+|   Phase 3: BanditRouter Pipeline, WTA Argmax Selection, Oscillation Baseline     |
++-----------------------------------------------------------------------------------+
+                                         │
+                                         ▼
++-----------------------------------------------------------------------------------+
+| PHASE 4 (CURRENT): THE PID CONTROL LAYER                                          |
+|   - calculate_pid_step pure function engine                                       |
+|   - project_to_bounded_simplex exploration floor enforcement                      |
+|   - Anti-windup bounded clamping (I_max = 1.0) & zero-kick derivative             |
+|   - Tuned Gains: Kp=0.12, Ki=0.005, Kd=0.25                                       |
+|   - RoutingResult telemetry envelope extension                                    |
++-----------------------------------------------------------------------------------+
+                                         │
+                                         ▼
++-----------------------------------------------------------------------------------+
+| NEXT PHASE (PHASE 5: DATA & METRICS LAYER)                                        |
+|   Phase 4 Owes Phase 5:                                                           |
+|     1. Structured RoutingResult payload with typed allocations and diagnostics.   |
+|     2. Stable, non-chattering transaction streams for rolling PSR calculation.     |
+|   Phase 5 Will Build:                                                             |
+|     - SQLite persistent transaction and telemetry logging.                        |
+|     - Redis Pub/Sub event broadcasting for live UI visualization.                 |
++-----------------------------------------------------------------------------------+
+```
+
+---
+
+## 8. Defensible Scope Exclusions
+
+To maintain implementation focus and avoid over-engineering, we deliberately excluded three items:
+
+1. **No Continuous Wall-Clock Integration ($\Delta t = t - t_{\text{prev}}$)**:
+   *Scope Call*: PID step math assumes constant discrete step $\Delta t = 1.0$ per transaction.
+   *Defense*: Payment routing is an event-driven discrete transaction process. Coupling control velocity to wall-clock time introduces floating-point jitter and makes unit testing dependent on system sleep timers. Discrete transaction-paced integration is deterministic and robust.
+2. **No Dynamic Exploration Floor Throttling**:
+   *Scope Call*: The minimum floor is fixed at $w_{\text{min}} = 0.03$ (3%) rather than dynamically tapering to 0% during sustained multi-hour outages.
+   *Defense*: 3% failure traffic during a total outage is an industry-standard trade-off to retain instant recovery detection. Dynamic throttling adds significant state-machine complexity for marginal benefit in early phases.
+3. **No Multi-Input Multi-Output (MIMO) Matrix Cross-Coupling**:
+   *Scope Call*: Each acquirer arm computes independent SISO (Single-Input Single-Output) PID terms, coupled strictly through zero-sum centering and simplex projection, rather than a full state-space matrix ($A, B, C, D$).
+   *Defense*: Independent PID with simplex projection runs in $O(K)$ linear time, requires tuning only 3 scalar gains, and is mathematically proven to conserve probability mass. Full MIMO matrix control would require dozens of cross-coupling coefficients with severe risk of numerical instability.
+
+---
+
+## Glossary
+
+- **Actuator**: The physical or logical mechanism that executes a decision (in Loom, the HTTP dispatch component).
+- **Anti-Windup Clamping**: A control mechanism that caps an accumulator to prevent extreme mathematical buildup during sustained error.
+- **Argmax**: Mathematical operator that selects the argument or candidate that yields the highest value.
+- **Bounded Simplex**: A mathematical probability space where all variables sum to 1.0 and each is guaranteed to be at least a minimum floor ($w_i \ge w_{\text{min}}$).
+- **Decision Boundary Flapping**: Rapid alternating choices caused by random noise when two options have nearly identical expected values.
+- **Deficit Round-Robin**: A deterministic scheduling algorithm that paces discrete items to match continuous fractional targets with zero random jitter.
+- **Derivative Kick**: A violent mathematical spike caused by differentiating an input that jumps instantaneously.
+- **Derivative-on-Measurement**: A control formulation that computes the derivative term from the actual output rather than the error, eliminating derivative kick.
+- **Dormant Route Starvation**: A failure mode where an unselected route never receives traffic, causing its event-driven learning to freeze indefinitely.
+- **Error Signal**: The numerical difference between the desired target setpoint and the actual current value ($e = w^* - w$).
+- **Exploration Floor**: A guaranteed minimum percentage of traffic assigned to non-lead gateways to continuously probe their operational health.
+- **Herd Migration Stampede**: A catastrophic failure mode where 100% of traffic suddenly diverts onto a single backup processor, crashing it under load.
+- **Leaky Integration**: An integral formulation that applies a slight decay factor ($\gamma_I < 1.0$) to slowly forget ancient accumulated error.
+- **Monotonic Easing**: A smooth, continuous transition curve that moves steadily in one direction without stuttering, jumping, or reversing.
+- **Overshoot**: How far a control variable shoots past its intended target before stabilizing.
+- **PID Controller**: A three-term feedback controller that applies Proportional, Integral, and Derivative corrections.
+- **Proportional Gain ($K_p$)**: The scaling constant that determines how strongly a controller pushes back based on current error magnitude.
+- **Ringing (Chatter)**: Rapid, unwanted oscillations around a target value before coming to rest.
+- **Thompson Sampling**: A probabilistic heuristic that chooses actions according to random samples drawn from posterior belief distributions.

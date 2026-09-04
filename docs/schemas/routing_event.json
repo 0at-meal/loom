@@ -1,0 +1,241 @@
+{
+  "additionalProperties": false,
+  "description": "Full point-in-time telemetry payload emitted to Redis Pub/Sub on every transaction.",
+  "properties": {
+    "event_id": {
+      "description": "Unique event identifier (UUID v4 hex string).",
+      "examples": [
+        "9f2b84c8e71b48b6a386123456789abc"
+      ],
+      "title": "Event Id",
+      "type": "string"
+    },
+    "sequence_number": {
+      "default": 0,
+      "description": "Monotonic sequential counter for order verification and drop detection.",
+      "examples": [
+        1
+      ],
+      "minimum": 0,
+      "title": "Sequence Number",
+      "type": "integer"
+    },
+    "event_type": {
+      "const": "ROUTING_COMPLETED",
+      "default": "ROUTING_COMPLETED",
+      "description": "Event classification discriminator for subscriber routing.",
+      "title": "Event Type",
+      "type": "string"
+    },
+    "timestamp": {
+      "description": "Epoch timestamp (seconds) when routing completed.",
+      "examples": [
+        1756973000.123
+      ],
+      "title": "Timestamp",
+      "type": "number"
+    },
+    "transaction_id": {
+      "description": "Transaction identifier echoed from inbound request.",
+      "examples": [
+        "tx_12345678-abcd-ef01-2345-6789abcdef01"
+      ],
+      "title": "Transaction Id",
+      "type": "string"
+    },
+    "selected_acquirer": {
+      "description": "The acquirer route selected by the routing engine.",
+      "examples": [
+        "acquirer_alpha"
+      ],
+      "title": "Selected Acquirer",
+      "type": "string"
+    },
+    "status": {
+      "description": "Outcome classification status.",
+      "enum": [
+        "AUTHORIZED",
+        "DECLINED",
+        "ERROR"
+      ],
+      "examples": [
+        "AUTHORIZED"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "authorized": {
+      "description": "True if payment authorized successfully, False otherwise.",
+      "examples": [
+        true
+      ],
+      "title": "Authorized",
+      "type": "boolean"
+    },
+    "success": {
+      "description": "Binary outcome feedback fed back into the bandit state.",
+      "examples": [
+        true
+      ],
+      "title": "Success",
+      "type": "boolean"
+    },
+    "decline_code": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Specific decline or error code if payment was not authorized.",
+      "examples": [
+        "ACQUIRER_OUTAGE"
+      ],
+      "title": "Decline Code"
+    },
+    "routing_latency_ms": {
+      "description": "Time taken by the router to select arm and compute PID step in ms.",
+      "examples": [
+        0.12
+      ],
+      "minimum": 0.0,
+      "title": "Routing Latency Ms",
+      "type": "number"
+    },
+    "acquirer_latency_ms": {
+      "description": "Network and execution latency to the acquirer in ms.",
+      "examples": [
+        22.45
+      ],
+      "minimum": 0.0,
+      "title": "Acquirer Latency Ms",
+      "type": "number"
+    },
+    "total_latency_ms": {
+      "description": "Total round-trip transaction latency in ms.",
+      "examples": [
+        22.57
+      ],
+      "minimum": 0.0,
+      "title": "Total Latency Ms",
+      "type": "number"
+    },
+    "thompson_samples": {
+      "additionalProperties": {
+        "type": "number"
+      },
+      "description": "Point-in-time Beta distribution samples drawn for all candidate routes.",
+      "examples": [
+        {
+          "acquirer_alpha": 0.892,
+          "acquirer_beta": 0.741
+        }
+      ],
+      "title": "Thompson Samples",
+      "type": "object"
+    },
+    "target_allocation": {
+      "anyOf": [
+        {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Raw bandit target allocation vector prior to PID smoothing.",
+      "examples": [
+        {
+          "acquirer_alpha": 1.0,
+          "acquirer_beta": 0.0
+        }
+      ],
+      "title": "Target Allocation"
+    },
+    "smoothed_allocation": {
+      "anyOf": [
+        {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Smoothed traffic allocation vector calculated by PID layer.",
+      "examples": [
+        {
+          "acquirer_alpha": 0.78,
+          "acquirer_beta": 0.22
+        }
+      ],
+      "title": "Smoothed Allocation"
+    },
+    "allocation_weight": {
+      "description": "The instantaneous smoothed allocation weight assigned to the chosen route.",
+      "examples": [
+        0.78
+      ],
+      "maximum": 1.0,
+      "minimum": 0.0,
+      "title": "Allocation Weight",
+      "type": "number"
+    },
+    "pid_diagnostics": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Internal PID calculation diagnostics if PID layer was active.",
+      "title": "Pid Diagnostics"
+    },
+    "updated_state": {
+      "additionalProperties": {
+        "type": "number"
+      },
+      "description": "Updated post-outcome snapshot for selected route (alpha, beta, health_score).",
+      "examples": [
+        {
+          "alpha": 2.9,
+          "beta": 1.0,
+          "expected_success_rate": 0.743,
+          "health_score": 1.0
+        }
+      ],
+      "title": "Updated State",
+      "type": "object"
+    }
+  },
+  "required": [
+    "timestamp",
+    "transaction_id",
+    "selected_acquirer",
+    "status",
+    "authorized",
+    "success",
+    "routing_latency_ms",
+    "acquirer_latency_ms",
+    "total_latency_ms",
+    "thompson_samples",
+    "allocation_weight",
+    "updated_state"
+  ],
+  "title": "RoutingEvent",
+  "type": "object"
+}

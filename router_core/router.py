@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import inspect
 import logging
 import time
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import httpx
 import numpy as np
@@ -14,6 +15,10 @@ from router_core.bandit import BanditStateRegistry
 from router_core.models import AcquirerRouteConfig, RouterConfig, RoutingResult
 from router_core.pid import PIDConfig, PIDDiagnostics, PIDState, calculate_pid_step
 from router_core.state import AcquirerStateSnapshot
+
+if TYPE_CHECKING:
+    from data_layer.redis_pubsub import AsyncEventPublisher, EventPublisher
+    from data_layer.sqlite_logger import MetricsLogger, SQLiteMetricsStore
 
 logger = logging.getLogger("loom.router")
 
@@ -26,16 +31,22 @@ class BanditRouter:
         config: RouterConfig,
         http_client: httpx.AsyncClient | None = None,
         rng: np.random.Generator | None = None,
+        registry: BanditStateRegistry | None = None,
+        event_publisher: EventPublisher | AsyncEventPublisher | Any | None = None,
+        metrics_logger: MetricsLogger | SQLiteMetricsStore | Any | None = None,
     ) -> None:
         """Initialize router registry, HTTP client configuration, and PRNG."""
         self._config = config
         self._routes: dict[str, AcquirerRouteConfig] = {r.acquirer_id: r for r in config.routes}
-        self._registry = BanditStateRegistry()
+        self._registry = registry if registry is not None else BanditStateRegistry()
+        self._event_publisher = event_publisher
+        self._metrics_logger = metrics_logger
         for r in config.routes:
-            self._registry.register_acquirer(
-                acquirer_id=r.acquirer_id,
-                config=r.state_config,
-            )
+            if r.acquirer_id not in self._registry.list_acquirer_ids():
+                self._registry.register_acquirer(
+                    acquirer_id=r.acquirer_id,
+                    config=r.state_config,
+                )
 
         self._rng = rng if rng is not None else np.random.default_rng(config.seed)
         self._client = http_client
@@ -60,6 +71,21 @@ class BanditRouter:
     def config(self) -> RouterConfig:
         """Return the configuration parameters for this router."""
         return self._config
+
+    @property
+    def registry(self) -> BanditStateRegistry:
+        """Return the underlying state registry."""
+        return self._registry
+
+    @property
+    def event_publisher(self) -> Any | None:
+        """Return the optional event publisher hook."""
+        return self._event_publisher
+
+    @property
+    def metrics_logger(self) -> Any | None:
+        """Return the optional metrics logger hook."""
+        return self._metrics_logger
 
     @property
     def current_allocation(self) -> dict[str, float]:
@@ -259,7 +285,7 @@ class BanditRouter:
             updated_snapshot.expected_success_rate,
         )
 
-        return RoutingResult(
+        routing_result = RoutingResult(
             transaction_id=request.transaction_id,
             selected_acquirer=selected_id,
             thompson_samples=samples,
@@ -277,6 +303,24 @@ class BanditRouter:
             pid_diagnostics=diagnostics,
             timestamp=time.time(),
         )
+
+        if self._event_publisher is not None:
+            try:
+                pub_res = self._event_publisher.publish_routing_event(routing_result)
+                if inspect.isawaitable(pub_res):
+                    await pub_res
+            except Exception as exc:  # noqa: BLE001 - Telemetry errors must never crash payment path
+                logger.warning("Failed to publish routing telemetry event: %s", exc)
+
+        if self._metrics_logger is not None:
+            try:
+                log_res = self._metrics_logger.log_routing_result(routing_result)
+                if inspect.isawaitable(log_res):
+                    await log_res
+            except Exception as exc:  # noqa: BLE001 - Telemetry errors must never crash payment path
+                logger.warning("Failed to log metrics for transaction: %s", exc)
+
+        return routing_result
 
     def get_state(self, acquirer_id: str) -> AcquirerStateSnapshot:
         """Return point-in-time state snapshot for a single acquirer."""

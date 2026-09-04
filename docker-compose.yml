@@ -1,4 +1,13 @@
-﻿version: '3.8'
+# ==============================================================================
+# Loom Phase 5 Local Infrastructure: Redis Service
+# ==============================================================================
+# Spins up Redis 7 with AOF persistence and automated container healthcheck.
+# Usage:
+#   docker compose up -d
+#   docker compose ps
+#   docker compose down
+# ==============================================================================
+version: '3.8'
 
 services:
   redis:

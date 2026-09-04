@@ -1,0 +1,62 @@
+{
+  "additionalProperties": false,
+  "description": "Alert event emitted when an acquirer's health degrades or recovers.",
+  "properties": {
+    "event_id": {
+      "description": "Unique alert identifier.",
+      "title": "Event Id",
+      "type": "string"
+    },
+    "event_type": {
+      "const": "HEALTH_ALERT",
+      "default": "HEALTH_ALERT",
+      "title": "Event Type",
+      "type": "string"
+    },
+    "timestamp": {
+      "description": "Epoch timestamp when alert was triggered.",
+      "title": "Timestamp",
+      "type": "number"
+    },
+    "acquirer_id": {
+      "description": "Acquirer whose health triggered the alert.",
+      "title": "Acquirer Id",
+      "type": "string"
+    },
+    "old_health": {
+      "description": "Health score prior to the outcome.",
+      "title": "Old Health",
+      "type": "number"
+    },
+    "new_health": {
+      "description": "Health score following the outcome.",
+      "title": "New Health",
+      "type": "number"
+    },
+    "severity": {
+      "default": "WARNING",
+      "description": "Alert severity tier.",
+      "enum": [
+        "INFO",
+        "WARNING",
+        "CRITICAL"
+      ],
+      "title": "Severity",
+      "type": "string"
+    },
+    "message": {
+      "description": "Human-readable summary of the health state transition.",
+      "title": "Message",
+      "type": "string"
+    }
+  },
+  "required": [
+    "timestamp",
+    "acquirer_id",
+    "old_health",
+    "new_health",
+    "message"
+  ],
+  "title": "HealthAlertEvent",
+  "type": "object"
+}
