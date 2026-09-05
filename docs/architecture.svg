@@ -1,0 +1,275 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1160 840"
+     font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
+
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="6" refY="5"
+            markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#475569"/>
+    </marker>
+    <marker id="arrow-accent" viewBox="0 0 10 10" refX="6" refY="5"
+            markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#6366F1"/>
+    </marker>
+  </defs>
+
+  <!-- Canvas -->
+  <rect width="1160" height="840" fill="#FFFFFF"/>
+
+  <!-- Title -->
+  <text x="580" y="36" text-anchor="middle"
+        font-size="18" font-weight="700" fill="#0F172A">
+    Loom — Dynamic Payment Routing Architecture
+  </text>
+  <text x="580" y="56" text-anchor="middle"
+        font-size="11" font-weight="400" fill="#64748B">
+    Thompson Sampling + PID Control · FastAPI · Redis · SQLite · React
+  </text>
+
+  <!-- ────────────────────────────────────────────────────── -->
+  <!-- Tier 0 · Transaction Generator                        -->
+  <!-- ────────────────────────────────────────────────────── -->
+
+  <rect x="440" y="80" width="280" height="60" rx="8"
+        fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.5"/>
+  <text x="580" y="106" text-anchor="middle"
+        font-size="13" font-weight="600" fill="#0F172A">Transaction Generator</text>
+  <text x="580" y="124" text-anchor="middle"
+        font-size="11" font-weight="400" fill="#64748B">scripts/ · Python CLI</text>
+
+  <!-- ────────────────────────────────────────────────────── -->
+  <!-- Tier 1 · Router Core                                  -->
+  <!-- ────────────────────────────────────────────────────── -->
+
+  <rect x="80" y="200" width="1000" height="200" rx="8"
+        fill="#F8FAFC" stroke="#94A3B8" stroke-dasharray="4 4"/>
+  <text x="100" y="220"
+        font-size="11" font-weight="600" fill="#94A3B8">Router Core</text>
+  <text x="194" y="220"
+        font-size="11" font-weight="400" fill="#94A3B8">·  router_core/  ·  FastAPI :8000</text>
+
+  <!-- Card: Thompson Sampling -->
+  <rect x="120" y="260" width="200" height="80" rx="8"
+        fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.5"/>
+  <text x="220" y="290" text-anchor="middle"
+        font-size="13" font-weight="600" fill="#0F172A">Thompson Sampling</text>
+  <text x="220" y="310" text-anchor="middle"
+        font-size="11" font-weight="400" fill="#64748B">Beta(α,β) draws · bandit.py</text>
+
+  <!-- Card: PID Controller -->
+  <rect x="360" y="260" width="200" height="80" rx="8"
+        fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.5"/>
+  <text x="460" y="290" text-anchor="middle"
+        font-size="13" font-weight="600" fill="#0F172A">PID Controller</text>
+  <text x="460" y="310" text-anchor="middle"
+        font-size="11" font-weight="400" fill="#64748B">Kp / Ki / Kd gains · pid.py</text>
+
+  <!-- Card: Acquirer State -->
+  <rect x="600" y="260" width="200" height="80" rx="8"
+        fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.5"/>
+  <text x="700" y="290" text-anchor="middle"
+        font-size="13" font-weight="600" fill="#0F172A">Acquirer State</text>
+  <text x="700" y="310" text-anchor="middle"
+        font-size="11" font-weight="400" fill="#64748B">EWMA health · state.py</text>
+
+  <!-- Card: API Surface -->
+  <rect x="840" y="260" width="200" height="80" rx="8"
+        fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.5"/>
+  <text x="940" y="290" text-anchor="middle"
+        font-size="13" font-weight="600" fill="#0F172A">API Surface</text>
+  <text x="940" y="310" text-anchor="middle"
+        font-size="11" font-weight="400" fill="#64748B">REST + WebSocket · app.py</text>
+
+  <!-- Internal forward arrows -->
+  <path d="M 320 300 H 360" fill="none" stroke="#475569" stroke-width="1.5"
+        stroke-linejoin="round" marker-end="url(#arrow)"/>
+  <text x="340" y="292" text-anchor="middle"
+        font-size="9" font-weight="400" fill="#94A3B8">target</text>
+
+  <path d="M 560 300 H 600" fill="none" stroke="#475569" stroke-width="1.5"
+        stroke-linejoin="round" marker-end="url(#arrow)"/>
+  <text x="580" y="292" text-anchor="middle"
+        font-size="9" font-weight="400" fill="#94A3B8">update</text>
+
+  <path d="M 800 300 H 840" fill="none" stroke="#475569" stroke-width="1.5"
+        stroke-linejoin="round" marker-end="url(#arrow)"/>
+  <text x="820" y="292" text-anchor="middle"
+        font-size="9" font-weight="400" fill="#94A3B8">serve</text>
+
+  <!-- Closed-loop feedback path -->
+  <path d="M 700 340 V 362 H 220 V 340" fill="none"
+        stroke="#6366F1" stroke-width="1.5" stroke-dasharray="4 4"
+        stroke-linejoin="round" marker-end="url(#arrow-accent)"/>
+  <text x="460" y="376" text-anchor="middle"
+        font-size="9" font-weight="500" fill="#6366F1">outcome feedback</text>
+
+  <!-- ────────────────────────────────────────────────────── -->
+  <!-- Tier 2a · Acquirer Simulator                          -->
+  <!-- ────────────────────────────────────────────────────── -->
+
+  <rect x="80" y="440" width="460" height="160" rx="8"
+        fill="#F8FAFC" stroke="#94A3B8" stroke-dasharray="4 4"/>
+  <text x="100" y="460"
+        font-size="11" font-weight="600" fill="#94A3B8">Acquirer Simulator</text>
+  <text x="234" y="460"
+        font-size="11" font-weight="400" fill="#94A3B8">·  acquirer_sim/  ·  FastAPI :8001</text>
+
+  <!-- Card: Alpha -->
+  <rect x="120" y="480" width="120" height="80" rx="8"
+        fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.5"/>
+  <text x="180" y="514" text-anchor="middle"
+        font-size="13" font-weight="600" fill="#0F172A">Alpha</text>
+  <text x="180" y="534" text-anchor="middle"
+        font-size="11" font-weight="400" fill="#64748B">/authorize</text>
+
+  <!-- Card: Beta -->
+  <rect x="260" y="480" width="120" height="80" rx="8"
+        fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.5"/>
+  <text x="320" y="514" text-anchor="middle"
+        font-size="13" font-weight="600" fill="#0F172A">Beta</text>
+  <text x="320" y="534" text-anchor="middle"
+        font-size="11" font-weight="400" fill="#64748B">/authorize</text>
+
+  <!-- Card: Gamma -->
+  <rect x="400" y="480" width="120" height="80" rx="8"
+        fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.5"/>
+  <text x="460" y="514" text-anchor="middle"
+        font-size="13" font-weight="600" fill="#0F172A">Gamma</text>
+  <text x="460" y="534" text-anchor="middle"
+        font-size="11" font-weight="400" fill="#64748B">/authorize</text>
+
+  <text x="310" y="578" text-anchor="middle"
+        font-size="10" font-weight="400" fill="#94A3B8">
+    Scriptable outages · Controllable success rates
+  </text>
+
+  <!-- ────────────────────────────────────────────────────── -->
+  <!-- Tier 2b · Data Layer                                  -->
+  <!-- ────────────────────────────────────────────────────── -->
+
+  <rect x="600" y="440" width="480" height="160" rx="8"
+        fill="#F8FAFC" stroke="#94A3B8" stroke-dasharray="4 4"/>
+  <text x="620" y="460"
+        font-size="11" font-weight="600" fill="#94A3B8">Data Layer</text>
+  <text x="688" y="460"
+        font-size="11" font-weight="400" fill="#94A3B8">·  data_layer/</text>
+
+  <!-- Card: Redis -->
+  <rect x="640" y="480" width="200" height="80" rx="8"
+        fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.5"/>
+  <text x="740" y="510" text-anchor="middle"
+        font-size="13" font-weight="600" fill="#0F172A">Redis 7</text>
+  <text x="740" y="530" text-anchor="middle"
+        font-size="11" font-weight="400" fill="#64748B">Pub/Sub · Health state store</text>
+
+  <!-- Card: SQLite -->
+  <rect x="860" y="480" width="200" height="80" rx="8"
+        fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.5"/>
+  <text x="960" y="510" text-anchor="middle"
+        font-size="13" font-weight="600" fill="#0F172A">SQLite</text>
+  <text x="960" y="530" text-anchor="middle"
+        font-size="11" font-weight="400" fill="#64748B">Append-only tx ledger</text>
+
+  <text x="840" y="578" text-anchor="middle"
+        font-size="10" font-weight="400" fill="#94A3B8">
+    redis_state.py · redis_pubsub.py · sqlite_logger.py
+  </text>
+
+  <!-- ────────────────────────────────────────────────────── -->
+  <!-- Tier 3a · Live Dashboard                              -->
+  <!-- ────────────────────────────────────────────────────── -->
+
+  <rect x="80" y="660" width="580" height="140" rx="8"
+        fill="#F8FAFC" stroke="#94A3B8" stroke-dasharray="4 4"/>
+  <text x="100" y="680"
+        font-size="11" font-weight="600" fill="#94A3B8">Live Dashboard</text>
+  <text x="186" y="680"
+        font-size="11" font-weight="400" fill="#94A3B8">·  dashboard/  ·  React + Vite :5173</text>
+
+  <!-- Card: Allocation Chart -->
+  <rect x="120" y="700" width="140" height="60" rx="8"
+        fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.5"/>
+  <text x="190" y="726" text-anchor="middle"
+        font-size="12" font-weight="600" fill="#0F172A">Allocation Chart</text>
+  <text x="190" y="744" text-anchor="middle"
+        font-size="10" font-weight="400" fill="#64748B">Traffic split curves</text>
+
+  <!-- Card: Metric Readouts -->
+  <rect x="300" y="700" width="140" height="60" rx="8"
+        fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.5"/>
+  <text x="370" y="726" text-anchor="middle"
+        font-size="12" font-weight="600" fill="#0F172A">Metric Readouts</text>
+  <text x="370" y="744" text-anchor="middle"
+        font-size="10" font-weight="400" fill="#64748B">Rolling PSR · Health</text>
+
+  <!-- Card: Operator Controls -->
+  <rect x="480" y="700" width="140" height="60" rx="8"
+        fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.5"/>
+  <text x="550" y="726" text-anchor="middle"
+        font-size="12" font-weight="600" fill="#0F172A">Operator Controls</text>
+  <text x="550" y="744" text-anchor="middle"
+        font-size="10" font-weight="400" fill="#64748B">Outage triggers</text>
+
+  <!-- ────────────────────────────────────────────────────── -->
+  <!-- Tier 3b · Baseline Router + Success Metric            -->
+  <!-- ────────────────────────────────────────────────────── -->
+
+  <rect x="700" y="660" width="380" height="60" rx="8"
+        fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.5"/>
+  <text x="890" y="686" text-anchor="middle"
+        font-size="13" font-weight="600" fill="#0F172A">Baseline Router</text>
+  <text x="890" y="704" text-anchor="middle"
+        font-size="11" font-weight="400" fill="#64748B">Static priority-list · Circuit breaker · baseline_router/</text>
+
+  <rect x="700" y="740" width="380" height="60" rx="8"
+        fill="#FFFFFF" stroke="#6366F1" stroke-width="1.5"/>
+  <text x="890" y="766" text-anchor="middle"
+        font-size="13" font-weight="600" fill="#0F172A">PSR Lift = Loom − Baseline</text>
+  <text x="890" y="784" text-anchor="middle"
+        font-size="11" font-weight="400" fill="#64748B">Smooth allocation curve · No oscillation</text>
+
+  <!-- ────────────────────────────────────────────────────── -->
+  <!-- Connectors                                            -->
+  <!-- ────────────────────────────────────────────────────── -->
+
+  <!-- TX Generator → Router Core -->
+  <path d="M 580 140 V 200" fill="none" stroke="#475569" stroke-width="1.5"
+        stroke-linejoin="round" marker-end="url(#arrow)"/>
+  <text x="596" y="176"
+        font-size="10" font-weight="400" fill="#64748B">POST /route</text>
+
+  <!-- Router Core → Acquirer Simulator -->
+  <path d="M 300 400 V 440" fill="none" stroke="#475569" stroke-width="1.5"
+        stroke-linejoin="round" marker-end="url(#arrow)"/>
+  <text x="316" y="426"
+        font-size="10" font-weight="400" fill="#64748B">HTTP /authorize</text>
+
+  <!-- Router Core → Data Layer -->
+  <path d="M 840 400 V 440" fill="none" stroke="#475569" stroke-width="1.5"
+        stroke-linejoin="round" marker-end="url(#arrow)"/>
+  <text x="856" y="426"
+        font-size="10" font-weight="400" fill="#64748B">Pub/Sub + Log</text>
+
+  <!-- Router Core → Dashboard (WebSocket) -->
+  <path d="M 80 300 H 40 V 730 H 80" fill="none"
+        stroke="#6366F1" stroke-width="1.5"
+        stroke-linejoin="round" marker-end="url(#arrow-accent)"/>
+  <text x="30" y="520"
+        font-size="10" font-weight="500" fill="#6366F1"
+        transform="rotate(-90 30 520)" text-anchor="middle">WS /ws/telemetry</text>
+
+  <!-- Baseline Router → Acquirer Simulator -->
+  <path d="M 700 660 V 620 H 300 V 600" fill="none" stroke="#475569" stroke-width="1.5"
+        stroke-linejoin="round" marker-end="url(#arrow)"/>
+  <text x="500" y="614" text-anchor="middle"
+        font-size="10" font-weight="400" fill="#64748B">Comparison runs</text>
+
+  <!-- ────────────────────────────────────────────────────── -->
+  <!-- Footer                                                -->
+  <!-- ────────────────────────────────────────────────────── -->
+
+  <text x="580" y="826" text-anchor="middle"
+        font-size="10" font-weight="500" fill="#6366F1">
+    Closed-loop: Sample beliefs → PID smooth → Dispatch → Observe outcome → Update Beta(α,β) → Repeat
+  </text>
+
+</svg>

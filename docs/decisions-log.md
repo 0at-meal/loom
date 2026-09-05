@@ -176,7 +176,13 @@ Format: `[Phase] Decision — alternatives considered — why this one won`
   4. *Load-Bearing Disambiguation Legend*: Explicitly labeling `'Loom (live)'` vs `'Static baseline (recorded run)'` is load-bearing, preventing technical panels and auditors from misinterpreting the reference line as a second live router or shadow canary arm.
   5. *Dynamic Outage-Anchor Synchronization*: Pinning the baseline curve's outage step to the live chart's outage-trigger timestamp ensures both systems appear to encounter the outage at the exact same horizontal coordinate on the x-axis, regardless of when the live operator injects the fault.
 
+- **[Post-Phase 7 Tech Lead Review] README Editorial Governance: Retention of Standalone "How This Was Built" Engineering Loop Section.** Alternatives considered: Folding "How This Was Built" into an abbreviated summary paragraph inside "How It Works" (Principle 10 ruthless cutting); removing engineering methodology from the README entirely to focus solely on software user documentation. Why this one won:
+  1. *Separation of System Architecture from Meta-Engineering Process*: "How It Works" specifies the runtime payment execution pipeline (Simulator $\to$ Router Core $\to$ Data Layer $\to$ Dashboard). Conflating runtime software mechanics with team engineering methodology creates cognitive confusion between the payment control loop and the multi-role development loop.
+  2. *Load-Bearing Evidence of the PID-Wiring Bug*: Loom's engineering credibility rests on proving that its multi-role loop (Architect $\to$ Engineer $\to$ QA $\to$ Tech Lead) operates as a rigorous, adversarial safety mechanism. Condensing the section would obscure the concrete PID-wiring bug—where the production server entrypoints silently fell back to Winner-Take-All hard-switching and were caught exclusively by QA's live TCP socket verification. That bug is primary evidence of engineering integrity, not an implementation footnote.
+  3. *Balance of Depth and Conciseness*: Applying Principle 9 ("real depth over hand-waving") while maintaining Principle 10 discipline: the section is kept tight (33 lines), contains an illustrative Mermaid cycle, details the defect and resolution with exact parameter locks ($K_p=0.12, K_i=0.005, K_d=0.25, I_{\text{max}}=1.0, w_{\text{min}}=0.03$), and links directly to regression test artifacts (`tests/router_core/test_server_cli.py`).
+
 ## Interface Contracts
+
 
 ### [Phase 1] Per-Acquirer State & Health Signal Contract
 
