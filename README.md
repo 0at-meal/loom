@@ -6,22 +6,6 @@ A multi-armed bandit algorithm continuously learns which payment acquirer is hea
 
 ---
 
-## Hero Visual
-
-<!-- PLACEHOLDER: HERO VISUAL (Owned by Frontend Engineer / Designer) -->
-<!--
-  Target Asset: docs/architecture.svg / Animated screencast of the live Mission-Control cockpit.
-  Required Content:
-    1. The live allocation chart showing Loom's smooth exponential PID easing curve (solid lines, peak jump <= 11.77%)
-       directly juxtaposed against the static baseline's instantaneous Heaviside cliff drop (dashed hairline, 100.0% step jump).
-    2. The vertical Alert Rust marker (#E5484D) pinning the exact transaction where the outage was injected (Tx #51).
-    3. Headline metrics readouts (Lifetime PSR, Rolling 50-Tx PSR, and Lift-vs-Baseline).
--->
-> [!NOTE]
-> **Hero Visual Placeholder**: The production visualization artifact is maintained by the Frontend Engineering role. For architectural topology, refer to [`docs/architecture.svg`](file:///d:/loom/docs/architecture.svg).
-
----
-
 ## Results at a Glance
 
 All metrics below are pulled directly from empirical benchmark runs on the identical 150-transaction outage gauntlet documented in [`docs/phase6-qa-report.md`](file:///d:/loom/docs/phase6-qa-report.md), [`docs/phase7-qa-report.md`](file:///d:/loom/docs/phase7-qa-report.md), and [`docs/phase4-qa-report.md`](file:///d:/loom/docs/phase4-qa-report.md). The benchmark environment evaluates Primary Acquirer Alpha (95% base PSR) vs Backup Acquirer Beta (94% base PSR) with simulator seed `42` across three stages: Warmup (Tx 1–50), Outage on Alpha (Tx 51–100, effective PSR 0.0%), and Recovery on Alpha (Tx 101–150, effective PSR 95.0%).
