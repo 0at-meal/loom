@@ -14,17 +14,17 @@ class PIDConfig(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     kp: float = Field(
-        default=0.20,
+        default=0.12,
         ge=0.0,
         description="Proportional gain constant. Controls immediate reaction to allocation error.",
     )
     ki: float = Field(
-        default=0.01,
+        default=0.005,
         ge=0.0,
         description="Integral gain constant. Eliminates steady-state offset.",
     )
     kd: float = Field(
-        default=0.10,
+        default=0.25,
         ge=0.0,
         description="Derivative gain constant. Dampens oscillation and rate of change.",
     )

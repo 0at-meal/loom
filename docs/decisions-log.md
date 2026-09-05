@@ -120,6 +120,62 @@ Format: `[Phase] Decision — alternatives considered — why this one won`
 
 - **[Phase 6] Database isolation via dedicated SQLite ledger (`baseline_metrics.db`) with identical DDL.** Alternatives considered: Logging Loom and Baseline runs into a single `loom_metrics.db` with run tags; ephemeral in-memory SQLite tables. Why this one won: Executing the baseline into `baseline_metrics.db` using the identical `data_layer/schema.sql` guarantees zero table write-lock contention, eliminates WAL checkpoint starvation during concurrent benchmark runs, and preserves an immutable, isolated audit trail for side-by-side SQL diffing.
 
+- **[Phase 7] Locked Mission-Control Visual Direction (Navy `#0B1120`, Panel `#111827`, Hairlines `#1E3A5F`, Amber `#D9A441`, Rust `#C1622D`).** Alternatives considered: Standard Tailwind UI kit; Grafana embedded iframe; light/dark SaaS themes. Why this one won: Loom is demonstrating a mathematically rigorous control system. Consumer SaaS designs with pastel gradients and rounded card kit shadows dilute credibility. Locking the mission-control palette establishes semantic clarity: Amber is strictly reserved for live telemetry numbers and the healthy-state chart line; Rust is strictly reserved for outage/danger states; monospace is restricted to numbers; flat hairline borders eliminate UI fluff.
+
+- **[Phase 7] FastAPI-Native WebSocket Gateway (`/ws/telemetry`) over separate Node.js proxy.** Alternatives considered: Standalone Node.js proxy (`ws` / `socket.io`); client polling HTTP `/state`. Why this one won: Directly leverages Phase 5's `AsyncEventSubscriber` in Python, eliminating an extra runtime daemon and preserving single-process execution for the demo environment without added operational complexity.
+
+- **[Phase 7] Decoupled Circular Ring Buffer with `requestAnimationFrame` render throttling.** Alternatives considered: Direct React `setState` per message; fixed interval polling (`setInterval`). Why this one won: Transaction rates of 20–50 TPS cause 50 state dispatches per second if wired naively, freezing the browser thread. A circular ring buffer (200 events) combined with a `requestAnimationFrame` 60 FPS animation ticker ensures rock-solid UI smoothness with bounded client memory (<50MB).
+
+- **[Phase 7] Hybrid Cold-Start Bootstrap (SQLite History + Redis Live Stream).** Alternatives considered: Redis Streams with consumer groups; empty chart on initial page load. Why this one won: Redis Pub/Sub has at-most-once delivery and no historical replay buffer. Sending an initial bootstrap snapshot of recent transactions from SQLite upon WebSocket connection guarantees the chart populates instantly upon page open without waiting for new transactions.
+
+- **[Phase 7] Backend Reverse Proxy for Acquirer Outage Controls.** Alternatives considered: Direct browser fetch to acquirer ports with CORS; manual curl commands in terminal. Why this one won: Eliminates browser CORS issues and decouples the frontend from internal port topology by routing admin requests through `router_core/app.py`.
+
+- **[Phase 7] Contextualized Multi-Scenario Benchmark Presentation (Phase 6 Findings).** Alternatives considered: Displaying raw standard benchmark (86% vs 92%) without context; hiding baseline comparisons entirely. Why this one won: In an unconstrained simulation with infinite mock secondary capacity, static hard-switching appears to win because secondary collapse is unmodeled. Presenting the 8.5x stability improvement (11.77% vs 100.0% peak jump) alongside the Overreaction ($M=1$, +1000 bps Loom lift) and Gray Failure scenarios provides an honest, compelling, scientifically sound comparison.
+
+- **[Phase 4/7 Review] Production PID Server Wiring & Global Tuned Gains Lock.** Alternatives considered: Leaving PID optional via explicit CLI opt-in flag with no-op default; allowing separate gain profiles across dashboard and core router. Why this one won: Without PID explicitly instantiated in the production CLI entrypoint (`router_core/server.py`) and default ASGI application instance (`router_core/app.py`), the router silently fell back to Phase 3 Winner-Take-All hard-switching, emitting binary 100%/0% square-wave allocations that completely broke live dashboard damping. We enabled PID by default in both entrypoints with a `--no-pid` bypass flag, and locked default gains in `PIDConfig` across all scripts, dashboard footers, and test suites to Phase 4's empirically tuned values ($K_p=0.12, K_i=0.005, K_d=0.25, I_{\text{max}}=1.0, w_{\text{min}}=0.03$), eliminating untuned aggressive settings ($K_p=0.40, K_i=0.05, K_d=0.10$).
+
+- **[Phase 7 Revision] Visual Design System & Information Architecture Revision (Supersedes Phase 7 Color/Type Decision).** Alternatives considered: Retaining original navy/amber/rust palette; adopting generic light/dark SaaS theme; embedding Grafana; maintaining disconnected bottom-deck operator controls. Why this one won:
+  1. *Visual & Semantic Discipline*: The original navy (`#0B1120`), amber (`#D9A441`), and rust (`#C1622D`) console created high visual fatigue, eye vibration, and competing semantic signals across multiple route lines. The revised palette shifts to industrial slate ground (`#0F1115`), cockpit panel (`#16181D`), and low-contrast borders (`#2A2D34`), governed by strictly **one accent** (`#5B8DEF` cobalt blue for healthy state, active chart lines, and focus states) and **one alert** (`#E5484D` crimson for outage/degraded states only, never decorative).
+  2. *Typography & Casing*: Switching from Inter / JetBrains Mono to `IBM Plex Sans` (for all UI text, headings, and labels) and `IBM Plex Mono` (strictly reserved for live numeric telemetry: PSR%, health scores, RTT, counters) establishes authentic engineering rhythm. Mandating sentence case throughout eliminates the shouting and visual noise of tracked-out uppercase.
+  3. *Information Architecture (Sensor-Actuator Colocation)*: Separating the operator outage controls into an isolated bottom deck forced operators to scan back and forth across 800 vertical pixels between the health readout and the trigger button. Colocating each acquirer's outage controls physically adjacent to its own health card unifies perception and actuation into a cohesive operational unit.
+  4. *Progressive Disclosure*: Default-closed `<details>` disclosures for "Diagnostics" (Phase 6 benchmark comparison audit) and "Simulation controls" (global presets and reset) reclaim primary vertical real estate, ensuring the live allocation chart and acquirer health readouts remain the unobstructed hero center of the telemetry cockpit.
+  5. *Consolidated Persistent Status*: Consolidating three disparate, jumping status badges into a single persistent header element eliminates layout shift while providing honest, unambiguous connection lifecycle states (`Live`, `Reconnecting`, `Connection lost`).
+
+- **[Phase 7 Revision 3] Deterministic Acquirer Color Assignment & Inviolable Alert Override (Supersedes Phase 7 Revision 2 Chart Line Assignment).** Alternatives considered: Retaining single-accent with dual-gray lines (#5B8DEF + two #8B8F98 lines); using full multi-hue rainbow (blue, purple, green, yellow); allowing alert color (#E5484D) to appear as static UI accents. Why this one won:
+  1. *Multi-Arm Visual Discrimination*: Revision 2's strict single-accent rule solved chromatic fatigue but degraded chart legibility during traffic cutover: when Primary Alpha shed volume, secondary and tertiary routes (Beta and Gamma) both rendered in muted gray (#8B8F98), making crossover disambiguation difficult at a glance.
+  2. *Assigned, Not Decorative Mapping*: Introducing Accent 2 (`#C084FC` soft violet) for the second acquirer and Secondary Text Gray (`#7C808A`) for the third acquirer gives each route a deterministic, identifiable hue without adding a distracting third saturated color.
+  3. *Cross-Surface Identity Invariant*: This exact mapping applies uniformly across all surfaces (chart lines, legend dots, health-card indicators, and EWMA micro-gauge bars) so that any given acquirer maintains identical visual identity across the cockpit.
+  4. *Inviolable Alert Override*: Alert (`#E5484D` crimson) strictly overrides any acquirer's assigned color the instant it enters an outage or degraded state ($H < 0.70$), guaranteeing that failure states dominate operator attention. Alert is strictly forbidden from appearing anywhere else for any other purpose.
+  5. *Accent 2 Scope Constraint*: Accent 2 (`#C084FC`) is strictly quarantined to the second-acquirer identity; it is forbidden from being reused as general-purpose UI styling.
+
+- **[Phase 7 Revision 4] Typography & Extreme Density Reduction Contract (Supersedes Phase 7 Revision 3 Density & Typography Rules).** Alternatives considered: Retaining boxed cockpit panels and per-acquirer cards; hiding acquirers in a modal or dropdown; keeping the full 4-panel cluster telemetry grid. Why this one won:
+  1. *Elimination of Container Clutter*: Boxed cards, hairline panels, and micro-gauge bars created visual noise and repeated representations of the same fact (e.g. traffic weight shown in chart, card header, subgrid, and legend simultaneously).
+  2. *Headline Visual Hierarchy*: Promoting PSR and Lift-vs-Baseline to borderless, box-free headline figures side-by-side establishes an immediate visual anchor for executive and technical review panels without boxy container boundaries.
+  3. *Radical Row-Level Acquirer Reduction*: Reducing each acquirer to a single row (color dot, name, one live telemetry number) eliminates redundant sub-cards while preserving immediate operational state.
+  4. *Type Hierarchy Discipline*: Allocating `Space Grotesk` (700) exclusively for the wordmark and massive headline metrics, `Space Mono` for live telemetry figures, and `Inter` for all UI labels delivers clean, modern legibility.
+  5. *Zero-Footprint Progressive Disclosure*: Collapsing secondary diagnostics behind a minimal text link (`'Diagnostics ›'`) reclaims vertical space and eliminates boxy disclosure borders even when closed.
+  6. *Plain Text-Style Outage Controls*: Transforming chunky bordered button cards into plain text-style buttons (`[trigger outage]` / `[clear outage]`) maintains instant actuation while preserving typographic lightness.
+  7. *Preserved Invariants*: The Revision 3 deterministic acquirer color mapping (`#5B8DEF`, `#C084FC`, `#7C808A`), chart series line colors, and the inviolable Alert (`#E5484D`) override remain strictly active and unchanged.
+
+- **[Phase 7 Revision 5] Humanized Architecture Descriptions & Minimized Simulation Harness Contract (Supersedes Phase 7 Revision 4 Footer & Simulation Controls).** Alternatives considered: Keeping raw mathematical/config strings (`PID [Kp=0.12, ...]`, `tau=60s`, `SQLite ledger`, `Redis dispatch`) in the footer; keeping inline scenario presets and failure controls in an expanded deck; deleting advanced simulator controls entirely to save space. Why this one won:
+  1. *Humanized Architectural Comprehension*: Raw configuration parameters and tuning knobs create cognitive friction without communicating operational intent to executive and technical evaluators. Replacing cryptic configuration formulas with plain descriptions explains the core mechanical purpose of each layer directly in human terms:
+     - `'Smooths every reroute so traffic never jumps'` (PID control loop)
+     - `'Learns which gateway is healthiest, weighted toward the last minute'` (Thompson Sampling)
+     - `'Every decision is logged, permanently'` (Append-only SQLite ledger)
+     - `'Reacts to every transaction instantly'` (Real-time Redis Pub/Sub)
+  2. *Strict Spatial Separation (Zero Pipes or Middle-Dots)*: Inline text strung together with `•` or `|` creates visual crowding and horizontal tracking fatigue. Formatting these four plain descriptions as independent vertical lines (one line each, never joined by middle-dots or pipes) enforces visual calm and dignified typographic hierarchy.
+  3. *Excision of Artifact Version Strings*: Removing `"Loom protocol v0.7.0"` completely eliminates dead build-version noise from the live operational display.
+  4. *Symmetric Minimal Simulation Harness*: Matching the dashboard's existing per-acquirer row pattern brings structural harmony to the simulation harness: each acquirer gets exactly one row (`[Name] [Current State] [Trigger/Clear outage plain text button]`), with nothing else visible by default.
+  5. *Progressive Disclosure for Advanced Simulator Controls (`'Simulation settings ›'`)*: Success-rate sliders, failure-behavior mode toggles (`RETURN_DECLINE`, `HTTP_503`, `LATENCY_SPIKE`), and benchmark presets (`Standard Cliff`, `Sensitive Blip`, `Gray Failure`, `Reset all routes`) move behind a single `'Simulation settings ›'` link, collapsed by default (`open={false}`), mirroring the established `'Diagnostics ›'` text link pattern.
+  6. *Additive Invariant Guarantee*: Zero functional capabilities that QA, backend, or automated tests relied on in earlier phases are deleted or disabled. All backend endpoints (`POST /api/simulator/acquirers/{id}/outage`, `POST /api/simulator/acquirers/{id}/success-rate`, `POST /api/simulator/admin/reset`), payload schemas, slider ranges, behavior modes, and presets remain 100% active, testable, and functional behind the disclosure.
+
+- **[Phase 7 Revision 6] Static-Baseline Reference Curve Overlay on Live Allocation Chart (Extends Phase 7 Revision 3/4/5 Chart Contracts).** Alternatives considered: Displaying two separate charts side-by-side; running a live shadow baseline router concurrently in backend; hiding baseline comparisons exclusively inside the collapsed diagnostics panel. Why this one won:
+  1. *Visceral Visual Contrast on Single Hero Canvas*: Juxtaposing the static baseline's brutal 100% cliff drop against Loom's smooth PID exponential easing curve on the exact same coordinate plane provides immediate, undeniable visual proof of Loom's core stability claim ($\Delta w_{\text{max}} = 11.77\%$ vs $100.0\%$).
+  2. *Pre-Computed Deterministic Reference*: Sourcing the baseline curve directly from Phase 6's stored 150-transaction benchmark results (under the identical outage gauntlet) eliminates runtime overhead and guarantees mathematical fidelity without running redundant backend routing loops.
+  3. *Strict Non-Competitive Visual Hierarchy*: Rendering the reference curve in a dashed stroke, muted secondary text gray (`#8B8F98`), hairline width (1.0–1.5px), and rendering it behind all live series in z-order ensures it remains an archival backdrop that never competes with or obscures live operational telemetry.
+  4. *Load-Bearing Disambiguation Legend*: Explicitly labeling `'Loom (live)'` vs `'Static baseline (recorded run)'` is load-bearing, preventing technical panels and auditors from misinterpreting the reference line as a second live router or shadow canary arm.
+  5. *Dynamic Outage-Anchor Synchronization*: Pinning the baseline curve's outage step to the live chart's outage-trigger timestamp ensures both systems appear to encounter the outage at the exact same horizontal coordinate on the x-axis, regardless of when the live operator injects the fault.
+
 ## Interface Contracts
 
 ### [Phase 1] Per-Acquirer State & Health Signal Contract
@@ -774,6 +830,406 @@ class BaselineRouterConfig(BaseModel):
   $$\text{Relative Lift} = \frac{\Delta \text{PSR}}{\text{PSR}_{\text{Baseline}}} \times 100\%, \quad \Delta w_{\max} = \max_t |w(t) - w(t-1)|$$
 - **Segmented Analysis**: Generates comprehensive markdown audit tables across Steady-State (Pre-Outage), Outage Window, and Recovery.
 
+### [Phase 7] Live Mission-Control Dashboard & WebSocket Gateway Contract
+
+**Module Target**: `dashboard/` (`AllocationChart.jsx`, `MetricReadouts.jsx`, `OperatorControls.jsx`, `useLoomTelemetry.js`), `router_core/app.py`
+**Detailed Specification**: `docs/phase7-dashboard-spec.md`
+
+#### 1. Visual Token Contract (Mission-Control Palette & Geometry)
+- **Palette**: Ground `#0B1120`, Panel `#111827`, Well Inset `#070C18`, Hairline Border `1px solid #1E3A5F`.
+- **Reserved Colors**: Telemetry Amber (`#D9A441`) strictly reserved for active numbers and healthy line; Alert Rust (`#C1622D`) strictly reserved for outage/danger states. Secondary route in Steel Cyan (`#38BDF8`), Tertiary in Slate (`#94A3B8`).
+- **Typography**: Monospace (`'JetBrains Mono', monospace`) with `tnum` tabular alignment for numbers only; Clean Sans (`Inter`) for all text/headers.
+- **Elevation**: Zero diffuse card shadows (`box-shadow: none`); flat sharp corners (`border-radius: 0px` or max `2px`).
+
+#### 2. Ticket Contracts & Data Ingestion Shapes
+
+##### Ticket A: Live Multi-Acquirer Allocation Chart (`AllocationChart.jsx`)
+- **Render**: Rolling 60s time series of smoothed allocation weights ($w_i \in [0.0, 1.0]$) demonstrating Phase 4 PID easing curve ($82\% \to 65\% \dots \to 3\%$).
+- **Markers**: Pinned vertical hairline Rust (`#C1622D`) marker on outage injection (`decline_code == 'ACQUIRER_OUTAGE'`); vertical Amber (`#D9A441`) marker on recovery.
+- **Readout**: Instantaneous peak single-step delta gauge: $\Delta w_{\text{max}} = 11.77\%$ vs $100.0\%$ baseline cliff.
+- **Data Ingestion**: Consumes `RoutingEvent.smoothed_allocation`, `allocation_weight`, `timestamp`, `sequence_number`, `decline_code`.
+
+##### Ticket B: Cluster & Acquirer Telemetry Readouts (`MetricReadouts.jsx`, `BaselineComparisonCard.jsx`)
+- **Cluster Readouts**: Rolling 50-tx PSR (Amber $\to$ Rust when $<80\%$), Lifetime Global PSR, Stability Multiplier (`8.5x Smoother`), routing latency ($t_{\text{routing}} < 0.1\text{ms}$).
+- **Benchmark Card**: Contextualizes Phase 6 empirical results: $M=1$ Overreaction collapse (Loom 86% vs Baseline 76%, +1000 bps lift), $M=3$ Standard Outage (86% vs 92% with 0 downstream capacity limit), Gray Failure (21-tx bleed).
+- **Per-Acquirer Card**: EWMA health score ($H$) with 4px micro-gauge bar, Beta parameters ($\alpha, \beta, \mathbb{E}[\theta]$), traffic share ($w_i$), network latency ($t_{\text{acquirer}}$).
+- **Data Ingestion**: Consumes `RoutingEvent.updated_state` (`alpha`, `beta`, `health_score`, `expected_success_rate`), `status`, `authorized`, and SQLite `get_psr_metrics()`.
+
+##### Ticket C: Operator Outage Controls (`OperatorControls.jsx`)
+- **Controls**: Per-acquirer two-state trigger buttons (Normal $\to$ Armed Rust), behavior radio (`RETURN_DECLINE`, `HTTP_503`, `LATENCY_SPIKE`), brownout slider ($p \in [0.0, 1.0]$).
+- **Presets**: Standard Cliff, Sensitive Blip ($M=1$), Gray Failure ($p=0.60$), and Global Reset.
+- **Dispatch**: Dispatches via backend proxy `POST /api/simulator/acquirers/{id}/outage` to Acquirer Simulator Admin API.
+
+##### Ticket D: WebSocket Streaming Gateway (`router_core/app.py`, `useLoomTelemetry.js`)
+- **Backend Route**: `@app.websocket("/ws/telemetry")` subscribing to Redis `events:routing` and `events:health` via `AsyncEventSubscriber`.
+- **Hybrid Bootstrap**: Emits initial snapshot of current route states and recent SQLite transactions upon connection open.
+- **Client Architecture**: Circular ring buffer (200 events) with `requestAnimationFrame` 60 FPS animation ticker, preventing UI thread freezing under 50+ TPS.
+- **Resilience**: Auto-reconnect with exponential backoff ($500\text{ms} \to 10\text{s}$) and top-bar status badge (`LIVE`, `RECONNECTING`, `DISCONNECTED`).
+
+### [Phase 7 Revision] Visual Design System & Information Architecture Revision Contract
+
+**Supersedes**: Visual Token Contract in Phase 7 (ADR-01 / ADR-06 styling tokens).
+**Preserves**: Underlying WebSocket schemas (`RoutingEvent`, `HealthAlertEvent`), SQLite schema, Redis pub/sub streams, and circular ring buffer architecture.
+
+#### 1. Color Palette Tokens & Semantic Invariants
+
+| Token Identifier | Hex Code | Semantic Role & Invariants |
+| :--- | :--- | :--- |
+| `ground` | `#0F1115` | Canvas base ground. Neutral dark slate replacing deep space navy. |
+| `panel` | `#16181D` | Panel and card surface background. Subtle contrast above ground. |
+| `border` | `#2A2D34` | Hairline border (`1px solid #2A2D34`) for all panels, dividers, and axes. |
+| `text-primary` | `#E4E6EB` | Primary typography for titles, labels, headings, and key readouts. |
+| `text-secondary`| `#8B8F98` | Muted typography for secondary metadata, units, and timestamps. |
+| `accent` | `#5B8DEF` | **Singular Accent (Cobalt Blue)**: Reserved exclusively for healthy states, active primary chart line, live status dot, and interactive focus states. Never used for static decoration. |
+| `alert` | `#E5484D` | **Singular Alert (Crimson)**: Reserved exclusively for active outage states, degraded health (<0.70), reconnection failure, and chart outage markers. Never decorative. |
+
+#### 2. Typography Contract & Casing Rules
+
+1. **Primary Interface Font (`IBM Plex Sans`)**:
+   - Applied to all UI copy, navigation, section headers, card titles, table labels, buttons, and disclosures.
+   - Weights: 400 (regular), 500 (medium), 600 (semi-bold).
+2. **Telemetry Numeric Font (`IBM Plex Mono`)**:
+   - Reserved strictly for live numerical telemetry values: PSR percentages (e.g. `89.33%`), health scores (e.g. `0.942`), latencies (e.g. `0.042 ms`), sequence numbers (e.g. `#1042`), Beta shape parameters ($\alpha, \beta$), allocation shares (e.g. `82.0%`).
+   - Mandates `font-feature-settings: "tnum" 1, "zero" 1;` (tabular figures and slashed zero).
+3. **Strict Sentence Case Invariant**:
+   - All headings, labels, button texts, and tooltips must use standard sentence case (e.g., "Live traffic allocation", "Rolling PSR (50 txs)", "Diagnostics", "Simulation controls", "Trigger outage", "Clear outage").
+   - Tracked-out uppercase and shouting acronym blocks are strictly prohibited.
+
+#### 3. Information Architecture & Component Hierarchy
+
+1. **Hero Composition Preserved**:
+   - The live multi-acquirer allocation chart (`AllocationChart.jsx`) remains the visual hero at the top of the viewport, rendering the smooth PID easing curve against the 60-second rolling window.
+2. **Sensor-Actuator Colocation (Per-Acquirer Cards)**:
+   - Each acquirer card combines observation and control into a single physical unit:
+     - Upper block: Acquirer name, role, live status indicator, EWMA health score with 4px micro-gauge, Beta parameters, and allocation share.
+     - Lower block (physically adjacent): Two-state outage button (`Trigger outage` / `Clear outage`), failure mode selector (`Decline`, `503`, `Latency spike`), and brownout slider.
+3. **Progressive Disclosure Disclosures (Default-Closed)**:
+   - **`Diagnostics`**: Houses the Phase 6 benchmark comparison audit (`BaselineComparisonCard.jsx`), default-closed via native `<details>` element.
+   - **`Simulation controls`**: Houses the global simulation scenario gauntlet presets (Standard cliff, Sensitive blip $M=1$, Gray failure $p=0.60$, Global reset), default-closed via native `<details>` element.
+4. **Consolidated Single Status Element**:
+   - A single persistent status pill in the header dynamically transitions through three states:
+     - **Connected**: Border `#2A2D34`, dot `#5B8DEF`, text `Live`.
+     - **Reconnecting**: Border `#2A2D34`, dot `#E5484D` (pulsing), text `Reconnecting (attempt {n})`.
+     - **Disconnected**: Border `#2A2D34`, dot `#E5484D`, text `Connection lost`, with inline `Reconnect` button.
+
+### [Phase 7 Revision 3] Acquirer Color Mapping & Inviolable Alert Override Contract
+
+**Supersedes**: Chart Line Color Assignment in Phase 7 Revision 2.
+**Preserves**: Ground (`#0F1115`), Panel (`#16181D`), Border (`#2A2D34`), Text Primary (`#E4E6EB`), Text Secondary (`#8B8F98`), Type rules (`IBM Plex Sans` / `IBM Plex Mono`), Sentence case, Colocated per-acquirer controls, and Default-closed disclosures.
+
+#### 1. Deterministic Acquirer Color Assignment (Not Decorative)
+
+| Acquirer Entity | Role | Assigned Nominal Color | Hex Code | Purpose & Context |
+| :--- | :--- | :--- | :--- | :--- |
+| **Acquirer 1 (Alpha)** | Primary leader | **Accent** | `#5B8DEF` | Cobalt blue. Assigned to first acquirer across all identity surfaces. |
+| **Acquirer 2 (Beta)** | Secondary backup | **Accent 2** | `#C084FC` | Soft violet. Assigned to second acquirer across all identity surfaces. |
+| **Acquirer 3 (Gamma)** | Tertiary floor | **Secondary text gray** | `#7C808A` | Calm slate gray. Assigned to third acquirer across all identity surfaces. |
+
+#### 2. Cross-Surface Identity Consistency Rule
+The assigned color for each acquirer applies universally across all surfaces on the dashboard where that acquirer's identity is represented:
+- **Allocation Chart Series Lines**: Primary line (`#5B8DEF`), secondary line (`#C084FC`), tertiary line (`#7C808A`).
+- **Chart Legend Indicators**: Matching color bars/dots and percentage labels.
+- **Health Panel Status Dots & Badges**: Nominal state dot uses the acquirer's assigned color (`#5B8DEF` for Alpha, `#C084FC` for Beta, `#7C808A` for Gamma).
+- **EWMA Health Micro-Gauge Fill**: Nominal fill level uses the acquirer's assigned color when $H \ge 0.70$.
+- **Allocation Weight Badges / Borders**: Subordinate borders or badges reflect the acquirer's assigned color.
+
+#### 3. Inviolable Alert Override Rule
+
+$$\text{ActiveColor}(i, t) = \begin{cases} \text{\#E5484D (Alert)}, & \text{if Acquirer } i \text{ is in Outage or Degraded } (H_i(t) < 0.70) \\ \text{AssignedColor}(i), & \text{otherwise (Nominal / Healthy)} \end{cases}$$
+
+- **Instantaneous Preemption**: The exact millisecond an acquirer enters an outage (via operator toggle or event-driven health alert $H < 0.70$), its color **instantly shifts to Alert (`#E5484D` crimson)**, overriding its assigned color regardless of whether it is Alpha, Beta, or Gamma.
+- **Recovery Hysteresis**: When the outage clears and operational health restores ($H \ge 0.70$), the acquirer's visual representation reverts smoothly to its assigned nominal color.
+- **Outage Event Marker**: Pinned vertical dashed line and timestamped marker badge on the chart render strictly in **Alert (`#E5484D`)**.
+
+#### 4. Strict Negative Invariants (Semantic Quarantine)
+
+1. **Alert (`#E5484D`) Quarantine**:
+   - Alert is strictly an emergency signal.
+   - It must **never** appear anywhere on the dashboard for any decorative, neutral, or non-failure purpose.
+   - It is permitted ONLY for: (1) an acquirer currently in outage/degraded state, (2) the vertical outage event marker on the chart, and (3) a dropped WebSocket connection (`Connection lost` / `Reconnecting`).
+2. **Accent 2 (`#C084FC`) Quarantine**:
+   - Accent 2 is reserved **strictly and exclusively** for the second acquirer's identity (Acquirer Beta).
+   - It must **never** be reused elsewhere as a general-purpose UI accent, button color, heading highlight, or decorative embellishment.
+
+### [Phase 7 Revision 4] Typography & Extreme Density Architecture Contract
+
+**Supersedes**: Typography, Density, and Information-Architecture Rules in Phase 7 Revisions 2 and 3.
+**Preserves**: Palette Ground (`#0F1115`), Panel (`#16181D`), Border (`#2A2D34`), Text Primary (`#E4E6EB`), Text Secondary (`#8B8F98`), Deterministic Acquirer Color Assignment (Alpha: `#5B8DEF`, Beta: `#C084FC`, Gamma: `#7C808A`), Inviolable Alert (`#E5484D`) Override on Outage/Degraded ($H < 0.70$), and Semantic Quarantines for Alert and Accent 2.
+
+---
+
+#### 1. The Typographic Triad & Strict Role Assignment
+
+This contract replaces all instances of `IBM Plex Sans` and `IBM Plex Mono` with a strictly partitioned typographic triad:
+
+| Typeface | Weight | Strict Dedicated Role | Elements & Surfaces |
+| :--- | :--- | :--- | :--- |
+| **`Space Grotesk`** | **700 (Bold)** | **Wordmark & Headline Metric Magnitudes** | 1. Application Wordmark (`"Loom"`).<br>2. Headline Rolling PSR percentage (e.g. `86.0%`).<br>3. Headline Baseline PSR Lift value (e.g. `+1000 bps` / `+10.0%`). |
+| **`Space Mono`** | **400 (Regular) / 700 (Bold)** | **Live Telemetry Figures** | 1. Per-acquirer health score / allocation figures (e.g. `0.942`, `82.0%`).<br>2. Live chart tick numbers and time axes (`0%`, `50%`, `100%`, `-60s`, `Now`).<br>3. Live peak step delta figure (`11.8%`).<br>4. Telemetry latency & count values (`0.042 ms`, `1,240 txs`). |
+| **`Inter`** | **400 / 500 / 600** | **All Interface Labels & Copy** | Every remaining textual element: metric labels (`"Rolling PSR"`, `"PSR lift vs baseline"`), acquirer names (`"Alpha"`, `"Beta"`, `"Gamma"`), status copy (`"Healthy"`), text buttons (`"trigger outage"`), and section descriptors. |
+
+**Negative Type Invariants**:
+- `Space Grotesk` must NEVER be used for body text, regular labels, or secondary metrics.
+- `Space Mono` must NEVER be used for non-numeric labels, headings, or status copy.
+- `Inter` must NEVER be used for live telemetry numbers or headline magnitude metrics.
+
+---
+
+#### 2. Radical Density & Layout Invariants (The Mockup Specification)
+
+To eliminate container fatigue, repetitive telemetry representations, and visual noise, the layout is compressed into five structural rules:
+
+##### Rule 1: Header Wordmark with Integrated Minimal Status Line
+- **Wordmark**: Left-aligned `"Loom"` rendered in `Space Grotesk` 700 (`text-2xl font-bold tracking-tight text-[#E4E6EB]`).
+- **Single Status Line**: Directly beneath the wordmark — dot + word (`● Healthy` or `● Degraded` / `● Reconnecting`), NOT a banner, NOT a pill box, NOT a separate right-aligned gadget:
+  - *Healthy State*: Inline indicator with a 6px dot (`#5B8DEF`) + text `"Healthy"` (`Inter`, 12px, `#8B8F98` / `#E4E6EB`).
+  - *Degraded / Outage State*: Inline indicator with a 6px pulsing dot (`#E5484D animate-pulse`) + text `"Degraded"` / `"Outage active"` (`Inter`, 12px, `#E5484D`).
+  - *Connection Lost State*: Inline indicator with a 6px dot (`#E5484D`) + text `"Connection lost"` (`Inter`, 12px, `#E5484D`) with a minimal text-link `"Reconnect"`.
+- **Elimination**: The cluttered right-aligned header navigation bar with multiple bordered pills (UTC clock, RTT pill, counter pill) is eliminated in favor of a clean, uncluttered masthead.
+
+##### Rule 2: Borderless Headline Metrics (The Two Largest Elements)
+- **Positioning**: Rolling PSR and Lift-vs-Baseline are the **two largest elements on the screen**, positioned side by side at the top of the telemetry section.
+- **Zero Containers**: Strictly label-plus-number with **NO surrounding box, NO border, NO card container, NO panel background** (`bg-transparent`, no card borders).
+- **Structure**:
+  - **Left Headline (Rolling PSR)**:
+    - Label: `"Rolling PSR (50 txs)"` in `Inter`, 12px, font-medium, color `#8B8F98`.
+    - Value: `86.0%` in `Space Grotesk` 700, 48px–56px (`text-5xl font-bold tracking-tight`), colored `#5B8DEF` (nominal) or `#E5484D` (when $<80.0\%$).
+  - **Right Headline (PSR Lift vs Baseline)**:
+    - Label: `"PSR lift vs baseline"` in `Inter`, 12px, font-medium, color `#8B8F98`.
+    - Value: `+1000 bps` (or `+10.0%`) in `Space Grotesk` 700, 48px–56px (`text-5xl font-bold tracking-tight`), colored `#5B8DEF`.
+
+##### Rule 3: Single-Row Acquirer Strip (Zero Panels, Zero Bars, Zero Redundancy)
+- **Elimination of Per-Acquirer Cards**: The 3 heavy rectangular cards, 4px micro-gauge bars, and subgrids with duplicated numbers ($\alpha/\beta$ parameters, expected PSR, duplicate weights) are **completely eliminated**.
+- **Single-Row Representation**: Each acquirer is rendered strictly as a **single horizontal row**:
+  ```
+  [Color Dot]  [Acquirer Name]  [One Live Telemetry Number]  [Plain Text Outage Button]
+  ```
+- **Row Elements**:
+  1. **Color Dot**: 8px circle (`w-2 h-2 rounded-full`) reflecting the acquirer's assigned color (`#5B8DEF` Alpha, `#C084FC` Beta, `#7C808A` Gamma), overridden by `#E5484D` during outage/degraded state.
+  2. **Acquirer Name**: `"Alpha"`, `"Beta"`, `"Gamma"` in `Inter`, 13px, font-medium, `#E4E6EB`.
+  3. **Single Telemetry Figure**: The live health score (e.g. `0.942`) or traffic split percentage (e.g. `82.0%`) in `Space Mono`, 13px, colored per assigned identity or alert override.
+  4. **Text-Style Outage Button**: Minimal inline text action (e.g. `"trigger outage"` / `"clear outage"`).
+
+##### Rule 4: Plain Text-Style Outage-Trigger Controls
+- Outage triggers are styled as **plain text buttons**, NOT bordered cards or bulky actuator blocks.
+- **Styling**: Minimal inline text (`text-xs text-[#8B8F98] hover:text-[#E4E6EB] hover:underline bg-transparent border-0 p-0 cursor-pointer transition-colors font-sans`).
+- **Active Outage State**: Color shifts to Alert Crimson (`text-[#E5484D]`) with label `"clear outage"`.
+- **Disabled In-Flight State**: Displays `"dispatching..."` with `opacity-50 pointer-events-none`.
+
+##### Rule 5: Zero-Footprint Progressive Disclosure (`'Diagnostics ›'`)
+- The Phase 6 benchmark comparison audit and full simulation deck are collapsed behind a **single small text link**: `'Diagnostics ›'`.
+- **Zero Border Footprint**: Must NOT render as a visible disclosure block, bordered box, or container card when closed. It appears as an understated text link in `Inter` (`text-xs text-[#8B8F98] hover:text-[#E4E6EB]`).
+- When activated, it expands smoothly in-place below the main telemetry views to present the detailed comparative audits and scenario triggers without cluttering the resting viewport.
+
+---
+
+#### 3. Preserved Invariants from Revision 3
+
+1. **Color Tokens**:
+   - Ground: `#0F1115`
+   - Panel: `#16181D` (used for chart canvas container)
+   - Border: `#2A2D34` (used for chart well hairline border)
+   - Primary Text: `#E4E6EB`
+   - Secondary Text: `#8B8F98`
+2. **Chart Series Line Assignments**:
+   - Acquirer 1 (Alpha): `#5B8DEF` (2.0px stroke)
+   - Acquirer 2 (Beta): `#C084FC` (1.5px stroke)
+   - Acquirer 3 (Gamma): `#7C808A` (1.0px stroke)
+3. **Inviolable Alert Override**:
+   - Active outage (`activeOutages[id]`) or degraded health ($H < 0.70$) immediately forces the acquirer's identity (dot, text, number, chart line) to Alert Crimson (`#E5484D`).
+   - Reverts immediately upon recovery ($H \ge 0.70$ and outage cleared).
+4. **Semantic Quarantines**:
+   - Alert (`#E5484D`) is strictly an emergency signal (outages, markers, disconnects). Zero decorative use.
+   - Accent 2 (`#C084FC`) is strictly reserved for Acquirer Beta. Zero general UI use.
+
+---
+
+### [Phase 7 Revision 5] Humanized Architecture Descriptions & Minimized Simulation Harness Contract
+
+**Supersedes**: Footer/Diagnostics architecture strings and simulation harness disclosure in Phase 7 Revision 4.
+**Preserves**: Typographic triad (`Space Grotesk` 700 for wordmark/headlines, `Space Mono` for live telemetry figures, `Inter` for interface labels/copy), borderless headline metrics (`Rolling PSR` and `PSR lift vs baseline`), single-row acquirer strip, deterministic color mapping (Alpha: `#5B8DEF`, Beta: `#C084FC`, Gamma: `#7C808A`), inviolable alert override (`#E5484D`), and base palette (`#0F1115`, `#16181D`, `#2A2D34`, `#E4E6EB`, `#8B8F98`).
+
+---
+
+#### 1. Baseline Superseded Contract (Pasted from Phase 7 Revision 4)
+
+> *The following specification represents the fourth revision's contract from the Decisions Log, incorporated here in full as the baseline that Revision 5 supersedes:*
+
+##### 1. The Typographic Triad & Strict Role Assignment (Revision 4 Baseline)
+| Typeface | Weight | Strict Dedicated Role | Elements & Surfaces |
+| :--- | :--- | :--- | :--- |
+| **`Space Grotesk`** | **700 (Bold)** | **Wordmark & Headline Metric Magnitudes** | 1. Application Wordmark (`"Loom"`).<br>2. Headline Rolling PSR percentage (e.g. `86.0%`).<br>3. Headline Baseline PSR Lift value (e.g. `+1000 bps` / `+10.0%`). |
+| **`Space Mono`** | **400 (Regular) / 700 (Bold)** | **Live Telemetry Figures** | 1. Per-acquirer health score / allocation figures (e.g. `0.942`, `82.0%`).<br>2. Live chart tick numbers and time axes (`0%`, `50%`, `100%`, `-60s`, `Now`).<br>3. Live peak step delta figure (`11.8%`).<br>4. Telemetry latency & count values (`0.042 ms`, `1,240 txs`). |
+| **`Inter`** | **400 / 500 / 600** | **All Interface Labels & Copy** | Every remaining textual element: metric labels (`"Rolling PSR"`, `"PSR lift vs baseline"`), acquirer names (`"Alpha"`, `"Beta"`, `"Gamma"`), status copy (`"Healthy"`), text buttons (`"trigger outage"`), and section descriptors. |
+
+Negative Type Invariants:
+- `Space Grotesk` must NEVER be used for body text, regular labels, or secondary metrics.
+- `Space Mono` must NEVER be used for non-numeric labels, headings, or status copy.
+- `Inter` must NEVER be used for live telemetry numbers or headline magnitude metrics.
+
+##### 2. Radical Density & Layout Invariants (Revision 4 Baseline)
+- **Rule 1: Header Wordmark with Integrated Minimal Status Line**: Left-aligned `"Loom"` rendered in `Space Grotesk` 700 (`text-2xl font-bold tracking-tight text-[#E4E6EB]`). Directly beneath: single status line (dot + word, e.g. `● Healthy`), not a banner, not a pill box, not a separate right-aligned gadget. Cluttered right-aligned navbar eliminated.
+- **Rule 2: Borderless Headline Metrics (The Two Largest Elements)**: Rolling PSR and Lift-vs-Baseline side-by-side as the two largest elements on screen. Strictly label-plus-number with NO surrounding box, NO border, NO card container, NO panel background (`bg-transparent`, no card borders). Rolling PSR in `Space Grotesk` 700 (48px–56px, `#5B8DEF` / `#E5484D`). Lift-vs-Baseline in `Space Grotesk` 700 (48px–56px, `#5B8DEF`).
+- **Rule 3: Single-Row Acquirer Strip**: Zero panels, zero bars, zero redundancy. Each acquirer rendered as a single horizontal row: `[Color Dot]  [Acquirer Name]  [One Live Telemetry Number]  [Plain Text Outage Button]`. Color dot (8px circle, assigned color overridden by `#E5484D` on outage), Name (`Inter`, 13px, `#E4E6EB`), Figure (`Space Mono`, 13px), Action (`[trigger outage]` / `[clear outage]`).
+- **Rule 4: Plain Text-Style Outage-Trigger Controls**: Minimal inline text (`text-xs text-[#8B8F98] hover:text-[#E4E6EB] hover:underline bg-transparent border-0 p-0 cursor-pointer`). Active state shifts to Alert Crimson (`text-[#E5484D]`) with `"clear outage"`.
+- **Rule 5: Zero-Footprint Progressive Disclosure (`'Diagnostics ›'`)**: Benchmark audit collapsed behind a single small text link: `'Diagnostics ›'`. Closed state renders no border or box footprint.
+
+##### 3. Preserved Invariants from Revision 3 (Revision 4 Baseline)
+- Base Palette: Ground `#0F1115`, Panel `#16181D`, Border `#2A2D34`, Primary Text `#E4E6EB`, Secondary Text `#8B8F98`.
+- Acquirer Chart Lines: Alpha `#5B8DEF` (2.0px stroke), Beta `#C084FC` (1.5px stroke), Gamma `#7C808A` (1.0px stroke).
+- Inviolable Alert Override: Outage or $H < 0.70$ immediately forces acquirer's identity to Alert Crimson (`#E5484D`), reverting upon recovery.
+- Quarantines: Alert strictly non-decorative; Accent 2 strictly Acquirer Beta.
+
+---
+
+#### 2. Revision 5 Specifications: The Two Architectural Enhancements
+
+##### Enhancement 1: Humanized Architecture Descriptions & Footer Cleanliness
+
+1. **Excision of Build Version String**:
+   - The build artifact string `"Loom protocol v0.7.0"` is **completely excised from the live view**.
+   - *Architectural Rationale*: Operational consoles for live mission-critical routing should display real-time physical telemetry and operational semantics. Static build versions create irrelevant cognitive clutter during live outage rehearsals and technical presentations.
+
+2. **Humanized Plain Copy (Replacing Configuration Formulas)**:
+   - Cryptic configuration strings, algorithmic parameter notation, and database technology tags (`PID [Kp=0.12, Ki=0.005, Kd=0.25, M=3]`, `Decayed Thompson sampling [tau=60s]`, `Append-only SQLite ledger`, `Real-time Redis dispatch`) are replaced with plain, human-friendly descriptions of what each architectural subsystem does:
+     - **PID Controller**: `'Smooths every reroute so traffic never jumps'`
+     - **Thompson Sampling**: `'Learns which gateway is healthiest, weighted toward the last minute'`
+     - **SQLite Ledger**: `'Every decision is logged, permanently'`
+     - **Redis Pub/Sub**: `'Reacts to every transaction instantly'`
+
+3. **Strict Spatial Separation Invariant (Zero Pipes / Zero Middle-Dots)**:
+   - The four architectural statements must be rendered strictly as **one line each**.
+   - They must **NEVER be joined with middle-dots (`•`) or pipes (`|`)**.
+   - *Typographic Rationale*: Inline concatenation (`string • string • string | string`) creates visual crowding and horizontal scanning strain. Presenting each capability on its own distinct line establishes visual calm, dignified whitespace, and effortless vertical scanning.
+   - *Styling Contract*: Rendered in `Inter` (`text-[11px]` or `text-xs`, color `#8B8F98`, leading relaxed, `font-normal`).
+
+##### Enhancement 2: Minimized Simulation Harness & Progressive Settings Disclosure
+
+1. **Primary Per-Acquirer Simulation Row Pattern**:
+   - The simulation harness is minimized to match the dashboard's existing per-acquirer row pattern.
+   - Each acquirer is represented as exactly one row containing strictly:
+     ```
+     [Acquirer Name]    [Current State]    [Trigger outage / Clear outage]
+     ```
+   - *Row Elements*:
+     1. **Acquirer Name**: `"Alpha"`, `"Beta"`, `"Gamma"` (`Inter`, 13px, font-medium, color `#E4E6EB`).
+     2. **Current State**: Visual dot + state text (`● Nominal` in `#8B8F98` / `#5B8DEF`, or `● Outage active` in `#E5484D animate-pulse`).
+     3. **Single Outage Text-Button**: A single plain text button (`"Trigger outage"` / `"Clear outage"`), styled with `text-xs text-[#8B8F98] hover:text-[#E4E6EB] hover:underline bg-transparent border-0 p-0 cursor-pointer font-sans transition-colors`. When armed, text shifts to Alert Crimson (`text-[#E5484D]`); when in-flight, displays `"dispatching..."` with `opacity-50 pointer-events-none`.
+   - **Nothing else is visible by default** in the primary simulator harness (no sliders, no behavior radio buttons, no scenario preset decks).
+
+2. **Progressive Disclosure for Advanced Simulation Settings (`'Simulation settings ›'`)*:
+   - Advanced operator actuation controls move behind a single disclosure text link: `'Simulation settings ›'`.
+   - **Zero Border Footprint**:
+     - Modeled identically to the `'Diagnostics ›'` text link pattern.
+     - Rendered in `Inter` (`text-xs text-[#8B8F98] hover:text-[#5B8DEF] inline-flex items-center gap-1 select-none cursor-pointer transition-colors`).
+     - Default closed (`open={false}`).
+     - Zero box borders, zero container outlines when collapsed.
+   - **Tucked Simulator Controls (Fully Preserved Behind Disclosure)**:
+     1. *Success-Rate Sliders*: Base success rate sliders ($p \in [0.0, 1.0]$) with monospace numeric readouts (`Space Mono`) per acquirer for partial gray-failure / brownout testing.
+     2. *Failure-Behavior-Mode Toggles*: Mode radio selectors (`RETURN_DECLINE`, `HTTP_503`, `LATENCY_SPIKE`) per acquirer.
+     3. *Benchmark Scenario Gauntlet Presets*:
+        - *Preset 1: Standard Cliff* ($M=3$ hard outage on Alpha).
+        - *Preset 2: Sensitive Blip* ($M=1$ transient outage on Alpha, 3.5s dip).
+        - *Preset 3: Gray Failure* ($p=0.60$ partial brownout on Alpha).
+     4. *Global Simulator Reset Action*: `"Reset all routes"` button to restore nominal baseline states across all simulated gateways.
+
+---
+
+#### 3. Architectural Additive Invariant & Functional Compatibility Guarantee
+
+- **Zero Capability Deletion**: Every single functional capability QA, the tech lead, or automated integration test suites relied on in earlier phases is 100% preserved.
+- **Contract Parity**:
+  - The underlying backend proxy endpoints (`/api/simulator/acquirers/{id}/outage`, `/api/simulator/acquirers/{id}/success-rate`, `/api/simulator/admin/reset`) remain identical in path, method, and latency characteristics.
+  - The request payload contracts (`active`, `behavior`, `transition_seconds`, `success_rate`, `reason`) remain identical.
+  - Test suites (`tests/dashboard/test_phase7_qa_scenarios.py` and `tests/router_core/test_phase7_dashboard_integration.py`) execute against the exact same API and DOM contracts.
+- **Operational Safety**: No simulator feature was removed; complex testing controls were simply organized under clean progressive disclosure to prevent operator distraction during executive demonstrations.
+
+---
+
+### [Phase 7 Revision 6] Static-Baseline Reference Curve Overlay Contract
+
+**Extends**: Hero Allocation Chart Telemetry Specification in Phase 7 Revisions 3, 4, and 5.
+**Preserves**: Typographic triad (`Space Grotesk`, `Space Mono`, `Inter`), single-row acquirers, minimized simulation harness, humanized architecture footer copy, deterministic acquirer color mapping (Alpha: `#5B8DEF`, Beta: `#C084FC`, Gamma: `#7C808A`), and inviolable alert override (`#E5484D`).
+
+---
+
+#### 1. Architectural Purpose & Mathematical Model
+
+In Phase 6, the `StaticBaselineRouter` was benchmarked against the identical 150-transaction outage schedule (Seed 42, Alpha base rate 95%, Outage at Tx 51–100, Recovery at Tx 101–150). While Phase 6 demonstrated that the static router incurred an instantaneous $100.0\%$ single-step jump ($\Delta w_{\text{max}} = 100\%$), that comparison was previously confined to tabular audits.
+
+This contract specifies overlaying the **pre-computed Phase 6 static-baseline run as a passive reference curve** directly onto Loom's live allocation chart canvas, creating an immediate visual comparison between:
+- **Loom's Smooth PID Damping Curve**: Continuous exponential traffic decay ($\Delta w_{\text{max}} = 11.77\%$), preventing downstream herd-migration shock.
+- **Static Baseline's Discontinuous Cliff Drop**: Instantaneous Heaviside step drop ($\Delta w_{\text{max}} = 100.0\%$), snapping from $100\% \to 0\%$ upon $M=3$ consecutive failures.
+
+---
+
+#### 2. Pre-Computed Reference Dataset Specification
+
+The overlay is **static and pre-computed**—it is **never calculated in real-time, never re-routed live, and adds zero runtime backend compute**:
+- **Plotted Variable**: The static baseline's traffic allocation share $w_{\text{Alpha}}^{\text{baseline}}$ for the outage-targeted leader (Acquirer Alpha).
+- **Canonical Step Profile** (Sourced from Phase 6 empirical run):
+  $$\Delta k = k - k_{\text{outage\_trigger}}$$
+  $$w_{\text{Alpha}}^{\text{baseline}}(\Delta k) = \begin{cases}
+  1.00 & \text{if } \Delta k < 0 \quad \text{(Pre-outage normal operation)} \\
+  1.00 & \text{if } 0 \le \Delta k < 3 \quad \text{(Absorbing } M=3 \text{ consecutive failures before trip)} \\
+  0.00 & \text{if } 3 \le \Delta k < 63 \quad \text{(Circuit breaker TRIPPED; 100\% volume dumped to Beta)} \\
+  1.00 & \text{if } \Delta k \ge 64 \quad \text{(Canary probe succeeds; instantaneous snapback to Alpha)}
+  \end{cases}$$
+- **Data Encapsulation**: Stored on the frontend client as an immutable lookup table / relative step series (`BASELINE_REFERENCE_RUN`), ensuring instant local rendering with zero network latency.
+
+---
+
+#### 3. Visual Presentation Contract & Strict Rendering Invariants
+
+1. **Stroke Style**:
+   - Dashed stroke pattern: `stroke-dasharray="4 4"` (or `strokeDasharray: "4 4"`).
+   - Line width: Hairline `1.5px` (or `1.0px`).
+2. **Color Token**:
+   - Secondary Text Gray (`#8B8F98`), rendered with opacity $0.50$ to $0.60$ (`strokeOpacity="0.55"`).
+   - **Strict Negative Invariant**: The baseline line must **NEVER** use an accent color (`#5B8DEF` cobalt blue or `#C084FC` violet) and must **NEVER** use Alert Crimson (`#E5484D`). It is an archival ghost reference, not an active or failing participant.
+3. **Z-Order & Layering (Painter's Algorithm Invariant)**:
+   - The reference curve must be rendered **strictly behind Loom's live curves**:
+     $$\text{Canvas Background} \to \text{Gridlines} \to \mathbf{Static\ Baseline\ Reference\ Line} \to \text{Live Gamma Line} \to \text{Live Beta Line} \to \text{Live Alpha Line} \to \text{Outage Markers} \to \text{Head Dots}$$
+   - *Architectural Rationale*: Sinking the dashed gray line to the background ensures it provides contextual contrast without competing with or visually fracturing the live telemetry signals.
+
+---
+
+#### 4. Load-Bearing Disambiguation Legend
+
+A compact legend element is added to the chart header / canvas corner:
+- **Element 1**: Solid Accent Bar (`#5B8DEF`, solid `w-3 h-0.5`) + text `'Loom (live)'` (`Inter`, 11px, `#E4E6EB`).
+- **Element 2**: Dashed Gray Bar (`#8B8F98`, dashed border or SVG `stroke-dasharray="2 2"`) + text `'Static baseline (recorded run)'` (`Inter`, 11px, `#8B8F98`).
+- **Load-Bearing Invariant**:
+  - This legend is **architecturally load-bearing, not decorative copy**.
+  - Without explicit disambiguation, visiting engineers, tech leads, or executive panels would mistake the dashed line for a second concurrent live router running in production (or a fourth gateway arm). The label explicitly establishes the epistemological status of the two lines: Loom is actively responding to live events; the static baseline is an archival reference run under the identical failure gauntlet.
+
+---
+
+#### 5. Timeline Synchronization Mechanics (X-Axis Alignment)
+
+To ensure the live outage and the recorded baseline cliff align perfectly on screen:
+1. **Dynamic Outage Anchor Point**:
+   - When an outage is triggered in the live demo (via `'Trigger outage'` text button or benchmark presets), the system records the live trigger event index $i_{\text{outage}}$ and timestamp $t_{\text{outage}}$.
+   - An Outage Event Marker is pinned at horizontal coordinate $X_{\text{outage}}$.
+2. **Relative Offset Mapping**:
+   - The baseline reference dataset is parameterized relative to outage trigger ($\Delta \tau = 0$ at trigger).
+   - For any point $i$ in the active chart window ($i \in [0, N-1]$):
+     $$\Delta i = i - i_{\text{outage}}$$
+   - If no outage has been triggered yet in the current session (or if the last outage has completely rolled off the 60-second window):
+     $$w_{\text{Alpha}}^{\text{baseline}}(i) = 1.00 \quad (\forall i)$$
+     *(Renders as a clean, resting 100% dashed reference line, showing the static baseline's normal priority allocation).*
+   - When an outage is present within the chart window:
+     - For events prior to outage ($i < i_{\text{outage}}$): $w_{\text{Alpha}}^{\text{baseline}} = 1.00$.
+     - For 3 events after outage ($i_{\text{outage}} \le i < i_{\text{outage}} + 3$): $w_{\text{Alpha}}^{\text{baseline}} = 1.00$ (absorbing $M=3$ failures).
+     - At $i = i_{\text{outage}} + 3$: Allocation drops vertically down to $0.00$ at a sharp 90° angle.
+     - While outage is active: Allocation remains flat at $0.00$.
+     - When recovery occurs + canary probe succeeds: Allocation jumps vertically back to $1.00$.
+3. **Visual Result on Screen**:
+   - Both Loom's live line and the static baseline line encounter the failure at the exact same horizontal coordinate $X_{\text{outage}}$.
+   - The evaluator sees the static line plummet instantly to zero (the 100% stampede), while Loom's line eases smoothly down along its exponential damping curve, demonstrating the 8.5x stability advantage ($\Delta w_{\text{max}} = 11.77\%$ vs $100.0\%$) with unmistakable clarity.
+
+---
+
 ## Open Risks
 
 
@@ -816,6 +1272,11 @@ class BaselineRouterConfig(BaseModel):
 - **[Phase 6] Secondary Acquirer Capacity Cliff in Stress Tests:** The simulated acquirer service in Phase 2 currently handles requests without internal rate limiting. In production, herd migration causes secondary gateway collapse because backup acquirers hit concurrency limits. Future benchmark iterations or stress scripts in Phase 8 should incorporate rate-limiting on Acquirer Beta to make the operational danger of herd migration tangible.
 - **[Phase 6 Tech Lead Review] Micro-Benchmark PSR Inversion vs Infinite Secondary Capacity:** In an unconstrained synthetic benchmark where secondary acquirers have infinite mock capacity, cutting over via an instantaneous 100% Heaviside step jump incurs fewer transition failures (4 failures) than Loom's smooth PID ramp (11 failures). This causes the static baseline to register 92.00% vs Loom's 86.00% on the standard 150-tx test. This raw 86% vs 92% number cannot be used as the naive headline comparison on the Phase 7 dashboard; the dashboard must explicitly contextualize the 8.5x stability improvement ($\Delta w_{\text{max}} = 11.77\%$ vs $100.0\%$) and the downstream secondary capacity protection.
 - **[Phase 6 Tech Lead Review] Multi-Scenario Dashboard Architecture for Phase 7:** To demonstrate Loom's true PSR advantage convincingly in Phase 7, the dashboard operator controls must provide toggleable scenario gauntlets: (1) Standard Outage ($M=3$), highlighting stability and failure damping, (2) Sensitive Blip / Overreaction ($M=1$), demonstrating Loom's +1000 bps PSR lift (86% vs 76%), and (3) Gray Failure / Brownout, demonstrating dynamic adaptation against static counter-reset paralysis.
+- **[Phase 7] Browser Main-Thread Render Starvation under High-TPS Transaction Bursts:** If the transaction generator fires at 50–100 TPS, naive component state updating per WebSocket message will freeze the React event loop. The decoupled ring buffer and `requestAnimationFrame` ticker (ADR-03) must be strictly adhered to by the frontend engineer; any direct `setState` inside `ws.onmessage` is an immediate review blocker.
+- **[Phase 7] Chart Canvas Memory Leaks during Prolonged Running:** Long-running browser tabs accumulating points into unbounded arrays will cause Chromium tab crashes (OOM). Ticket A's time series must enforce a hard FIFO slice (max 200 data points or 60-second window).
+- **[Phase 7] WebSocket Cold-Start Race Conditions:** If the React dashboard mounts and connects before the simulated acquirers or router service are fully initialized, the WebSocket connection will drop or receive an empty bootstrap state. The UI must handle initial `DISCONNECTED` states gracefully with automated exponential backoff retries without crashing the page.
+- **[Phase 7] Acquirer Admin Outage Propagation Latency:** When an operator clicks `TRIGGER OUTAGE`, there is an async network round-trip from browser $\to$ router proxy $\to$ simulated acquirer $\to$ router state $\to$ Redis Pub/Sub $\to$ WebSocket $\to$ browser chart. If this loop exceeds 100ms, the operator will experience perceptible interface lag. Network latencies across localhost must remain $<10\text{ms}$.
+- **[Phase 7] Visual Misinterpretation of the Unconstrained 86% vs 92% Benchmark:** If an uninformed audience views the Phase 6 standard outage numbers without context, they may mistakenly assume the static router is superior because it scored 92% vs Loom's 86%. Ticket B's `BaselineComparisonCard` must prominently feature the $M=1$ Overreaction scenario (Loom +1000 bps lift) and the 8.5x stability multiplier ($\Delta w_{\text{max}} = 11.77\%$ vs $100.0\%$).
 
 ---
 

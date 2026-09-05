@@ -10,6 +10,7 @@ import uvicorn
 
 from router_core.app import create_router_app
 from router_core.models import AcquirerRouteConfig, RouterConfig
+from router_core.pid import PIDConfig
 from router_core.state import AcquirerStateConfig
 
 
@@ -56,6 +57,36 @@ def parse_args(args: list[str] | None = None) -> argparse.Namespace:
         help="Server logging level (default: info)",
     )
     parser.add_argument(
+        "--pid",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Enable PID smoothing layer (default: True, use --no-pid to disable)",
+    )
+    parser.add_argument(
+        "--kp",
+        type=float,
+        default=0.12,
+        help="PID proportional gain (default: 0.12)",
+    )
+    parser.add_argument(
+        "--ki",
+        type=float,
+        default=0.005,
+        help="PID integral gain (default: 0.005)",
+    )
+    parser.add_argument(
+        "--kd",
+        type=float,
+        default=0.25,
+        help="PID derivative gain (default: 0.25)",
+    )
+    parser.add_argument(
+        "--min-allocation",
+        type=float,
+        default=0.03,
+        help="Minimum exploration allocation floor per acquirer (default: 0.03)",
+    )
+    parser.add_argument(
         "--reload",
         action="store_true",
         help="Enable auto-reload for development",
@@ -83,7 +114,16 @@ def build_router_config(parsed: argparse.Namespace) -> RouterConfig:
             )
         )
 
-    return RouterConfig(routes=routes)
+    pid_config: PIDConfig | None = None
+    if getattr(parsed, "pid", True):
+        pid_config = PIDConfig(
+            kp=getattr(parsed, "kp", 0.12),
+            ki=getattr(parsed, "ki", 0.005),
+            kd=getattr(parsed, "kd", 0.25),
+            min_allocation=getattr(parsed, "min_allocation", 0.03),
+        )
+
+    return RouterConfig(routes=routes, pid_config=pid_config)
 
 
 def main() -> None:

@@ -302,3 +302,7 @@ def create_app(
         return sim.reset()
 
     return app
+
+
+# Default application instance for ASGI servers (e.g. uvicorn acquirer_sim.app:app)
+app = create_app()

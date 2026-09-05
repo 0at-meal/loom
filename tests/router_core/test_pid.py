@@ -19,9 +19,9 @@ class TestPIDCoreContractAndValidation:
     def test_default_config_valid(self) -> None:
         """Default PIDConfig should have valid defaults per spec."""
         config = PIDConfig()
-        assert config.kp == 0.20
-        assert config.ki == 0.01
-        assert config.kd == 0.10
+        assert config.kp == 0.12
+        assert config.ki == 0.005
+        assert config.kd == 0.25
         assert config.integral_max == 1.0
         assert config.integral_decay == 1.0
         assert config.derivative_filter_alpha == 0.0
