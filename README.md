@@ -8,7 +8,7 @@ A multi-armed bandit algorithm continuously learns which payment acquirer is hea
 
 ## Results at a Glance
 
-All metrics below are pulled directly from empirical benchmark runs on the identical 150-transaction outage gauntlet documented in [`docs/phase6-qa-report.md`](file:///d:/loom/docs/phase6-qa-report.md), [`docs/phase7-qa-report.md`](file:///d:/loom/docs/phase7-qa-report.md), and [`docs/phase4-qa-report.md`](file:///d:/loom/docs/phase4-qa-report.md). The benchmark environment evaluates Primary Acquirer Alpha (95% base PSR) vs Backup Acquirer Beta (94% base PSR) with simulator seed `42` across three stages: Warmup (Tx 1–50), Outage on Alpha (Tx 51–100, effective PSR 0.0%), and Recovery on Alpha (Tx 101–150, effective PSR 95.0%).
+All metrics below are pulled directly from empirical benchmark runs on the identical 150-transaction outage gauntlet. The benchmark environment evaluates Primary Acquirer Alpha (95% base PSR) vs Backup Acquirer Beta (94% base PSR) with simulator seed `42` across three stages: Warmup (Tx 1–50), Outage on Alpha (Tx 51–100, effective PSR 0.0%), and Recovery on Alpha (Tx 101–150, effective PSR 95.0%).
 
 ### Empirical Benchmark Gauntlet (Identical 150-Tx Outage Schedule)
 
@@ -54,12 +54,12 @@ Loom executes a four-stage closed-loop pipeline across discrete functional bound
 │             ▼                                                                          │
 │  ┌──────────────────────────────────────────────────────────────────────────────────┐  │
 │  │ 1. ROUTER CORE (router_core/)                                                    │  │
-│  │    ├── Bayesian Perception: Thompson Sampling Beta(α, β) with mean-reverting    │  │
+│  │    ├── Bayesian Perception: Thompson Sampling Beta(α, β) with mean-reverting     │  │
 │  │    │   offset decay (γ=0.98) produces target setpoint weights w_target.          │  │
-│  │    ├── PID Smoothing Engine: Derivative-on-measurement (-Kd·dw/dt) and anti-    │  │
+│  │    ├── PID Smoothing Engine: Derivative-on-measurement (-Kd·dw/dt) and anti-     │  │
 │  │    │   windup clamping (I_max=1.0) smooths target into w_smoothed.               │  │
 │  │    ├── Simplex Actuation: Simplex projection enforces exploration floor          │  │
-│  │    │   (w_min >= 0.03); Bresenham deficit queue schedules discrete dispatch.    │  │
+│  │    │   (w_min >= 0.03); Bresenham deficit queue schedules discrete dispatch.     │  │
 │  │    └── Non-Blocking Hook: Emits RoutingResult to Data Layer.                     │  │
 │  └──────────────────────────────────┬───────────────────────────────────────────────┘  │
 │                                     │                                                  │
