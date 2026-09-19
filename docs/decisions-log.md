@@ -181,7 +181,10 @@ Format: `[Phase] Decision — alternatives considered — why this one won`
   2. *Load-Bearing Evidence of the PID-Wiring Bug*: Loom's engineering credibility rests on proving that its multi-role loop (Architect $\to$ Engineer $\to$ QA $\to$ Tech Lead) operates as a rigorous, adversarial safety mechanism. Condensing the section would obscure the concrete PID-wiring bug—where the production server entrypoints silently fell back to Winner-Take-All hard-switching and were caught exclusively by QA's live TCP socket verification. That bug is primary evidence of engineering integrity, not an implementation footnote.
   3. *Balance of Depth and Conciseness*: Applying Principle 9 ("real depth over hand-waving") while maintaining Principle 10 discipline: the section is kept tight (33 lines), contains an illustrative Mermaid cycle, details the defect and resolution with exact parameter locks ($K_p=0.12, K_i=0.005, K_d=0.25, I_{\text{max}}=1.0, w_{\text{min}}=0.03$), and links directly to regression test artifacts (`tests/router_core/test_server_cli.py`).
 
+- **[Phase 8] Value-Scaled Exploration Policy Layer via Exponential Shrinkage toward Posterior Mean ($\tilde{\theta}_i = (1 - \lambda(V))\theta_i + \lambda(V)\hat{\mu}_i$).** Alternatives considered: Hard rule thresholds (e.g. static cutoff `if amount > 500: route_to_leader()`); dollar-weighted Bayesian updates ($\alpha \leftarrow \alpha + V$); variance-scaled Beta shape modifications ($\alpha' = k\alpha, \beta' = k\beta$). Why this one won: Modifying Beta updates with dollar weights violates the conjugate Bernoulli likelihood (a $10,000 transaction is not 10,000 independent coin tosses) and triggers pseudo-count explosion that destroys decay half-life calibration. Hard amount cutoffs create artificial knife-edge discontinuities where $499.99 explores and $500.00 locks down. Continuous exponential shrinkage $\lambda(V) = 1 - \exp(-V/\tau)$ smoothly contracts the effective sampling width $\text{Width}(\tilde{\theta}_i) = (1 - \lambda(V))\sigma_i$ toward zero as transaction value $V$ increases, cleanly concentrating high-value transactions onto the best-known arm ($\arg\max_i \hat{\mu}_i$) while preserving normal exploration for micro-transactions. Sits as a pure wrapper policy between Thompson sampling perception and selection/actuation, leaving Phase 1's underlying Beta updates, health scoring, and PID mechanics completely untouched.
+
 ## Interface Contracts
+
 
 
 ### [Phase 1] Per-Acquirer State & Health Signal Contract
@@ -1234,9 +1237,59 @@ To ensure the live outage and the recorded baseline cliff align perfectly on scr
    - Both Loom's live line and the static baseline line encounter the failure at the exact same horizontal coordinate $X_{\text{outage}}$.
    - The evaluator sees the static line plummet instantly to zero (the 100% stampede), while Loom's line eases smoothly down along its exponential damping curve, demonstrating the 8.5x stability advantage ($\Delta w_{\text{max}} = 11.77\%$ vs $100.0\%$) with unmistakable clarity.
 
+### [Phase 8] Value-Scaled Exploration Policy Layer Contract
+
+**Module Target**: `router_core/value_policy.py` (Policy logic & config), integrated via `router_core/models.py` and `router_core/router.py`.
+
+#### 1. Configuration & Mathematical Functions
+
+```python
+import math
+from pydantic import BaseModel, ConfigDict, Field
+
+class ValueScaledExplorationConfig(BaseModel):
+    """Configuration for Phase 8 value-scaled exploration policy."""
+
+    model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
+
+    enabled: bool = Field(
+        default=False,
+        description="Whether value-scaled exploration is active.",
+    )
+    tau: float = Field(
+        default=100.0,
+        gt=0.0,
+        description="Reference amount (tau) where exploration width is compressed by 63.2%.",
+    )
+
+    def calculate_shrinkage(self, amount: float) -> float:
+        """Calculate shrinkage factor lambda(V) in [0, 1)."""
+        if not self.enabled or amount <= 0.0:
+            return 0.0
+        return 1.0 - math.exp(-amount / self.tau)
+
+def apply_value_scaled_policy(
+    samples: dict[str, float],
+    posterior_means: dict[str, float],
+    amount: float,
+    config: ValueScaledExplorationConfig | None,
+) -> tuple[dict[str, float], float]:
+    """Adjust raw Thompson samples toward posterior means based on transaction value."""
+    if config is None or not config.enabled or amount <= 0.0:
+        return dict(samples), 0.0
+
+    lam = config.calculate_shrinkage(amount)
+    adjusted = {
+        aid: (1.0 - lam) * samples[aid] + lam * posterior_means[aid]
+        for aid in samples
+    }
+    return adjusted, lam
+```
+
 ---
 
 ## Open Risks
+
 
 
 *(Rolls forward from the PRD, then grows as QA/Tech Lead surface new ones per phase.)*
@@ -1283,8 +1336,10 @@ To ensure the live outage and the recorded baseline cliff align perfectly on scr
 - **[Phase 7] WebSocket Cold-Start Race Conditions:** If the React dashboard mounts and connects before the simulated acquirers or router service are fully initialized, the WebSocket connection will drop or receive an empty bootstrap state. The UI must handle initial `DISCONNECTED` states gracefully with automated exponential backoff retries without crashing the page.
 - **[Phase 7] Acquirer Admin Outage Propagation Latency:** When an operator clicks `TRIGGER OUTAGE`, there is an async network round-trip from browser $\to$ router proxy $\to$ simulated acquirer $\to$ router state $\to$ Redis Pub/Sub $\to$ WebSocket $\to$ browser chart. If this loop exceeds 100ms, the operator will experience perceptible interface lag. Network latencies across localhost must remain $<10\text{ms}$.
 - **[Phase 7] Visual Misinterpretation of the Unconstrained 86% vs 92% Benchmark:** If an uninformed audience views the Phase 6 standard outage numbers without context, they may mistakenly assume the static router is superior because it scored 92% vs Loom's 86%. Ticket B's `BaselineComparisonCard` must prominently feature the $M=1$ Overreaction scenario (Loom +1000 bps lift) and the 8.5x stability multiplier ($\Delta w_{\text{max}} = 11.77\%$ vs $100.0\%$).
+- **[Phase 8] Value-scaled exploration suppression of recovery discovery under high-value traffic bursts:** When value-scaling is active and traffic consists predominantly of high-value transactions ($V \gg \tau$), exploration width on secondary/recovering arms is compressed to near zero ($\lambda \approx 1$). While this protects capital from failure risk on degraded routes, it prevents high-value transactions from discovering when a previously failed route has recovered. The system relies entirely on low-value transactions or the Phase 4 minimum allocation floor ($w_{\text{min}} = 0.03$) to generate recovery probe observations.
 
 ---
+
 
 
 ## How to use this file
