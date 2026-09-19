@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from acquirer_sim.models import AuthorizeResponse
 from router_core.pid import PIDConfig, PIDDiagnostics
 from router_core.state import AcquirerStateConfig, AcquirerStateSnapshot
+from router_core.value_policy import ValueScaledExplorationConfig
 
 
 class AcquirerRouteConfig(BaseModel):
@@ -79,6 +80,13 @@ class RouterConfig(BaseModel):
         description=(
             "Optional PID smoothing configuration. "
             "If None, router uses raw Thompson hard-switching."
+        ),
+    )
+    value_scaled_config: ValueScaledExplorationConfig | None = Field(
+        default=None,
+        description=(
+            "Optional Phase 8 value-scaled exploration policy configuration. "
+            "If None or disabled, router uses standard Thompson Sampling."
         ),
     )
 
@@ -160,6 +168,14 @@ class RoutingResult(BaseModel):
     pid_diagnostics: PIDDiagnostics | None = Field(
         default=None,
         description="Internal PID calculation diagnostics if PID layer was active.",
+    )
+    adjusted_samples: dict[str, float] | None = Field(
+        default=None,
+        description="Value-scaled adjusted samples if Phase 8 policy was active.",
+    )
+    exploration_shrinkage: float | None = Field(
+        default=None,
+        description="Shrinkage factor lambda(V) applied to Thompson samples in Phase 8.",
     )
     timestamp: float = Field(
         ...,

@@ -16,6 +16,10 @@ from router_core.state import (
     AcquirerStateConfig,
     AcquirerStateSnapshot,
 )
+from router_core.value_policy import (
+    ValueScaledExplorationConfig,
+    apply_value_scaled_policy,
+)
 
 __all__ = [
     "AcquirerRouteConfig",
@@ -30,6 +34,8 @@ __all__ = [
     "PIDStepResult",
     "RouterConfig",
     "RoutingResult",
+    "ValueScaledExplorationConfig",
+    "apply_value_scaled_policy",
     "calculate_gamma_from_half_life",
     "calculate_pid_step",
     "project_to_bounded_simplex",

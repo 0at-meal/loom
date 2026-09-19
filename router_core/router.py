@@ -15,6 +15,7 @@ from router_core.bandit import BanditStateRegistry
 from router_core.models import AcquirerRouteConfig, RouterConfig, RoutingResult
 from router_core.pid import PIDConfig, PIDDiagnostics, PIDState, calculate_pid_step
 from router_core.state import AcquirerStateSnapshot
+from router_core.value_policy import ValueScaledExplorationConfig, apply_value_scaled_policy
 
 if TYPE_CHECKING:
     from data_layer.redis_pubsub import AsyncEventPublisher, EventPublisher
@@ -60,6 +61,9 @@ class BanditRouter:
         self._dispatched_count: dict[str, int] = {}
         self._last_diagnostics: PIDDiagnostics | None = None
 
+        # Phase 8 Value-Scaled Exploration policy configuration
+        self._value_scaled_config: ValueScaledExplorationConfig | None = config.value_scaled_config
+
         if self._pid_config is not None:
             acquirer_ids = [r.acquirer_id for r in config.routes]
             self._pid_state = PIDState.initialize(acquirer_ids)
@@ -71,6 +75,11 @@ class BanditRouter:
     def config(self) -> RouterConfig:
         """Return the configuration parameters for this router."""
         return self._config
+
+    @property
+    def value_scaled_config(self) -> ValueScaledExplorationConfig | None:
+        """Return the value-scaled exploration policy configuration if set."""
+        return self._value_scaled_config
 
     @property
     def registry(self) -> BanditStateRegistry:
@@ -132,28 +141,66 @@ class BanditRouter:
         """Async context manager exit."""
         await self.close()
 
-    def select_route(self) -> tuple[str, dict[str, float]]:
+    def select_route(self, amount: float = 0.0) -> tuple[str, dict[str, float]]:
         """Sample Beta beliefs across all candidate routes and select argmax arm."""
-        samples = self._registry.sample_all(rng=self._rng)
+        raw_samples = self._registry.sample_all(rng=self._rng)
+        if (
+            self._value_scaled_config is not None
+            and self._value_scaled_config.enabled
+            and amount > 0.0
+        ):
+            states = self._registry.get_all_states()
+            means = {aid: s.expected_success_rate for aid, s in states.items()}
+            adjusted_samples, _ = apply_value_scaled_policy(
+                samples=raw_samples,
+                posterior_means=means,
+                amount=amount,
+                config=self._value_scaled_config,
+            )
+            selected_id = max(
+                adjusted_samples.keys(),
+                key=lambda aid: (adjusted_samples[aid], aid),
+            )
+            return selected_id, adjusted_samples
+
         # Deterministic tie-breaking: max by sample value, then by acquirer_id
-        selected_id = max(samples.keys(), key=lambda aid: (samples[aid], aid))
-        return selected_id, samples
+        selected_id = max(raw_samples.keys(), key=lambda aid: (raw_samples[aid], aid))
+        return selected_id, raw_samples
 
     async def route(self, request: AuthorizeRequest) -> RoutingResult:
         """Execute end-to-end routing decision, acquirer dispatch, and state update."""
         t_start = time.perf_counter()
 
-        # 1. Perception, PID Smoothing & Selection
+        # 1. Perception, Value-Scaled Policy, PID Smoothing & Selection
         t_sample_start = time.perf_counter()
-        samples = self._registry.sample_all(rng=self._rng)
+        raw_samples = self._registry.sample_all(rng=self._rng)
+        effective_samples = raw_samples
+        adjusted_samples: dict[str, float] | None = None
+        shrinkage: float | None = None
+
+        if (
+            self._value_scaled_config is not None
+            and self._value_scaled_config.enabled
+            and request.amount > 0.0
+        ):
+            states = self._registry.get_all_states()
+            means = {aid: s.expected_success_rate for aid, s in states.items()}
+            adjusted_samples, shrinkage = apply_value_scaled_policy(
+                samples=raw_samples,
+                posterior_means=means,
+                amount=request.amount,
+                config=self._value_scaled_config,
+            )
+            effective_samples = adjusted_samples
+
         target_allocation: dict[str, float] | None = None
         smoothed_allocation: dict[str, float] | None = None
         diagnostics: PIDDiagnostics | None = None
 
         if self._pid_config is not None and self._pid_state is not None:
-            # Thompson sampling target allocation
-            win_id = max(samples.keys(), key=lambda aid: (samples[aid], aid))
-            target_allocation = {aid: 1.0 if aid == win_id else 0.0 for aid in samples}
+            # Thompson sampling target allocation using effective samples
+            win_id = max(effective_samples.keys(), key=lambda aid: (effective_samples[aid], aid))
+            target_allocation = {aid: 1.0 if aid == win_id else 0.0 for aid in effective_samples}
 
             # PID smoothing step
             step_result = calculate_pid_step(
@@ -186,21 +233,38 @@ class BanditRouter:
                 probs = [self._current_allocation[k] for k in keys]
                 selected_id = str(self._rng.choice(keys, p=probs))
         else:
-            # Winner-take-all argmax hard-switch (Phase 3 baseline)
-            selected_id = max(samples.keys(), key=lambda aid: (samples[aid], aid))
-            smoothed_allocation = {aid: 1.0 if aid == selected_id else 0.0 for aid in samples}
+            # Winner-take-all argmax hard-switch (Phase 3 baseline using effective samples)
+            selected_id = max(
+                effective_samples.keys(),
+                key=lambda aid: (effective_samples[aid], aid),
+            )
+            smoothed_allocation = {
+                aid: 1.0 if aid == selected_id else 0.0 for aid in effective_samples
+            }
             target_allocation = dict(smoothed_allocation)
 
         t_sample_end = time.perf_counter()
         routing_latency_ms = (t_sample_end - t_sample_start) * 1000.0
 
-        sample_str = ", ".join(f"{k}={v:.4f}" for k, v in sorted(samples.items()))
-        logger.info(
-            "Routing decision: tx_id=%s -> selected=%s (samples: [%s])",
-            request.transaction_id,
-            selected_id,
-            sample_str,
-        )
+        sample_str = ", ".join(f"{k}={v:.4f}" for k, v in sorted(raw_samples.items()))
+        if adjusted_samples is not None:
+            adj_str = ", ".join(f"{k}={v:.4f}" for k, v in sorted(adjusted_samples.items()))
+            logger.info(
+                "Routing decision: tx_id=%s -> selected=%s "
+                "(raw: [%s], adjusted: [%s], lambda=%.4f)",
+                request.transaction_id,
+                selected_id,
+                sample_str,
+                adj_str,
+                shrinkage or 0.0,
+            )
+        else:
+            logger.info(
+                "Routing decision: tx_id=%s -> selected=%s (samples: [%s])",
+                request.transaction_id,
+                selected_id,
+                sample_str,
+            )
 
         route_info = self._routes[selected_id]
         url = route_info.get_authorize_url()
@@ -288,7 +352,7 @@ class BanditRouter:
         routing_result = RoutingResult(
             transaction_id=request.transaction_id,
             selected_acquirer=selected_id,
-            thompson_samples=samples,
+            thompson_samples=raw_samples,
             status=status,
             authorized=authorized,
             success=success,
@@ -301,6 +365,8 @@ class BanditRouter:
             smoothed_allocation=smoothed_allocation,
             target_allocation=target_allocation,
             pid_diagnostics=diagnostics,
+            adjusted_samples=adjusted_samples,
+            exploration_shrinkage=shrinkage,
             timestamp=time.time(),
         )
 
