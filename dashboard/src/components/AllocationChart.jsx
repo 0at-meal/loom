@@ -383,7 +383,7 @@ export function AllocationChart({
             </span>
             <p className="text-[11px] text-[#8B8F98] max-w-sm">
               No live transaction events received from Phase 5 yet. Start the transaction generator
-              or trigger a test transaction to see real-time closed-loop allocation.
+              or trigger a test transaction to see the live allocation.
             </p>
           </div>
         ) : (

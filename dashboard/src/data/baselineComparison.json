@@ -1,0 +1,5467 @@
+{
+  "mode": "multi_seed",
+  "n_seeds": 100,
+  "seed": 42,
+  "seed_spacing": 10,
+  "loom_seed": 777,
+  "cooldown_n": 30,
+  "scenario": {
+    "transactions": 150,
+    "stages": "50 warmup, 50 outage on Alpha, 50 recovery",
+    "alpha_rate": 0.95,
+    "beta_rate": 0.94,
+    "gray_rate": 0.6,
+    "loom": "decay 0.95, PID kp=0.12 ki=0.005 kd=0.25, floor 0.03, deficit actuation"
+  },
+  "configs": {
+    "loom": {
+      "router": "loom",
+      "threshold_m": null,
+      "gray_rate": null,
+      "mean_psr_pct": 89.1,
+      "mean_outage_flips": 13.05,
+      "mean_outage_failures_alpha": 8.19,
+      "max_step_delta_range_pct": [
+        9.629381932775328,
+        12.36557218403932
+      ]
+    },
+    "raw": {
+      "router": "raw",
+      "threshold_m": null,
+      "gray_rate": null,
+      "mean_psr_pct": 90.81333333333333,
+      "mean_outage_flips": 7.66,
+      "mean_outage_failures_alpha": 5.54,
+      "max_step_delta_range_pct": [
+        100.0,
+        100.0
+      ]
+    },
+    "static_m1": {
+      "router": "baseline",
+      "threshold_m": 1,
+      "gray_rate": null,
+      "mean_psr_pct": 75.62666666666667,
+      "mean_outage_flips": 3.02,
+      "mean_outage_failures_alpha": 30.47,
+      "max_step_delta_range_pct": [
+        100.0,
+        100.0
+      ]
+    },
+    "static_m3": {
+      "router": "baseline",
+      "threshold_m": 3,
+      "gray_rate": null,
+      "mean_psr_pct": 92.28666666666668,
+      "mean_outage_flips": 3.01,
+      "mean_outage_failures_alpha": 3.91,
+      "max_step_delta_range_pct": [
+        100.0,
+        100.0
+      ]
+    },
+    "static_m5": {
+      "router": "baseline",
+      "threshold_m": 5,
+      "gray_rate": null,
+      "mean_psr_pct": 91.04666666666667,
+      "mean_outage_flips": 3,
+      "mean_outage_failures_alpha": 5.93,
+      "max_step_delta_range_pct": [
+        100.0,
+        100.0
+      ]
+    },
+    "loom_gray": {
+      "router": "loom",
+      "threshold_m": null,
+      "gray_rate": 0.6,
+      "mean_psr_pct": 91.07333333333332,
+      "mean_outage_flips": 21.34,
+      "mean_outage_failures_alpha": 5.55,
+      "max_step_delta_range_pct": [
+        9.629381932775328,
+        12.377343401618434
+      ]
+    },
+    "static_m3_gray": {
+      "router": "baseline",
+      "threshold_m": 3,
+      "gray_rate": 0.6,
+      "mean_psr_pct": 88.36,
+      "mean_outage_flips": 1.5,
+      "mean_outage_failures_alpha": 11.15,
+      "max_step_delta_range_pct": [
+        0.0,
+        100.0
+      ]
+    }
+  },
+  "comparisons": {
+    "loom_vs_m1": {
+      "label": "Loom vs static M=1 (hard outage)",
+      "first": "loom",
+      "second": "static_m1",
+      "n": 100,
+      "mean_diff_pp": 13.473333333333334,
+      "ci95_low_pp": 12.103225904850119,
+      "ci95_high_pp": 14.84344076181655,
+      "wins": 91,
+      "ties": 1,
+      "losses": 8
+    },
+    "loom_vs_m3": {
+      "label": "Loom vs static M=3 (hard outage)",
+      "first": "loom",
+      "second": "static_m3",
+      "n": 100,
+      "mean_diff_pp": -3.186666666666667,
+      "ci95_low_pp": -3.68679685702211,
+      "ci95_high_pp": -2.6865364763112236,
+      "wins": 6,
+      "ties": 4,
+      "losses": 90
+    },
+    "loom_vs_m5": {
+      "label": "Loom vs static M=5 (hard outage)",
+      "first": "loom",
+      "second": "static_m5",
+      "n": 100,
+      "mean_diff_pp": -1.9466666666666663,
+      "ci95_low_pp": -2.442216911300771,
+      "ci95_high_pp": -1.451116422032562,
+      "wins": 15,
+      "ties": 8,
+      "losses": 77
+    },
+    "loom_vs_m3_gray": {
+      "label": "Loom vs static M=3 (gray failure, Alpha at 60%)",
+      "first": "loom_gray",
+      "second": "static_m3_gray",
+      "n": 100,
+      "mean_diff_pp": 2.713333333333333,
+      "ci95_low_pp": 2.077333932550533,
+      "ci95_high_pp": 3.3493327341161323,
+      "wins": 77,
+      "ties": 7,
+      "losses": 16
+    },
+    "pid_vs_raw": {
+      "label": "Loom with PID vs raw bandit (hard outage)",
+      "first": "loom",
+      "second": "raw",
+      "n": 100,
+      "mean_diff_pp": -1.7133333333333338,
+      "ci95_low_pp": -1.98660763639912,
+      "ci95_high_pp": -1.4400590302675476,
+      "wins": 5,
+      "ties": 8,
+      "losses": 87
+    }
+  },
+  "rows": [
+    {
+      "sim_seed": 42,
+      "loom_seed": 777,
+      "loom": {
+        "psr": 0.86,
+        "outage_psr": 0.72,
+        "outage_failures_alpha": 11,
+        "outage_flips": 13,
+        "max_step_delta": 0.11773470631949312
+      },
+      "raw": {
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 7,
+        "outage_flips": 12,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.76,
+        "outage_psr": 0.38,
+        "outage_failures_alpha": 30,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.92,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.9,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 6,
+        "outage_flips": 29,
+        "max_step_delta": 0.11889777483969846
+      },
+      "static_m3_gray": {
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 8,
+        "outage_flips": 2,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 52,
+      "loom_seed": 778,
+      "loom": {
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.76,
+        "outage_failures_alpha": 9,
+        "outage_flips": 16,
+        "max_step_delta": 0.11674755399623733
+      },
+      "raw": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 6,
+        "outage_flips": 7,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.6733333333333333,
+        "outage_psr": 0.16,
+        "outage_failures_alpha": 40,
+        "outage_flips": 4,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 6,
+        "outage_flips": 20,
+        "max_step_delta": 0.10364439736729086
+      },
+      "static_m3_gray": {
+        "psr": 0.8466666666666667,
+        "outage_psr": 0.64,
+        "outage_failures_alpha": 18,
+        "outage_flips": 0,
+        "max_step_delta": 0.0
+      }
+    },
+    {
+      "sim_seed": 62,
+      "loom_seed": 779,
+      "loom": {
+        "psr": 0.9,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 6,
+        "outage_flips": 11,
+        "max_step_delta": 0.10353353429767664
+      },
+      "raw": {
+        "psr": 0.8733333333333333,
+        "outage_psr": 0.76,
+        "outage_failures_alpha": 10,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.6666666666666666,
+        "outage_psr": 0.14,
+        "outage_failures_alpha": 41,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.9,
+        "outage_failures_alpha": 4,
+        "outage_flips": 16,
+        "max_step_delta": 0.11647819818267821
+      },
+      "static_m3_gray": {
+        "psr": 0.8133333333333334,
+        "outage_psr": 0.62,
+        "outage_failures_alpha": 18,
+        "outage_flips": 1,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 72,
+      "loom_seed": 780,
+      "loom": {
+        "psr": 0.86,
+        "outage_psr": 0.7,
+        "outage_failures_alpha": 11,
+        "outage_flips": 15,
+        "max_step_delta": 0.11735333519180025
+      },
+      "raw": {
+        "psr": 0.8733333333333333,
+        "outage_psr": 0.76,
+        "outage_failures_alpha": 9,
+        "outage_flips": 7,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.6266666666666667,
+        "outage_psr": 0.02,
+        "outage_failures_alpha": 48,
+        "outage_flips": 2,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.88,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 7,
+        "outage_flips": 21,
+        "max_step_delta": 0.12364765625
+      },
+      "static_m3_gray": {
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.76,
+        "outage_failures_alpha": 9,
+        "outage_flips": 1,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 82,
+      "loom_seed": 781,
+      "loom": {
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 6,
+        "outage_flips": 12,
+        "max_step_delta": 0.11316331347524536
+      },
+      "raw": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 4,
+        "outage_flips": 8,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.7133333333333334,
+        "outage_psr": 0.18,
+        "outage_failures_alpha": 39,
+        "outage_flips": 4,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.92,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 4,
+        "outage_flips": 30,
+        "max_step_delta": 0.12074246711672365
+      },
+      "static_m3_gray": {
+        "psr": 0.8666666666666667,
+        "outage_psr": 0.64,
+        "outage_failures_alpha": 18,
+        "outage_flips": 1,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 92,
+      "loom_seed": 782,
+      "loom": {
+        "psr": 0.92,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 3,
+        "outage_flips": 6,
+        "max_step_delta": 0.12365337331194684
+      },
+      "raw": {
+        "psr": 0.9466666666666667,
+        "outage_psr": 0.94,
+        "outage_failures_alpha": 0,
+        "outage_flips": 0,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.7733333333333333,
+        "outage_psr": 0.48,
+        "outage_failures_alpha": 25,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.9,
+        "outage_failures_alpha": 2,
+        "outage_flips": 6,
+        "max_step_delta": 0.12365337331194684
+      },
+      "static_m3_gray": {
+        "psr": 0.8466666666666667,
+        "outage_psr": 0.68,
+        "outage_failures_alpha": 16,
+        "outage_flips": 0,
+        "max_step_delta": 0.0
+      }
+    },
+    {
+      "sim_seed": 102,
+      "loom_seed": 783,
+      "loom": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 6,
+        "outage_flips": 10,
+        "max_step_delta": 0.1176246125187678
+      },
+      "raw": {
+        "psr": 0.92,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 6,
+        "outage_flips": 11,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.8066666666666666,
+        "outage_psr": 0.56,
+        "outage_failures_alpha": 21,
+        "outage_flips": 4,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.92,
+        "outage_psr": 0.9,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 3,
+        "outage_flips": 21,
+        "max_step_delta": 0.11954268502678145
+      },
+      "static_m3_gray": {
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 10,
+        "outage_flips": 1,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 112,
+      "loom_seed": 784,
+      "loom": {
+        "psr": 0.8733333333333333,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 8,
+        "outage_flips": 15,
+        "max_step_delta": 0.11624999999999999
+      },
+      "raw": {
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 6,
+        "outage_flips": 12,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.6933333333333334,
+        "outage_psr": 0.26,
+        "outage_failures_alpha": 35,
+        "outage_flips": 4,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.88,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 7,
+        "outage_flips": 19,
+        "max_step_delta": 0.1185672179801763
+      },
+      "static_m3_gray": {
+        "psr": 0.8533333333333334,
+        "outage_psr": 0.72,
+        "outage_failures_alpha": 14,
+        "outage_flips": 0,
+        "max_step_delta": 0.0
+      }
+    },
+    {
+      "sim_seed": 122,
+      "loom_seed": 785,
+      "loom": {
+        "psr": 0.8533333333333334,
+        "outage_psr": 0.64,
+        "outage_failures_alpha": 14,
+        "outage_flips": 17,
+        "max_step_delta": 0.11253389349097898
+      },
+      "raw": {
+        "psr": 0.8733333333333333,
+        "outage_psr": 0.68,
+        "outage_failures_alpha": 11,
+        "outage_flips": 9,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.7266666666666667,
+        "outage_psr": 0.22,
+        "outage_failures_alpha": 37,
+        "outage_flips": 4,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.92,
+        "outage_psr": 0.76,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 7,
+        "outage_flips": 32,
+        "max_step_delta": 0.11262471530535756
+      },
+      "static_m3_gray": {
+        "psr": 0.8733333333333333,
+        "outage_psr": 0.68,
+        "outage_failures_alpha": 15,
+        "outage_flips": 1,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 132,
+      "loom_seed": 786,
+      "loom": {
+        "psr": 0.9,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 5,
+        "outage_flips": 9,
+        "max_step_delta": 0.1185672179801763
+      },
+      "raw": {
+        "psr": 0.92,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 1,
+        "outage_flips": 2,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.8733333333333333,
+        "outage_psr": 0.72,
+        "outage_failures_alpha": 13,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.92,
+        "outage_psr": 0.9,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 3,
+        "outage_flips": 15,
+        "max_step_delta": 0.12364765625
+      },
+      "static_m3_gray": {
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 142,
+      "loom_seed": 787,
+      "loom": {
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 7,
+        "outage_flips": 13,
+        "max_step_delta": 0.12048994088485082
+      },
+      "raw": {
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 6,
+        "outage_flips": 10,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.7666666666666667,
+        "outage_psr": 0.38,
+        "outage_failures_alpha": 30,
+        "outage_flips": 4,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.92,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.92,
+        "outage_psr": 0.9,
+        "outage_failures_alpha": 4,
+        "outage_flips": 19,
+        "max_step_delta": 0.11624999999999999
+      },
+      "static_m3_gray": {
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 152,
+      "loom_seed": 788,
+      "loom": {
+        "psr": 0.9,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 8,
+        "outage_flips": 13,
+        "max_step_delta": 0.10949387663591859
+      },
+      "raw": {
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 4,
+        "outage_flips": 7,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.7666666666666667,
+        "outage_psr": 0.36,
+        "outage_failures_alpha": 31,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.92,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 5,
+        "outage_flips": 21,
+        "max_step_delta": 0.11688230506821978
+      },
+      "static_m3_gray": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 7,
+        "outage_flips": 2,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 162,
+      "loom_seed": 789,
+      "loom": {
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.76,
+        "outage_failures_alpha": 9,
+        "outage_flips": 15,
+        "max_step_delta": 0.11506445163448131
+      },
+      "raw": {
+        "psr": 0.92,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.72,
+        "outage_psr": 0.24,
+        "outage_failures_alpha": 37,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.9,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 7,
+        "outage_flips": 21,
+        "max_step_delta": 0.12364765625
+      },
+      "static_m3_gray": {
+        "psr": 0.8466666666666667,
+        "outage_psr": 0.56,
+        "outage_failures_alpha": 22,
+        "outage_flips": 0,
+        "max_step_delta": 0.0
+      }
+    },
+    {
+      "sim_seed": 172,
+      "loom_seed": 790,
+      "loom": {
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 7,
+        "outage_flips": 12,
+        "max_step_delta": 0.11699511931291655
+      },
+      "raw": {
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 7,
+        "outage_flips": 11,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.7866666666666666,
+        "outage_psr": 0.38,
+        "outage_failures_alpha": 30,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.94,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 7,
+        "outage_flips": 20,
+        "max_step_delta": 0.11624999999999999
+      },
+      "static_m3_gray": {
+        "psr": 0.8533333333333334,
+        "outage_psr": 0.64,
+        "outage_failures_alpha": 17,
+        "outage_flips": 1,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 182,
+      "loom_seed": 791,
+      "loom": {
+        "psr": 0.92,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 5,
+        "outage_flips": 10,
+        "max_step_delta": 0.1167478804581071
+      },
+      "raw": {
+        "psr": 0.9466666666666667,
+        "outage_psr": 0.92,
+        "outage_failures_alpha": 1,
+        "outage_flips": 2,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.7733333333333333,
+        "outage_psr": 0.38,
+        "outage_failures_alpha": 30,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.92,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.92,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 5,
+        "outage_flips": 16,
+        "max_step_delta": 0.11624999999999999
+      },
+      "static_m3_gray": {
+        "psr": 0.8333333333333334,
+        "outage_psr": 0.6,
+        "outage_failures_alpha": 20,
+        "outage_flips": 0,
+        "max_step_delta": 0.0
+      }
+    },
+    {
+      "sim_seed": 192,
+      "loom_seed": 792,
+      "loom": {
+        "psr": 0.86,
+        "outage_psr": 0.7,
+        "outage_failures_alpha": 15,
+        "outage_flips": 17,
+        "max_step_delta": 0.11624999999999996
+      },
+      "raw": {
+        "psr": 0.88,
+        "outage_psr": 0.7,
+        "outage_failures_alpha": 12,
+        "outage_flips": 11,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.66,
+        "outage_psr": 0.06,
+        "outage_failures_alpha": 45,
+        "outage_flips": 4,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.88,
+        "outage_psr": 0.76,
+        "outage_failures_alpha": 12,
+        "outage_flips": 21,
+        "max_step_delta": 0.11624999999999996
+      },
+      "static_m3_gray": {
+        "psr": 0.8666666666666667,
+        "outage_psr": 0.7,
+        "outage_failures_alpha": 12,
+        "outage_flips": 1,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 202,
+      "loom_seed": 793,
+      "loom": {
+        "psr": 0.8733333333333333,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 8,
+        "outage_flips": 16,
+        "max_step_delta": 0.11863366582466675
+      },
+      "raw": {
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 6,
+        "outage_flips": 11,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.7666666666666667,
+        "outage_psr": 0.44,
+        "outage_failures_alpha": 27,
+        "outage_flips": 2,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 7,
+        "outage_flips": 32,
+        "max_step_delta": 0.11624999999999999
+      },
+      "static_m3_gray": {
+        "psr": 0.8733333333333333,
+        "outage_psr": 0.72,
+        "outage_failures_alpha": 14,
+        "outage_flips": 0,
+        "max_step_delta": 0.0
+      }
+    },
+    {
+      "sim_seed": 212,
+      "loom_seed": 794,
+      "loom": {
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 5,
+        "outage_flips": 10,
+        "max_step_delta": 0.11624999999999999
+      },
+      "raw": {
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 4,
+        "outage_flips": 8,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.8066666666666666,
+        "outage_psr": 0.52,
+        "outage_failures_alpha": 23,
+        "outage_flips": 2,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 4,
+        "outage_flips": 12,
+        "max_step_delta": 0.11863366582466675
+      },
+      "static_m3_gray": {
+        "psr": 0.9,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 10,
+        "outage_flips": 2,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 222,
+      "loom_seed": 795,
+      "loom": {
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 7,
+        "outage_flips": 14,
+        "max_step_delta": 0.10856770670449664
+      },
+      "raw": {
+        "psr": 0.9533333333333334,
+        "outage_psr": 0.9,
+        "outage_failures_alpha": 4,
+        "outage_flips": 7,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.74,
+        "outage_psr": 0.28,
+        "outage_failures_alpha": 35,
+        "outage_flips": 4,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.92,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.9533333333333334,
+        "outage_psr": 0.9,
+        "outage_failures_alpha": 4,
+        "outage_flips": 22,
+        "max_step_delta": 0.11624999999999999
+      },
+      "static_m3_gray": {
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 9,
+        "outage_flips": 2,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 232,
+      "loom_seed": 796,
+      "loom": {
+        "psr": 0.8733333333333333,
+        "outage_psr": 0.74,
+        "outage_failures_alpha": 9,
+        "outage_flips": 13,
+        "max_step_delta": 0.10192205885186467
+      },
+      "raw": {
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 7,
+        "outage_flips": 11,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.7333333333333333,
+        "outage_psr": 0.26,
+        "outage_failures_alpha": 36,
+        "outage_flips": 2,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 3,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.92,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 5,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.88,
+        "outage_psr": 0.74,
+        "outage_failures_alpha": 9,
+        "outage_flips": 27,
+        "max_step_delta": 0.11368348861353283
+      },
+      "static_m3_gray": {
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 9,
+        "outage_flips": 2,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 242,
+      "loom_seed": 797,
+      "loom": {
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 10,
+        "outage_flips": 15,
+        "max_step_delta": 0.1040589443369998
+      },
+      "raw": {
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 6,
+        "outage_flips": 12,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.96,
+        "outage_psr": 0.92,
+        "outage_failures_alpha": 3,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9466666666666667,
+        "outage_psr": 0.92,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 7,
+        "outage_flips": 17,
+        "max_step_delta": 0.11624999999999999
+      },
+      "static_m3_gray": {
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 10,
+        "outage_flips": 2,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 252,
+      "loom_seed": 798,
+      "loom": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.76,
+        "outage_failures_alpha": 10,
+        "outage_flips": 14,
+        "max_step_delta": 0.11624999999999999
+      },
+      "raw": {
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 7,
+        "outage_flips": 9,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.7733333333333333,
+        "outage_psr": 0.4,
+        "outage_failures_alpha": 29,
+        "outage_flips": 2,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.92,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 7,
+        "outage_flips": 18,
+        "max_step_delta": 0.11624999999999999
+      },
+      "static_m3_gray": {
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 7,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 262,
+      "loom_seed": 799,
+      "loom": {
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 8,
+        "outage_flips": 13,
+        "max_step_delta": 0.10565631679681098
+      },
+      "raw": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 4,
+        "outage_flips": 5,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.7,
+        "outage_psr": 0.2,
+        "outage_failures_alpha": 39,
+        "outage_flips": 2,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 9,
+        "outage_flips": 15,
+        "max_step_delta": 0.11624999999999999
+      },
+      "static_m3_gray": {
+        "psr": 0.9,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 9,
+        "outage_flips": 2,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 272,
+      "loom_seed": 800,
+      "loom": {
+        "psr": 0.8466666666666667,
+        "outage_psr": 0.74,
+        "outage_failures_alpha": 9,
+        "outage_flips": 17,
+        "max_step_delta": 0.10902487508784425
+      },
+      "raw": {
+        "psr": 0.8733333333333333,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 7,
+        "outage_flips": 7,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.7333333333333333,
+        "outage_psr": 0.38,
+        "outage_failures_alpha": 30,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.8733333333333333,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 4,
+        "outage_flips": 23,
+        "max_step_delta": 0.11624999999999999
+      },
+      "static_m3_gray": {
+        "psr": 0.88,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 8,
+        "outage_flips": 2,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 282,
+      "loom_seed": 801,
+      "loom": {
+        "psr": 0.9,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 10,
+        "outage_flips": 15,
+        "max_step_delta": 0.11365506722155594
+      },
+      "raw": {
+        "psr": 0.94,
+        "outage_psr": 0.9,
+        "outage_failures_alpha": 4,
+        "outage_flips": 8,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.7866666666666666,
+        "outage_psr": 0.38,
+        "outage_failures_alpha": 30,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9533333333333334,
+        "outage_psr": 0.9,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.94,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.92,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 7,
+        "outage_flips": 15,
+        "max_step_delta": 0.11973747233371523
+      },
+      "static_m3_gray": {
+        "psr": 0.8533333333333334,
+        "outage_psr": 0.62,
+        "outage_failures_alpha": 19,
+        "outage_flips": 0,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 292,
+      "loom_seed": 802,
+      "loom": {
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 6,
+        "outage_flips": 12,
+        "max_step_delta": 0.11624999999999999
+      },
+      "raw": {
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.9,
+        "outage_failures_alpha": 5,
+        "outage_flips": 7,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.86,
+        "outage_psr": 0.64,
+        "outage_failures_alpha": 18,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.94,
+        "outage_psr": 0.9,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.94,
+        "outage_psr": 0.9,
+        "outage_failures_alpha": 5,
+        "outage_flips": 28,
+        "max_step_delta": 0.11799691951235997
+      },
+      "static_m3_gray": {
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.72,
+        "outage_failures_alpha": 13,
+        "outage_flips": 1,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 302,
+      "loom_seed": 803,
+      "loom": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 7,
+        "outage_flips": 12,
+        "max_step_delta": 0.11624999999999999
+      },
+      "raw": {
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 5,
+        "outage_flips": 9,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.8666666666666667,
+        "outage_psr": 0.6,
+        "outage_failures_alpha": 19,
+        "outage_flips": 4,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.96,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9466666666666667,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 5,
+        "outage_flips": 12,
+        "max_step_delta": 0.11863366582466675
+      },
+      "static_m3_gray": {
+        "psr": 0.92,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 11,
+        "outage_flips": 1,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 312,
+      "loom_seed": 804,
+      "loom": {
+        "psr": 0.9,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 5,
+        "outage_flips": 9,
+        "max_step_delta": 0.11685204442080208
+      },
+      "raw": {
+        "psr": 0.9,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 5,
+        "outage_flips": 9,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.76,
+        "outage_psr": 0.4,
+        "outage_failures_alpha": 29,
+        "outage_flips": 2,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.92,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.92,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 3,
+        "outage_flips": 15,
+        "max_step_delta": 0.11875143757324219
+      },
+      "static_m3_gray": {
+        "psr": 0.86,
+        "outage_psr": 0.76,
+        "outage_failures_alpha": 12,
+        "outage_flips": 1,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 322,
+      "loom_seed": 805,
+      "loom": {
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.9,
+        "outage_failures_alpha": 3,
+        "outage_flips": 6,
+        "max_step_delta": 0.11624999999999999
+      },
+      "raw": {
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.9,
+        "outage_failures_alpha": 3,
+        "outage_flips": 6,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.7333333333333333,
+        "outage_psr": 0.36,
+        "outage_failures_alpha": 31,
+        "outage_flips": 2,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.92,
+        "outage_psr": 0.96,
+        "outage_failures_alpha": 0,
+        "outage_flips": 12,
+        "max_step_delta": 0.118346111913085
+      },
+      "static_m3_gray": {
+        "psr": 0.88,
+        "outage_psr": 0.76,
+        "outage_failures_alpha": 9,
+        "outage_flips": 2,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 332,
+      "loom_seed": 806,
+      "loom": {
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 10,
+        "outage_flips": 15,
+        "max_step_delta": 0.11624999999999999
+      },
+      "raw": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 7,
+        "outage_flips": 7,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.7533333333333333,
+        "outage_psr": 0.38,
+        "outage_failures_alpha": 30,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.92,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.92,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 5,
+        "outage_flips": 25,
+        "max_step_delta": 0.11648651585029877
+      },
+      "static_m3_gray": {
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 8,
+        "outage_flips": 2,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 342,
+      "loom_seed": 807,
+      "loom": {
+        "psr": 0.84,
+        "outage_psr": 0.64,
+        "outage_failures_alpha": 14,
+        "outage_flips": 13,
+        "max_step_delta": 0.11624999999999999
+      },
+      "raw": {
+        "psr": 0.8466666666666667,
+        "outage_psr": 0.68,
+        "outage_failures_alpha": 12,
+        "outage_flips": 11,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.6733333333333333,
+        "outage_psr": 0.08,
+        "outage_failures_alpha": 44,
+        "outage_flips": 4,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.92,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.76,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.8733333333333333,
+        "outage_psr": 0.74,
+        "outage_failures_alpha": 11,
+        "outage_flips": 26,
+        "max_step_delta": 0.11753133581965447
+      },
+      "static_m3_gray": {
+        "psr": 0.8666666666666667,
+        "outage_psr": 0.66,
+        "outage_failures_alpha": 15,
+        "outage_flips": 1,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 352,
+      "loom_seed": 808,
+      "loom": {
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 11,
+        "outage_flips": 17,
+        "max_step_delta": 0.11031355634750628
+      },
+      "raw": {
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 6,
+        "outage_flips": 8,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.7933333333333333,
+        "outage_psr": 0.48,
+        "outage_failures_alpha": 26,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.92,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 6,
+        "outage_flips": 27,
+        "max_step_delta": 0.11624999999999999
+      },
+      "static_m3_gray": {
+        "psr": 0.8533333333333334,
+        "outage_psr": 0.64,
+        "outage_failures_alpha": 16,
+        "outage_flips": 1,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 362,
+      "loom_seed": 809,
+      "loom": {
+        "psr": 0.88,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 4,
+        "outage_flips": 8,
+        "max_step_delta": 0.12364765625
+      },
+      "raw": {
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 3,
+        "outage_flips": 6,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.7533333333333333,
+        "outage_psr": 0.4,
+        "outage_failures_alpha": 29,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.92,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 3,
+        "outage_flips": 14,
+        "max_step_delta": 0.12364765625
+      },
+      "static_m3_gray": {
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 7,
+        "outage_flips": 2,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 372,
+      "loom_seed": 810,
+      "loom": {
+        "psr": 0.8533333333333334,
+        "outage_psr": 0.66,
+        "outage_failures_alpha": 13,
+        "outage_flips": 15,
+        "max_step_delta": 0.11624999999999996
+      },
+      "raw": {
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.76,
+        "outage_failures_alpha": 8,
+        "outage_flips": 9,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.6666666666666666,
+        "outage_psr": 0.06,
+        "outage_failures_alpha": 46,
+        "outage_flips": 2,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.92,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.8666666666666667,
+        "outage_psr": 0.7,
+        "outage_failures_alpha": 12,
+        "outage_flips": 29,
+        "max_step_delta": 0.11624999999999999
+      },
+      "static_m3_gray": {
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 382,
+      "loom_seed": 811,
+      "loom": {
+        "psr": 0.88,
+        "outage_psr": 0.76,
+        "outage_failures_alpha": 10,
+        "outage_flips": 17,
+        "max_step_delta": 0.11285915550438774
+      },
+      "raw": {
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 9,
+        "outage_flips": 5,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.7733333333333333,
+        "outage_psr": 0.38,
+        "outage_failures_alpha": 30,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.92,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 8,
+        "outage_flips": 24,
+        "max_step_delta": 0.11624999999999999
+      },
+      "static_m3_gray": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 7,
+        "outage_flips": 2,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 392,
+      "loom_seed": 812,
+      "loom": {
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 5,
+        "outage_flips": 10,
+        "max_step_delta": 0.11255701105468985
+      },
+      "raw": {
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.9,
+        "outage_failures_alpha": 2,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.76,
+        "outage_psr": 0.46,
+        "outage_failures_alpha": 26,
+        "outage_flips": 4,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.9,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.9,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 3,
+        "outage_flips": 10,
+        "max_step_delta": 0.11624999999999999
+      },
+      "static_m3_gray": {
+        "psr": 0.84,
+        "outage_psr": 0.68,
+        "outage_failures_alpha": 16,
+        "outage_flips": 0,
+        "max_step_delta": 0.0
+      }
+    },
+    {
+      "sim_seed": 402,
+      "loom_seed": 813,
+      "loom": {
+        "psr": 0.9,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 9,
+        "outage_flips": 18,
+        "max_step_delta": 0.09629381932775327
+      },
+      "raw": {
+        "psr": 0.92,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 6,
+        "outage_flips": 8,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.6933333333333334,
+        "outage_psr": 0.16,
+        "outage_failures_alpha": 41,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9466666666666667,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 9,
+        "outage_flips": 18,
+        "max_step_delta": 0.09629381932775327
+      },
+      "static_m3_gray": {
+        "psr": 0.92,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 8,
+        "outage_flips": 1,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 412,
+      "loom_seed": 814,
+      "loom": {
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 8,
+        "outage_flips": 15,
+        "max_step_delta": 0.11624999999999999
+      },
+      "raw": {
+        "psr": 0.9466666666666667,
+        "outage_psr": 0.94,
+        "outage_failures_alpha": 2,
+        "outage_flips": 4,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.7733333333333333,
+        "outage_psr": 0.46,
+        "outage_failures_alpha": 26,
+        "outage_flips": 1,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.92,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.92,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 5,
+        "outage_flips": 15,
+        "max_step_delta": 0.11624999999999999
+      },
+      "static_m3_gray": {
+        "psr": 0.8466666666666667,
+        "outage_psr": 0.68,
+        "outage_failures_alpha": 16,
+        "outage_flips": 0,
+        "max_step_delta": 0.0
+      }
+    },
+    {
+      "sim_seed": 422,
+      "loom_seed": 815,
+      "loom": {
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.94,
+        "outage_failures_alpha": 3,
+        "outage_flips": 6,
+        "max_step_delta": 0.12305940051225922
+      },
+      "raw": {
+        "psr": 0.94,
+        "outage_psr": 0.94,
+        "outage_failures_alpha": 2,
+        "outage_flips": 4,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.9466666666666667,
+        "outage_psr": 0.98,
+        "outage_failures_alpha": 1,
+        "outage_flips": 2,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.92,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.88,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.94,
+        "outage_failures_alpha": 3,
+        "outage_flips": 14,
+        "max_step_delta": 0.12305940051225922
+      },
+      "static_m3_gray": {
+        "psr": 0.88,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 7,
+        "outage_flips": 2,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 432,
+      "loom_seed": 816,
+      "loom": {
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.74,
+        "outage_failures_alpha": 11,
+        "outage_flips": 15,
+        "max_step_delta": 0.10975506317500006
+      },
+      "raw": {
+        "psr": 0.9,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 7,
+        "outage_flips": 7,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.6933333333333334,
+        "outage_psr": 0.12,
+        "outage_failures_alpha": 42,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 9,
+        "outage_flips": 21,
+        "max_step_delta": 0.11624999999999999
+      },
+      "static_m3_gray": {
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 7,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 442,
+      "loom_seed": 817,
+      "loom": {
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 4,
+        "outage_flips": 8,
+        "max_step_delta": 0.11624999999999999
+      },
+      "raw": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 5,
+        "outage_flips": 6,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.7666666666666667,
+        "outage_psr": 0.38,
+        "outage_failures_alpha": 30,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.94,
+        "outage_psr": 0.9,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.94,
+        "outage_psr": 0.9,
+        "outage_failures_alpha": 3,
+        "outage_flips": 10,
+        "max_step_delta": 0.12364765625
+      },
+      "static_m3_gray": {
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 452,
+      "loom_seed": 818,
+      "loom": {
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.74,
+        "outage_failures_alpha": 11,
+        "outage_flips": 17,
+        "max_step_delta": 0.10974384034306184
+      },
+      "raw": {
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 6,
+        "outage_flips": 10,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.7733333333333333,
+        "outage_psr": 0.4,
+        "outage_failures_alpha": 29,
+        "outage_flips": 2,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.94,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 3,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 5,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 7,
+        "outage_flips": 33,
+        "max_step_delta": 0.11624999999999999
+      },
+      "static_m3_gray": {
+        "psr": 0.92,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 7,
+        "outage_flips": 2,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 462,
+      "loom_seed": 819,
+      "loom": {
+        "psr": 0.84,
+        "outage_psr": 0.74,
+        "outage_failures_alpha": 13,
+        "outage_flips": 15,
+        "max_step_delta": 0.11863366582466683
+      },
+      "raw": {
+        "psr": 0.88,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 7,
+        "outage_flips": 5,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.6266666666666667,
+        "outage_psr": 0.02,
+        "outage_failures_alpha": 48,
+        "outage_flips": 2,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.8733333333333333,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 9,
+        "outage_flips": 29,
+        "max_step_delta": 0.1185672179801763
+      },
+      "static_m3_gray": {
+        "psr": 0.8733333333333333,
+        "outage_psr": 0.76,
+        "outage_failures_alpha": 9,
+        "outage_flips": 1,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 472,
+      "loom_seed": 820,
+      "loom": {
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.72,
+        "outage_failures_alpha": 9,
+        "outage_flips": 18,
+        "max_step_delta": 0.12364765625
+      },
+      "raw": {
+        "psr": 0.92,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 6,
+        "outage_flips": 1,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 7,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.92,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 5,
+        "outage_flips": 36,
+        "max_step_delta": 0.10891011229489234
+      },
+      "static_m3_gray": {
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 7,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 482,
+      "loom_seed": 821,
+      "loom": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 6,
+        "outage_flips": 10,
+        "max_step_delta": 0.11624999999999999
+      },
+      "raw": {
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 4,
+        "outage_flips": 7,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.8133333333333334,
+        "outage_psr": 0.52,
+        "outage_failures_alpha": 23,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.94,
+        "outage_psr": 0.92,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.94,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 4,
+        "outage_flips": 12,
+        "max_step_delta": 0.11796182670130628
+      },
+      "static_m3_gray": {
+        "psr": 0.9,
+        "outage_psr": 0.76,
+        "outage_failures_alpha": 12,
+        "outage_flips": 1,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 492,
+      "loom_seed": 822,
+      "loom": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 7,
+        "outage_flips": 13,
+        "max_step_delta": 0.11624999999999999
+      },
+      "raw": {
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 5,
+        "outage_flips": 9,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.6866666666666666,
+        "outage_psr": 0.18,
+        "outage_failures_alpha": 40,
+        "outage_flips": 2,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.92,
+        "outage_psr": 0.9,
+        "outage_failures_alpha": 2,
+        "outage_flips": 4,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 6,
+        "outage_flips": 23,
+        "max_step_delta": 0.11624999999999999
+      },
+      "static_m3_gray": {
+        "psr": 0.88,
+        "outage_psr": 0.72,
+        "outage_failures_alpha": 13,
+        "outage_flips": 1,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 502,
+      "loom_seed": 823,
+      "loom": {
+        "psr": 0.8733333333333333,
+        "outage_psr": 0.76,
+        "outage_failures_alpha": 10,
+        "outage_flips": 16,
+        "max_step_delta": 0.11104419191531756
+      },
+      "raw": {
+        "psr": 0.9,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 4,
+        "outage_flips": 7,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.7533333333333333,
+        "outage_psr": 0.38,
+        "outage_failures_alpha": 30,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 3,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 5,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 7,
+        "outage_flips": 16,
+        "max_step_delta": 0.11624999999999999
+      },
+      "static_m3_gray": {
+        "psr": 0.8733333333333333,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 9,
+        "outage_flips": 2,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 512,
+      "loom_seed": 824,
+      "loom": {
+        "psr": 0.92,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 5,
+        "outage_flips": 10,
+        "max_step_delta": 0.11699511931291655
+      },
+      "raw": {
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 4,
+        "outage_flips": 8,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.74,
+        "outage_psr": 0.34,
+        "outage_failures_alpha": 31,
+        "outage_flips": 5,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.9,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.88,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.92,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 4,
+        "outage_flips": 19,
+        "max_step_delta": 0.11766019804559
+      },
+      "static_m3_gray": {
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.9,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 522,
+      "loom_seed": 825,
+      "loom": {
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 7,
+        "outage_flips": 13,
+        "max_step_delta": 0.11779406580447499
+      },
+      "raw": {
+        "psr": 0.94,
+        "outage_psr": 0.92,
+        "outage_failures_alpha": 2,
+        "outage_flips": 4,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.7133333333333334,
+        "outage_psr": 0.2,
+        "outage_failures_alpha": 38,
+        "outage_flips": 4,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.92,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 4,
+        "outage_flips": 34,
+        "max_step_delta": 0.11779406580447499
+      },
+      "static_m3_gray": {
+        "psr": 0.8466666666666667,
+        "outage_psr": 0.64,
+        "outage_failures_alpha": 18,
+        "outage_flips": 1,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 532,
+      "loom_seed": 826,
+      "loom": {
+        "psr": 0.9,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 9,
+        "outage_flips": 15,
+        "max_step_delta": 0.11993342399621532
+      },
+      "raw": {
+        "psr": 0.92,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 6,
+        "outage_flips": 9,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.74,
+        "outage_psr": 0.28,
+        "outage_failures_alpha": 35,
+        "outage_flips": 2,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 4,
+        "outage_flips": 19,
+        "max_step_delta": 0.12259206553843448
+      },
+      "static_m3_gray": {
+        "psr": 0.92,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 542,
+      "loom_seed": 827,
+      "loom": {
+        "psr": 0.92,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 4,
+        "outage_flips": 8,
+        "max_step_delta": 0.11624999999999999
+      },
+      "raw": {
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.9,
+        "outage_failures_alpha": 2,
+        "outage_flips": 4,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.76,
+        "outage_psr": 0.38,
+        "outage_failures_alpha": 30,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.92,
+        "outage_psr": 0.9,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.92,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 4,
+        "outage_flips": 18,
+        "max_step_delta": 0.1167478804581071
+      },
+      "static_m3_gray": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 7,
+        "outage_flips": 1,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 552,
+      "loom_seed": 828,
+      "loom": {
+        "psr": 0.8733333333333333,
+        "outage_psr": 0.74,
+        "outage_failures_alpha": 12,
+        "outage_flips": 16,
+        "max_step_delta": 0.1236557218403932
+      },
+      "raw": {
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 9,
+        "outage_flips": 7,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.74,
+        "outage_failures_alpha": 12,
+        "outage_flips": 4,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.9,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 8,
+        "outage_flips": 17,
+        "max_step_delta": 0.1236557218403932
+      },
+      "static_m3_gray": {
+        "psr": 0.8533333333333334,
+        "outage_psr": 0.58,
+        "outage_failures_alpha": 20,
+        "outage_flips": 1,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 562,
+      "loom_seed": 829,
+      "loom": {
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.76,
+        "outage_failures_alpha": 10,
+        "outage_flips": 13,
+        "max_step_delta": 0.11973052099432957
+      },
+      "raw": {
+        "psr": 0.94,
+        "outage_psr": 0.9,
+        "outage_failures_alpha": 3,
+        "outage_flips": 5,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.78,
+        "outage_psr": 0.46,
+        "outage_failures_alpha": 27,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.9,
+        "outage_failures_alpha": 3,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 5,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.92,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 6,
+        "outage_flips": 15,
+        "max_step_delta": 0.11624999999999999
+      },
+      "static_m3_gray": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 572,
+      "loom_seed": 830,
+      "loom": {
+        "psr": 0.8533333333333334,
+        "outage_psr": 0.74,
+        "outage_failures_alpha": 11,
+        "outage_flips": 15,
+        "max_step_delta": 0.11382006867594896
+      },
+      "raw": {
+        "psr": 0.88,
+        "outage_psr": 0.76,
+        "outage_failures_alpha": 7,
+        "outage_flips": 11,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.6933333333333334,
+        "outage_psr": 0.18,
+        "outage_failures_alpha": 39,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.88,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 8,
+        "outage_flips": 29,
+        "max_step_delta": 0.12364765625000002
+      },
+      "static_m3_gray": {
+        "psr": 0.8733333333333333,
+        "outage_psr": 0.76,
+        "outage_failures_alpha": 9,
+        "outage_flips": 2,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 582,
+      "loom_seed": 831,
+      "loom": {
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.74,
+        "outage_failures_alpha": 13,
+        "outage_flips": 15,
+        "max_step_delta": 0.1151653357468222
+      },
+      "raw": {
+        "psr": 0.9,
+        "outage_psr": 0.76,
+        "outage_failures_alpha": 11,
+        "outage_flips": 9,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.7666666666666667,
+        "outage_psr": 0.38,
+        "outage_failures_alpha": 30,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.92,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 6,
+        "outage_flips": 31,
+        "max_step_delta": 0.11624999999999999
+      },
+      "static_m3_gray": {
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 592,
+      "loom_seed": 832,
+      "loom": {
+        "psr": 0.92,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 4,
+        "outage_flips": 8,
+        "max_step_delta": 0.11709851057016502
+      },
+      "raw": {
+        "psr": 0.92,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 5,
+        "outage_flips": 9,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.8133333333333334,
+        "outage_psr": 0.6,
+        "outage_failures_alpha": 19,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.92,
+        "outage_psr": 0.9,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 3,
+        "outage_flips": 20,
+        "max_step_delta": 0.12364765625
+      },
+      "static_m3_gray": {
+        "psr": 0.88,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 8,
+        "outage_flips": 2,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 602,
+      "loom_seed": 833,
+      "loom": {
+        "psr": 0.8533333333333334,
+        "outage_psr": 0.66,
+        "outage_failures_alpha": 13,
+        "outage_flips": 15,
+        "max_step_delta": 0.11625000000000008
+      },
+      "raw": {
+        "psr": 0.8733333333333333,
+        "outage_psr": 0.72,
+        "outage_failures_alpha": 10,
+        "outage_flips": 9,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.6533333333333333,
+        "outage_psr": 0.02,
+        "outage_failures_alpha": 48,
+        "outage_flips": 2,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9,
+        "outage_psr": 0.76,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.76,
+        "outage_failures_alpha": 8,
+        "outage_flips": 21,
+        "max_step_delta": 0.12193806551067218
+      },
+      "static_m3_gray": {
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.74,
+        "outage_failures_alpha": 10,
+        "outage_flips": 2,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 612,
+      "loom_seed": 834,
+      "loom": {
+        "psr": 0.86,
+        "outage_psr": 0.76,
+        "outage_failures_alpha": 11,
+        "outage_flips": 15,
+        "max_step_delta": 0.11962521315171015
+      },
+      "raw": {
+        "psr": 0.9,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 5,
+        "outage_flips": 7,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.64,
+        "outage_psr": 0.0,
+        "outage_failures_alpha": 48,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.9,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 6,
+        "outage_flips": 18,
+        "max_step_delta": 0.12377343401618435
+      },
+      "static_m3_gray": {
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.76,
+        "outage_failures_alpha": 9,
+        "outage_flips": 1,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 622,
+      "loom_seed": 835,
+      "loom": {
+        "psr": 0.8466666666666667,
+        "outage_psr": 0.74,
+        "outage_failures_alpha": 7,
+        "outage_flips": 14,
+        "max_step_delta": 0.11534329884265052
+      },
+      "raw": {
+        "psr": 0.86,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 5,
+        "outage_flips": 5,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.6733333333333333,
+        "outage_psr": 0.22,
+        "outage_failures_alpha": 37,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.8533333333333334,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.8533333333333334,
+        "outage_psr": 0.76,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.8533333333333334,
+        "outage_psr": 0.76,
+        "outage_failures_alpha": 7,
+        "outage_flips": 36,
+        "max_step_delta": 0.11715275575620207
+      },
+      "static_m3_gray": {
+        "psr": 0.8466666666666667,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 5,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 632,
+      "loom_seed": 836,
+      "loom": {
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 5,
+        "outage_flips": 10,
+        "max_step_delta": 0.11701510228681558
+      },
+      "raw": {
+        "psr": 0.9466666666666667,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 3,
+        "outage_flips": 6,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.6866666666666666,
+        "outage_psr": 0.1,
+        "outage_failures_alpha": 43,
+        "outage_flips": 4,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9466666666666667,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 5,
+        "outage_flips": 26,
+        "max_step_delta": 0.11689972969475698
+      },
+      "static_m3_gray": {
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 8,
+        "outage_flips": 1,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 642,
+      "loom_seed": 837,
+      "loom": {
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 5,
+        "outage_flips": 10,
+        "max_step_delta": 0.11651859840126941
+      },
+      "raw": {
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 6,
+        "outage_flips": 12,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.6666666666666666,
+        "outage_psr": 0.08,
+        "outage_failures_alpha": 44,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 3,
+        "outage_flips": 14,
+        "max_step_delta": 0.12344668832588891
+      },
+      "static_m3_gray": {
+        "psr": 0.92,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 652,
+      "loom_seed": 838,
+      "loom": {
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.74,
+        "outage_failures_alpha": 10,
+        "outage_flips": 13,
+        "max_step_delta": 0.11455395580686367
+      },
+      "raw": {
+        "psr": 0.88,
+        "outage_psr": 0.76,
+        "outage_failures_alpha": 9,
+        "outage_flips": 7,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.7733333333333333,
+        "outage_psr": 0.42,
+        "outage_failures_alpha": 28,
+        "outage_flips": 1,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.92,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 6,
+        "outage_flips": 15,
+        "max_step_delta": 0.12209714003343458
+      },
+      "static_m3_gray": {
+        "psr": 0.84,
+        "outage_psr": 0.66,
+        "outage_failures_alpha": 17,
+        "outage_flips": 1,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 662,
+      "loom_seed": 839,
+      "loom": {
+        "psr": 0.92,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 7,
+        "outage_flips": 14,
+        "max_step_delta": 0.11624999999999999
+      },
+      "raw": {
+        "psr": 0.94,
+        "outage_psr": 0.9,
+        "outage_failures_alpha": 3,
+        "outage_flips": 5,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.74,
+        "outage_psr": 0.26,
+        "outage_failures_alpha": 35,
+        "outage_flips": 5,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.94,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 6,
+        "outage_flips": 20,
+        "max_step_delta": 0.11624999999999999
+      },
+      "static_m3_gray": {
+        "psr": 0.8733333333333333,
+        "outage_psr": 0.7,
+        "outage_failures_alpha": 15,
+        "outage_flips": 1,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 672,
+      "loom_seed": 840,
+      "loom": {
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 4,
+        "outage_flips": 8,
+        "max_step_delta": 0.11863366582466675
+      },
+      "raw": {
+        "psr": 0.92,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 1,
+        "outage_flips": 2,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.7333333333333333,
+        "outage_psr": 0.3,
+        "outage_failures_alpha": 33,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.92,
+        "outage_psr": 0.9,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 4,
+        "outage_flips": 27,
+        "max_step_delta": 0.12139262041289323
+      },
+      "static_m3_gray": {
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 7,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 682,
+      "loom_seed": 841,
+      "loom": {
+        "psr": 0.9466666666666667,
+        "outage_psr": 0.9,
+        "outage_failures_alpha": 3,
+        "outage_flips": 6,
+        "max_step_delta": 0.11689788045810712
+      },
+      "raw": {
+        "psr": 0.96,
+        "outage_psr": 0.94,
+        "outage_failures_alpha": 0,
+        "outage_flips": 0,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.7666666666666667,
+        "outage_psr": 0.4,
+        "outage_failures_alpha": 29,
+        "outage_flips": 2,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.92,
+        "outage_psr": 0.92,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.9466666666666667,
+        "outage_psr": 0.92,
+        "outage_failures_alpha": 2,
+        "outage_flips": 14,
+        "max_step_delta": 0.11624999999999999
+      },
+      "static_m3_gray": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 692,
+      "loom_seed": 842,
+      "loom": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 10,
+        "outage_flips": 14,
+        "max_step_delta": 0.11592234398316681
+      },
+      "raw": {
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 7,
+        "outage_flips": 9,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.7866666666666666,
+        "outage_psr": 0.38,
+        "outage_failures_alpha": 30,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.96,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9466666666666667,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 7,
+        "outage_flips": 29,
+        "max_step_delta": 0.11637348313625909
+      },
+      "static_m3_gray": {
+        "psr": 0.9,
+        "outage_psr": 0.74,
+        "outage_failures_alpha": 11,
+        "outage_flips": 2,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 702,
+      "loom_seed": 843,
+      "loom": {
+        "psr": 0.8466666666666667,
+        "outage_psr": 0.68,
+        "outage_failures_alpha": 12,
+        "outage_flips": 19,
+        "max_step_delta": 0.11206315983204933
+      },
+      "raw": {
+        "psr": 0.8666666666666667,
+        "outage_psr": 0.74,
+        "outage_failures_alpha": 9,
+        "outage_flips": 17,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.6666666666666666,
+        "outage_psr": 0.16,
+        "outage_failures_alpha": 40,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.8733333333333333,
+        "outage_psr": 0.76,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.8733333333333333,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 7,
+        "outage_flips": 29,
+        "max_step_delta": 0.11382854213375404
+      },
+      "static_m3_gray": {
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 5,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 712,
+      "loom_seed": 844,
+      "loom": {
+        "psr": 0.8666666666666667,
+        "outage_psr": 0.74,
+        "outage_failures_alpha": 11,
+        "outage_flips": 15,
+        "max_step_delta": 0.11624999999999999
+      },
+      "raw": {
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 8,
+        "outage_flips": 9,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.6933333333333334,
+        "outage_psr": 0.18,
+        "outage_failures_alpha": 39,
+        "outage_flips": 4,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.92,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 7,
+        "outage_flips": 37,
+        "max_step_delta": 0.11341681736169179
+      },
+      "static_m3_gray": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 722,
+      "loom_seed": 845,
+      "loom": {
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.9,
+        "outage_failures_alpha": 5,
+        "outage_flips": 9,
+        "max_step_delta": 0.11624999999999999
+      },
+      "raw": {
+        "psr": 0.9,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 9,
+        "outage_flips": 13,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.7733333333333333,
+        "outage_psr": 0.4,
+        "outage_failures_alpha": 29,
+        "outage_flips": 2,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.94,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.94,
+        "outage_psr": 0.94,
+        "outage_failures_alpha": 3,
+        "outage_flips": 11,
+        "max_step_delta": 0.11624999999999999
+      },
+      "static_m3_gray": {
+        "psr": 0.8466666666666667,
+        "outage_psr": 0.66,
+        "outage_failures_alpha": 17,
+        "outage_flips": 1,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 732,
+      "loom_seed": 846,
+      "loom": {
+        "psr": 0.88,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 6,
+        "outage_flips": 10,
+        "max_step_delta": 0.12364765625
+      },
+      "raw": {
+        "psr": 0.88,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 6,
+        "outage_flips": 11,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.7533333333333333,
+        "outage_psr": 0.38,
+        "outage_failures_alpha": 30,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.9,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 3,
+        "outage_flips": 9,
+        "max_step_delta": 0.11811573049138863
+      },
+      "static_m3_gray": {
+        "psr": 0.8466666666666667,
+        "outage_psr": 0.7,
+        "outage_failures_alpha": 15,
+        "outage_flips": 1,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 742,
+      "loom_seed": 847,
+      "loom": {
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 7,
+        "outage_flips": 14,
+        "max_step_delta": 0.11689788045810712
+      },
+      "raw": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 6,
+        "outage_flips": 9,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.8666666666666667,
+        "outage_psr": 0.64,
+        "outage_failures_alpha": 17,
+        "outage_flips": 4,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9466666666666667,
+        "outage_psr": 0.9,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 5,
+        "outage_flips": 26,
+        "max_step_delta": 0.11386153509747088
+      },
+      "static_m3_gray": {
+        "psr": 0.8733333333333333,
+        "outage_psr": 0.7,
+        "outage_failures_alpha": 15,
+        "outage_flips": 1,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 752,
+      "loom_seed": 848,
+      "loom": {
+        "psr": 0.88,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 8,
+        "outage_flips": 13,
+        "max_step_delta": 0.12365510915904543
+      },
+      "raw": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.9,
+        "outage_failures_alpha": 5,
+        "outage_flips": 9,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.9533333333333334,
+        "outage_psr": 0.94,
+        "outage_failures_alpha": 3,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9466666666666667,
+        "outage_psr": 0.9,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.9,
+        "outage_failures_alpha": 5,
+        "outage_flips": 21,
+        "max_step_delta": 0.12365510915904543
+      },
+      "static_m3_gray": {
+        "psr": 0.86,
+        "outage_psr": 0.66,
+        "outage_failures_alpha": 16,
+        "outage_flips": 1,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 762,
+      "loom_seed": 849,
+      "loom": {
+        "psr": 0.82,
+        "outage_psr": 0.68,
+        "outage_failures_alpha": 10,
+        "outage_flips": 18,
+        "max_step_delta": 0.10672933734715995
+      },
+      "raw": {
+        "psr": 0.8266666666666667,
+        "outage_psr": 0.7,
+        "outage_failures_alpha": 9,
+        "outage_flips": 13,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.72,
+        "outage_psr": 0.3,
+        "outage_failures_alpha": 33,
+        "outage_flips": 4,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.76,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.8733333333333333,
+        "outage_psr": 0.74,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.8466666666666667,
+        "outage_psr": 0.74,
+        "outage_failures_alpha": 8,
+        "outage_flips": 32,
+        "max_step_delta": 0.11624999999999999
+      },
+      "static_m3_gray": {
+        "psr": 0.8733333333333333,
+        "outage_psr": 0.7,
+        "outage_failures_alpha": 10,
+        "outage_flips": 2,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 772,
+      "loom_seed": 850,
+      "loom": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 7,
+        "outage_flips": 13,
+        "max_step_delta": 0.11624999999999999
+      },
+      "raw": {
+        "psr": 0.92,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 6,
+        "outage_flips": 10,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.6466666666666666,
+        "outage_psr": 0.02,
+        "outage_failures_alpha": 48,
+        "outage_flips": 2,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.92,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.92,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 6,
+        "outage_flips": 17,
+        "max_step_delta": 0.12207050712856993
+      },
+      "static_m3_gray": {
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 5,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 782,
+      "loom_seed": 851,
+      "loom": {
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 6,
+        "outage_flips": 12,
+        "max_step_delta": 0.11624999999999999
+      },
+      "raw": {
+        "psr": 0.94,
+        "outage_psr": 0.9,
+        "outage_failures_alpha": 3,
+        "outage_flips": 6,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 9,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9466666666666667,
+        "outage_psr": 0.9,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.9533333333333334,
+        "outage_psr": 0.94,
+        "outage_failures_alpha": 3,
+        "outage_flips": 24,
+        "max_step_delta": 0.11624999999999999
+      },
+      "static_m3_gray": {
+        "psr": 0.92,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 8,
+        "outage_flips": 2,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 792,
+      "loom_seed": 852,
+      "loom": {
+        "psr": 0.88,
+        "outage_psr": 0.74,
+        "outage_failures_alpha": 8,
+        "outage_flips": 15,
+        "max_step_delta": 0.1013079748138701
+      },
+      "raw": {
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 6,
+        "outage_flips": 12,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.76,
+        "outage_psr": 0.38,
+        "outage_failures_alpha": 30,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.92,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 3,
+        "outage_flips": 35,
+        "max_step_delta": 0.10514095907043364
+      },
+      "static_m3_gray": {
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.72,
+        "outage_failures_alpha": 12,
+        "outage_flips": 1,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 802,
+      "loom_seed": 853,
+      "loom": {
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 7,
+        "outage_flips": 13,
+        "max_step_delta": 0.11624999999999999
+      },
+      "raw": {
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 8,
+        "outage_flips": 16,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.76,
+        "outage_psr": 0.42,
+        "outage_failures_alpha": 28,
+        "outage_flips": 2,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.9,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 6,
+        "outage_flips": 17,
+        "max_step_delta": 0.10325331917262315
+      },
+      "static_m3_gray": {
+        "psr": 0.9,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 7,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 812,
+      "loom_seed": 854,
+      "loom": {
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 9,
+        "outage_flips": 16,
+        "max_step_delta": 0.10592051592279395
+      },
+      "raw": {
+        "psr": 0.9533333333333334,
+        "outage_psr": 0.92,
+        "outage_failures_alpha": 4,
+        "outage_flips": 7,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.78,
+        "outage_psr": 0.38,
+        "outage_failures_alpha": 30,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9533333333333334,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.94,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.94,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 7,
+        "outage_flips": 16,
+        "max_step_delta": 0.11624999999999999
+      },
+      "static_m3_gray": {
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.74,
+        "outage_failures_alpha": 12,
+        "outage_flips": 1,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 822,
+      "loom_seed": 855,
+      "loom": {
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.72,
+        "outage_failures_alpha": 11,
+        "outage_flips": 16,
+        "max_step_delta": 0.11404064289902005
+      },
+      "raw": {
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 5,
+        "outage_flips": 7,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.76,
+        "outage_psr": 0.36,
+        "outage_failures_alpha": 31,
+        "outage_flips": 4,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.92,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 7,
+        "outage_flips": 18,
+        "max_step_delta": 0.11913317481481217
+      },
+      "static_m3_gray": {
+        "psr": 0.92,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 9,
+        "outage_flips": 1,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 832,
+      "loom_seed": 856,
+      "loom": {
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.9,
+        "outage_failures_alpha": 5,
+        "outage_flips": 10,
+        "max_step_delta": 0.11659788045810712
+      },
+      "raw": {
+        "psr": 0.92,
+        "outage_psr": 0.94,
+        "outage_failures_alpha": 3,
+        "outage_flips": 6,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 9,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9533333333333334,
+        "outage_psr": 0.92,
+        "outage_failures_alpha": 3,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.94,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 5,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.92,
+        "outage_psr": 0.94,
+        "outage_failures_alpha": 3,
+        "outage_flips": 18,
+        "max_step_delta": 0.11933526179533188
+      },
+      "static_m3_gray": {
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.76,
+        "outage_failures_alpha": 12,
+        "outage_flips": 0,
+        "max_step_delta": 0.0
+      }
+    },
+    {
+      "sim_seed": 842,
+      "loom_seed": 857,
+      "loom": {
+        "psr": 0.8666666666666667,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 8,
+        "outage_flips": 13,
+        "max_step_delta": 0.11364290521169484
+      },
+      "raw": {
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 5,
+        "outage_flips": 9,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.6133333333333333,
+        "outage_psr": 0.06,
+        "outage_failures_alpha": 46,
+        "outage_flips": 2,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.88,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.8733333333333333,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 4,
+        "outage_flips": 23,
+        "max_step_delta": 0.11856270466582605
+      },
+      "static_m3_gray": {
+        "psr": 0.8533333333333334,
+        "outage_psr": 0.66,
+        "outage_failures_alpha": 17,
+        "outage_flips": 0,
+        "max_step_delta": 0.0
+      }
+    },
+    {
+      "sim_seed": 852,
+      "loom_seed": 858,
+      "loom": {
+        "psr": 0.96,
+        "outage_psr": 0.92,
+        "outage_failures_alpha": 3,
+        "outage_flips": 6,
+        "max_step_delta": 0.11624999999999999
+      },
+      "raw": {
+        "psr": 0.9733333333333334,
+        "outage_psr": 0.96,
+        "outage_failures_alpha": 1,
+        "outage_flips": 2,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.78,
+        "outage_psr": 0.4,
+        "outage_failures_alpha": 29,
+        "outage_flips": 2,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.9,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.9666666666666667,
+        "outage_psr": 0.94,
+        "outage_failures_alpha": 2,
+        "outage_flips": 10,
+        "max_step_delta": 0.11699511931291655
+      },
+      "static_m3_gray": {
+        "psr": 0.8466666666666667,
+        "outage_psr": 0.72,
+        "outage_failures_alpha": 14,
+        "outage_flips": 1,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 862,
+      "loom_seed": 859,
+      "loom": {
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.76,
+        "outage_failures_alpha": 9,
+        "outage_flips": 15,
+        "max_step_delta": 0.11624999999999999
+      },
+      "raw": {
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.9,
+        "outage_failures_alpha": 3,
+        "outage_flips": 5,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.7466666666666667,
+        "outage_psr": 0.34,
+        "outage_failures_alpha": 32,
+        "outage_flips": 2,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 3,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.92,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 5,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 5,
+        "outage_flips": 33,
+        "max_step_delta": 0.12364765625
+      },
+      "static_m3_gray": {
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.76,
+        "outage_failures_alpha": 10,
+        "outage_flips": 1,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 872,
+      "loom_seed": 860,
+      "loom": {
+        "psr": 0.8533333333333334,
+        "outage_psr": 0.7,
+        "outage_failures_alpha": 14,
+        "outage_flips": 16,
+        "max_step_delta": 0.11579477194596144
+      },
+      "raw": {
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 8,
+        "outage_flips": 9,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.6733333333333333,
+        "outage_psr": 0.1,
+        "outage_failures_alpha": 44,
+        "outage_flips": 2,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.92,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.9,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 9,
+        "outage_flips": 22,
+        "max_step_delta": 0.12364765625
+      },
+      "static_m3_gray": {
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.74,
+        "outage_failures_alpha": 11,
+        "outage_flips": 2,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 882,
+      "loom_seed": 861,
+      "loom": {
+        "psr": 0.84,
+        "outage_psr": 0.76,
+        "outage_failures_alpha": 9,
+        "outage_flips": 15,
+        "max_step_delta": 0.11624999999999999
+      },
+      "raw": {
+        "psr": 0.8533333333333334,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 5,
+        "outage_flips": 10,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.6933333333333334,
+        "outage_psr": 0.18,
+        "outage_failures_alpha": 39,
+        "outage_flips": 4,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.88,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 5,
+        "outage_flips": 24,
+        "max_step_delta": 0.11624999999999999
+      },
+      "static_m3_gray": {
+        "psr": 0.86,
+        "outage_psr": 0.7,
+        "outage_failures_alpha": 10,
+        "outage_flips": 2,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 892,
+      "loom_seed": 862,
+      "loom": {
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 5,
+        "outage_flips": 10,
+        "max_step_delta": 0.11647819818267821
+      },
+      "raw": {
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 4,
+        "outage_flips": 8,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.9,
+        "outage_failures_alpha": 4,
+        "outage_flips": 4,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.9,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.92,
+        "outage_failures_alpha": 2,
+        "outage_flips": 11,
+        "max_step_delta": 0.12364765625
+      },
+      "static_m3_gray": {
+        "psr": 0.9,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 8,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 902,
+      "loom_seed": 863,
+      "loom": {
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 6,
+        "outage_flips": 11,
+        "max_step_delta": 0.11624999999999999
+      },
+      "raw": {
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 6,
+        "outage_flips": 8,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.78,
+        "outage_psr": 0.44,
+        "outage_failures_alpha": 27,
+        "outage_flips": 2,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 5,
+        "outage_flips": 17,
+        "max_step_delta": 0.11624999999999999
+      },
+      "static_m3_gray": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 9,
+        "outage_flips": 1,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 912,
+      "loom_seed": 864,
+      "loom": {
+        "psr": 0.9466666666666667,
+        "outage_psr": 0.9,
+        "outage_failures_alpha": 5,
+        "outage_flips": 10,
+        "max_step_delta": 0.11805178453796852
+      },
+      "raw": {
+        "psr": 0.96,
+        "outage_psr": 0.92,
+        "outage_failures_alpha": 3,
+        "outage_flips": 5,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.96,
+        "outage_psr": 0.96,
+        "outage_failures_alpha": 2,
+        "outage_flips": 4,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9466666666666667,
+        "outage_psr": 0.92,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.9533333333333334,
+        "outage_psr": 0.92,
+        "outage_failures_alpha": 4,
+        "outage_flips": 12,
+        "max_step_delta": 0.1185672179801763
+      },
+      "static_m3_gray": {
+        "psr": 0.92,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 10,
+        "outage_flips": 1,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 922,
+      "loom_seed": 865,
+      "loom": {
+        "psr": 0.9,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 5,
+        "outage_flips": 10,
+        "max_step_delta": 0.12074905487199272
+      },
+      "raw": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 3,
+        "outage_flips": 6,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.7466666666666667,
+        "outage_psr": 0.4,
+        "outage_failures_alpha": 29,
+        "outage_flips": 4,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.92,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 3,
+        "outage_flips": 25,
+        "max_step_delta": 0.12074905487199272
+      },
+      "static_m3_gray": {
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 8,
+        "outage_flips": 2,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 932,
+      "loom_seed": 866,
+      "loom": {
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.74,
+        "outage_failures_alpha": 11,
+        "outage_flips": 17,
+        "max_step_delta": 0.10216586284119922
+      },
+      "raw": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 8,
+        "outage_flips": 13,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.7733333333333333,
+        "outage_psr": 0.38,
+        "outage_failures_alpha": 30,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.94,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.92,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 7,
+        "outage_flips": 19,
+        "max_step_delta": 0.11624999999999999
+      },
+      "static_m3_gray": {
+        "psr": 0.8466666666666667,
+        "outage_psr": 0.6,
+        "outage_failures_alpha": 20,
+        "outage_flips": 0,
+        "max_step_delta": 0.0
+      }
+    },
+    {
+      "sim_seed": 942,
+      "loom_seed": 867,
+      "loom": {
+        "psr": 0.8666666666666667,
+        "outage_psr": 0.74,
+        "outage_failures_alpha": 12,
+        "outage_flips": 15,
+        "max_step_delta": 0.11624999999999996
+      },
+      "raw": {
+        "psr": 0.9,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 6,
+        "outage_flips": 7,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.76,
+        "outage_psr": 0.38,
+        "outage_failures_alpha": 30,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 8,
+        "outage_flips": 21,
+        "max_step_delta": 0.11624999999999996
+      },
+      "static_m3_gray": {
+        "psr": 0.86,
+        "outage_psr": 0.66,
+        "outage_failures_alpha": 17,
+        "outage_flips": 1,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 952,
+      "loom_seed": 868,
+      "loom": {
+        "psr": 0.82,
+        "outage_psr": 0.64,
+        "outage_failures_alpha": 16,
+        "outage_flips": 15,
+        "max_step_delta": 0.11625000000000008
+      },
+      "raw": {
+        "psr": 0.86,
+        "outage_psr": 0.74,
+        "outage_failures_alpha": 10,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.6466666666666666,
+        "outage_psr": 0.06,
+        "outage_failures_alpha": 46,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.8533333333333334,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 10,
+        "outage_flips": 17,
+        "max_step_delta": 0.11758056946213324
+      },
+      "static_m3_gray": {
+        "psr": 0.88,
+        "outage_psr": 0.74,
+        "outage_failures_alpha": 9,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 962,
+      "loom_seed": 869,
+      "loom": {
+        "psr": 0.88,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 4,
+        "outage_flips": 7,
+        "max_step_delta": 0.11624999999999999
+      },
+      "raw": {
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.92,
+        "outage_failures_alpha": 2,
+        "outage_flips": 4,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.66,
+        "outage_psr": 0.12,
+        "outage_failures_alpha": 42,
+        "outage_flips": 4,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.9,
+        "outage_failures_alpha": 3,
+        "outage_flips": 31,
+        "max_step_delta": 0.11666521938642878
+      },
+      "static_m3_gray": {
+        "psr": 0.8466666666666667,
+        "outage_psr": 0.64,
+        "outage_failures_alpha": 18,
+        "outage_flips": 0,
+        "max_step_delta": 0.0
+      }
+    },
+    {
+      "sim_seed": 972,
+      "loom_seed": 870,
+      "loom": {
+        "psr": 0.8733333333333333,
+        "outage_psr": 0.7,
+        "outage_failures_alpha": 10,
+        "outage_flips": 20,
+        "max_step_delta": 0.10081433300056153
+      },
+      "raw": {
+        "psr": 0.9,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 6,
+        "outage_flips": 9,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.6933333333333334,
+        "outage_psr": 0.12,
+        "outage_failures_alpha": 42,
+        "outage_flips": 4,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.92,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 4,
+        "outage_flips": 44,
+        "max_step_delta": 0.11571052845787311
+      },
+      "static_m3_gray": {
+        "psr": 0.8666666666666667,
+        "outage_psr": 0.76,
+        "outage_failures_alpha": 12,
+        "outage_flips": 1,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 982,
+      "loom_seed": 871,
+      "loom": {
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 5,
+        "outage_flips": 9,
+        "max_step_delta": 0.11624999999999999
+      },
+      "raw": {
+        "psr": 0.92,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 3,
+        "outage_flips": 5,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.94,
+        "outage_failures_alpha": 3,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.94,
+        "outage_psr": 0.9,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 3,
+        "outage_flips": 9,
+        "max_step_delta": 0.11872133344807212
+      },
+      "static_m3_gray": {
+        "psr": 0.86,
+        "outage_psr": 0.64,
+        "outage_failures_alpha": 18,
+        "outage_flips": 0,
+        "max_step_delta": 0.0
+      }
+    },
+    {
+      "sim_seed": 992,
+      "loom_seed": 872,
+      "loom": {
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 11,
+        "outage_flips": 16,
+        "max_step_delta": 0.10882244750648762
+      },
+      "raw": {
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 6,
+        "outage_flips": 9,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.7733333333333333,
+        "outage_psr": 0.4,
+        "outage_failures_alpha": 29,
+        "outage_flips": 2,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.94,
+        "outage_psr": 0.9,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 6,
+        "outage_flips": 20,
+        "max_step_delta": 0.11624999999999999
+      },
+      "static_m3_gray": {
+        "psr": 0.8533333333333334,
+        "outage_psr": 0.66,
+        "outage_failures_alpha": 17,
+        "outage_flips": 0,
+        "max_step_delta": 0.0
+      }
+    },
+    {
+      "sim_seed": 1002,
+      "loom_seed": 873,
+      "loom": {
+        "psr": 0.8666666666666667,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 7,
+        "outage_flips": 13,
+        "max_step_delta": 0.10428944363374498
+      },
+      "raw": {
+        "psr": 0.9,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 3,
+        "outage_flips": 6,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.72,
+        "outage_psr": 0.32,
+        "outage_failures_alpha": 33,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.9,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 3,
+        "outage_flips": 17,
+        "max_step_delta": 0.11719788045810711
+      },
+      "static_m3_gray": {
+        "psr": 0.8533333333333334,
+        "outage_psr": 0.68,
+        "outage_failures_alpha": 16,
+        "outage_flips": 1,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 1012,
+      "loom_seed": 874,
+      "loom": {
+        "psr": 0.8533333333333334,
+        "outage_psr": 0.72,
+        "outage_failures_alpha": 10,
+        "outage_flips": 13,
+        "max_step_delta": 0.10778362509773698
+      },
+      "raw": {
+        "psr": 0.86,
+        "outage_psr": 0.72,
+        "outage_failures_alpha": 9,
+        "outage_flips": 11,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.6933333333333334,
+        "outage_psr": 0.28,
+        "outage_failures_alpha": 34,
+        "outage_flips": 4,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.88,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 3,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.8666666666666667,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 5,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.86,
+        "outage_psr": 0.74,
+        "outage_failures_alpha": 9,
+        "outage_flips": 23,
+        "max_step_delta": 0.11699511931291655
+      },
+      "static_m3_gray": {
+        "psr": 0.86,
+        "outage_psr": 0.7,
+        "outage_failures_alpha": 14,
+        "outage_flips": 1,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 1022,
+      "loom_seed": 875,
+      "loom": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 9,
+        "outage_flips": 14,
+        "max_step_delta": 0.11459355251577874
+      },
+      "raw": {
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 6,
+        "outage_flips": 12,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.7733333333333333,
+        "outage_psr": 0.38,
+        "outage_failures_alpha": 30,
+        "outage_flips": 4,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9466666666666667,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 6,
+        "outage_flips": 28,
+        "max_step_delta": 0.11624999999999999
+      },
+      "static_m3_gray": {
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 8,
+        "outage_flips": 1,
+        "max_step_delta": 1.0
+      }
+    },
+    {
+      "sim_seed": 1032,
+      "loom_seed": 876,
+      "loom": {
+        "psr": 0.8533333333333334,
+        "outage_psr": 0.66,
+        "outage_failures_alpha": 13,
+        "outage_flips": 19,
+        "max_step_delta": 0.11996902709537038
+      },
+      "raw": {
+        "psr": 0.88,
+        "outage_psr": 0.72,
+        "outage_failures_alpha": 10,
+        "outage_flips": 11,
+        "max_step_delta": 1.0
+      },
+      "static_m1": {
+        "psr": 0.7066666666666667,
+        "outage_psr": 0.26,
+        "outage_failures_alpha": 35,
+        "outage_flips": 4,
+        "max_step_delta": 1.0
+      },
+      "static_m3": {
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 4,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "static_m5": {
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 6,
+        "outage_flips": 3,
+        "max_step_delta": 1.0
+      },
+      "loom_gray": {
+        "psr": 0.9,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 8,
+        "outage_flips": 39,
+        "max_step_delta": 0.11996902709537038
+      },
+      "static_m3_gray": {
+        "psr": 0.8733333333333333,
+        "outage_psr": 0.72,
+        "outage_failures_alpha": 14,
+        "outage_flips": 0,
+        "max_step_delta": 0.0
+      }
+    }
+  ],
+  "command": "python scripts/compare_psr.py --n-seeds 100 --out-json dashboard/src/data/baselineComparison.json"
+}

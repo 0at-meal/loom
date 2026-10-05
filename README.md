@@ -10,8 +10,8 @@ A multi-armed bandit (Thompson Sampling) estimates which payment acquirer is hea
 
 ### Known results and limitations (read this first)
 
-- **Hard outages:** Loom **loses** to a standard 3-consecutive-failure circuit breaker: −3.19 pp PSR over 100 paired seeds (95% CI [−3.68, −2.69]), winning only 6 of 100.
-- **Gray failures (partial brownout):** Loom **beats** the same breaker: +2.71 pp, 95% CI [+2.09, +3.34], when Alpha degrades to 60%.
+- **Hard outages:** Loom **loses** to a standard 3-consecutive-failure circuit breaker: −3.19 pp PSR over 100 paired seeds (95% CI [−3.69, −2.69]), winning only 6 of 100.
+- **Gray failures (partial brownout):** Loom **beats** the same breaker: +2.71 pp, 95% CI [+2.08, +3.35], when Alpha degrades to 60%.
 - **Healthy acquirers that differ slightly:** beliefs decay per observation (≈50 observations of memory per acquirer at γ=0.98), so the bandit cannot settle on the better of two close acquirers. With Alpha at 95% and Beta at 94% it keeps sending about 46% of traffic to Beta, and that share does not shrink with more traffic.
 
 See [Known Limitations & Open Risks](#known-limitations--open-risks) for the rest.
@@ -37,15 +37,15 @@ Primary Acquirer Alpha (95% base PSR) vs Backup Acquirer Beta (94% base PSR), si
 
 ### Multi-seed results (100 paired seeds, same schedule and configuration as the table)
 
-Seed 42 above is one draw. Across seeds, Loom's own PSR ranges from 82.00% to 96.00% (mean 89.10%); 15 of 100 seeds score below the 86.00% shown above.
+Seed 42 above is one draw. The table below comes from `python scripts/compare_psr.py --n-seeds 100` (simulator seeds 42, 52, …, 1032 paired with Loom seeds 777–876; 95% CIs use the t-distribution). Across seeds, Loom's own PSR ranges from 82.00% to 96.00% (mean 89.10%); 15 of 100 seeds score below the 86.00% shown above.
 
 | Comparison | Mean PSR difference (Loom − other) | 95% CI | Loom wins / ties / losses |
 | :--- | :---: | :---: | :---: |
-| vs Static $M=1$ | **+13.47 pp** | [+12.12, +14.83] | 91 / 1 / 8 |
-| vs Static $M=3$ | **−3.19 pp** | [−3.68, −2.69] | 6 / 4 / 90 |
-| vs Static $M=5$ | **−1.95 pp** | [−2.44, −1.46] | 15 / 8 / 77 |
-| vs Static $M=3$, gray failure (Alpha at 60%) | **+2.71 pp** | [+2.09, +3.34] | 77 / 7 / 16 |
-| PID Loom vs raw bandit (no PID) | **−1.71 pp** | [−1.98, −1.44] | 5 / 8 / 87 |
+| vs Static $M=1$ | **+13.47 pp** | [+12.10, +14.84] | 91 / 1 / 8 |
+| vs Static $M=3$ | **−3.19 pp** | [−3.69, −2.69] | 6 / 4 / 90 |
+| vs Static $M=5$ | **−1.95 pp** | [−2.44, −1.45] | 15 / 8 / 77 |
+| vs Static $M=3$, gray failure (Alpha at 60%) | **+2.71 pp** | [+2.08, +3.35] | 77 / 7 / 16 |
+| PID Loom vs raw bandit (no PID) | **−1.71 pp** | [−1.99, −1.44] | 5 / 8 / 87 |
 
 ### Reading the Numbers
 
@@ -122,7 +122,7 @@ Loom's pipeline is built from four stages behind separate module boundaries. In 
 - Keeps the latest 120 routing events in React state and re-renders on each message.
 - On connect, the server sends a `BOOTSTRAP` frame with the current in-memory acquirer beliefs; no transaction history is loaded.
 - Sensor-actuator colocation: individual acquirer health readouts are paired with their trigger controls. Collapsible disclosures isolate diagnostics and advanced simulator settings.
-- The benchmark comparison card shows hard-coded numbers rather than values computed from a run.
+- The benchmark comparison card (under **Diagnostics**) reads its numbers from `dashboard/src/data/baselineComparison.json`, which `scripts/compare_psr.py --n-seeds 100 --out-json …` writes. It shows Loom against static $M=1$, $M=3$ and the gray-failure case side by side.
 
 ### 5. Static Baseline Router (`baseline_router/`)
 - Active-Passive Priority Failover with a consecutive-failure circuit breaker (default $M=3$, cooldown $N_{\text{cooldown}}=30$ transactions, single canary probe, exhaustion fallback to the primary when all routes are tripped).
@@ -171,7 +171,7 @@ cp .env.example .env
 > **Configuration Notice**: Only the data-layer keys in `.env` are read (`REDIS_*`, `KEY_PREFIX`, `REDIS_CHANNEL_*`, `SQLITE_*`, via `data_layer/config.py`). `PID_KP`, `PID_KI`, `PID_KD`, `DECAY_HALF_LIFE_SEC`, `APP_ENV` and `LOG_LEVEL` are never read. PID gains default to $K_p=0.12, K_i=0.005, K_d=0.25, I_{\text{max}}=1.0, w_{\text{min}}=0.03$ in `PIDConfig` and are overridden via server CLI arguments (`--kp`, `--ki`, `--kd`, `--min-allocation`).
 
 > [!NOTE]
-> **Running the tests:** `pytest` currently stops at collection with `StarletteDeprecationWarning` (2 errors), because `pyproject.toml` turns warnings into errors and dependencies are unpinned. Workaround: `pytest -W "ignore::starlette.exceptions.StarletteDeprecationWarning"`. With it, 252 tests are collected. A few tests assert wall-clock latency and can fail on a loaded machine.
+> **Running the tests:** `pytest` collects and runs 262 tests; CI runs the same suite with coverage. Dependencies are unpinned, and `pyproject.toml` turns warnings into errors, so a new library release can still break collection. A few tests assert wall-clock latency and can fail on a loaded machine.
 
 ---
 
@@ -315,17 +315,23 @@ python scripts/simulate_outage.py --acquirer-id acquirer_alpha --action trigger 
 Compare Loom's PID router against the static priority baseline on the 150-transaction schedule.
 
 > [!WARNING]
-> `compare_psr.py` deletes and recreates its output databases (default `baseline_metrics.db` and `loom_metrics.db` in the current directory). `loom_metrics.db` is also the data layer's default ledger path, so pass `--loom-db` / `--base-db` if that file matters to you. Seeds are fixed (simulator 42, Loom 777), so each command reproduces one draw. The report header always prints `Threshold M=3, Cooldown N=30`, whatever flags you pass.
+> Single-seed mode deletes and recreates its two output databases (default `compare_psr_baseline.db` and `compare_psr_loom.db` in the current directory; override with `--base-db` / `--loom-db`). It refuses to use the data layer's default ledger, `loom_metrics.db`. Multi-seed mode keeps its ledgers in memory and writes no database files.
 
 ```bash
-# 1. Standard outage benchmark (M=3, cooldown N=30): static 92.00% vs Loom 86.00%
+# 1. Standard outage benchmark (M=3, cooldown N=30), one draw: static 92.00% vs Loom 86.00%
 python scripts/compare_psr.py
 
-# 2. Sensitive breaker (M=1): static 76.00% vs Loom 86.00%
+# 2. Sensitive breaker (M=1), one draw: static 76.00% vs Loom 86.00%
 python scripts/compare_psr.py --threshold-m 1
+
+# 3. Another draw: pick the simulator and Loom seeds
+python scripts/compare_psr.py --seed 52 --loom-seed 778
+
+# 4. The multi-seed table above (100 paired seeds; about 3 minutes), plus the dashboard card's data
+python scripts/compare_psr.py --n-seeds 100 --out-json dashboard/src/data/baselineComparison.json
 ```
 
-The remaining single-seed rows in the results table come from `python scripts/run_qa_baseline_scenario.py`.
+The report header prints the $M$ and $N$ actually used. The remaining single-seed rows in the results table come from `python scripts/run_qa_baseline_scenario.py`.
 
 ---
 
@@ -389,7 +395,7 @@ loom/
 - [`baseline_router/`](baseline_router/): Isolated static reference router (`router.py`, `models.py`) implementing priority-tier failover and circuit-breaker debouncing for comparison.
 - [`dashboard/`](dashboard/): Vite + React live mission-control user interface (`src/App.jsx`, `src/components/`, `src/hooks/useLoomTelemetry.js`).
 - [`scripts/`](scripts/): Operational scripts, synthetic transaction generator (`generate_transactions.py`), benchmark runners (`run_qa_baseline_scenario.py`, `compare_psr.py`), and all-in-one cluster launcher (`run_demo.py`).
-- [`tests/`](tests/): 252 automated tests mirroring the source hierarchy (`tests/router_core/`, `tests/acquirer_sim/`, `tests/data_layer/`, `tests/baseline_router/`, `tests/dashboard/`, `tests/scripts/`). `tests/dashboard/` contains Python backend tests for the Phase 7 scenarios; the React code itself has no tests.
+- [`tests/`](tests/): 262 automated tests mirroring the source hierarchy (`tests/router_core/`, `tests/acquirer_sim/`, `tests/data_layer/`, `tests/baseline_router/`, `tests/dashboard/`, `tests/scripts/`). `tests/dashboard/` contains Python backend tests for the Phase 7 scenarios; the React code itself has no tests.
 - [`docs/`](docs/): Architectural contracts, decision records, specs, and role personas.
 
 ---
@@ -435,6 +441,8 @@ All project documentation resides in [`docs/`](docs/). The QA reports are the ph
 - [`docs/CONSTITUTION.md`](docs/CONSTITUTION.md): Ground rules, pinned technology stack, folder structure, coding conventions, and hard stops.
 - [`docs/decisions-log.md`](docs/decisions-log.md): Append-only register of Architectural Decision Records (ADRs), interface contracts, and rolling Open Risks.
 - [`docs/architecture.svg`](docs/architecture.svg): System architecture diagram.
+- [`docs/WHITEPAPER_L1.md`](docs/WHITEPAPER_L1.md): From-scratch explainer of the payment domain, Thompson Sampling, decay, PID smoothing and Loom's experiments, with a register of doc/code mismatches.
+- [`docs/AUDIT.md`](docs/AUDIT.md): Independent adversarial audit of the code at commit `8001acb`: findings, reproduced claims and a roadmap. Later PRs address its findings.
 
 ### Specifications & Contracts
 - [`docs/phase1-state-spec.md`](docs/phase1-state-spec.md): Bayesian belief state, offset decay math, and EWMA health model.

@@ -108,12 +108,12 @@ export function App() {
       {/* Footer Architectural Descriptors (Phase 7 Revision 5: Humanized, One Line Each, Zero Dots/Pipes) */}
       <footer className="w-full border-t border-[#2A2D34] px-4 py-4 text-[11px] text-[#8B8F98] font-sans max-w-[1400px] mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-3 leading-relaxed">
         <div className="flex flex-col gap-1">
-          <span>Smooths every reroute so traffic never jumps</span>
-          <span>Learns which gateway is healthiest, weighted toward the last minute</span>
+          <span>Smooths the target traffic mix; each payment still goes to one gateway</span>
+          <span>Learns which gateway is healthiest from about its last 50 outcomes</span>
         </div>
         <div className="flex flex-col gap-1 sm:text-right">
-          <span>Every decision is logged, permanently</span>
-          <span>Reacts to every transaction instantly</span>
+          <span>This demo server keeps decisions in memory only</span>
+          <span>Updates its beliefs after every transaction</span>
         </div>
       </footer>
     </div>
