@@ -118,6 +118,8 @@ python_files = ["test_*.py"]
 python_functions = ["test_*"]
 asyncio_mode = "auto"
 addopts = "-v --strict-markers --tb=short"
+# Dump every thread's stack if a test runs this long (diagnoses CI hangs).
+faulthandler_timeout = 120
 filterwarnings = [
     "error",
     "ignore::DeprecationWarning",

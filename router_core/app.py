@@ -126,14 +126,21 @@ def create_router_app(
         }
         await broadcast_payload(event_payload)
 
+    forwarder_stop = asyncio.Event()
+
     async def _redis_forwarder_loop() -> None:
-        """Forward Redis Pub/Sub messages to WebSockets if data layer is active."""
+        """Forward Redis Pub/Sub messages to WebSockets if data layer is active.
+
+        Reads with a short timeout and checks ``forwarder_stop`` between reads, so shutdown
+        does not rely only on task cancellation reaching the Redis client.
+        """
         try:
             from data_layer.redis_pubsub import AsyncEventSubscriber
 
             async with AsyncEventSubscriber(channels=["events:routing", "events:health"]) as sub:
-                async for event in sub.listen():
-                    if active_websockets:
+                while not forwarder_stop.is_set():
+                    event = await sub.get_event(timeout=0.5)
+                    if event is not None and active_websockets:
                         await broadcast_payload(event.model_dump())
         except (ConnectionError, OSError, TimeoutError) as exc:
             logger.debug("Redis forwarder loop idle or stopped: %s", exc)
@@ -142,8 +149,10 @@ def create_router_app(
     async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
         """Manage router lifecycle, HTTP connection pool, and WebSocket forwarders."""
         await active_router.start()
+        forwarder_stop.clear()
         redis_task = asyncio.create_task(_redis_forwarder_loop())
         yield
+        forwarder_stop.set()
         redis_task.cancel()
         try:
             await redis_task
