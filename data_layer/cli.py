@@ -34,7 +34,7 @@ def get_redis_client(
     override_port: int | None = None,
     override_db: int | None = None,
     override_timeout: float | None = None,
-) -> redis.Redis[Any]:
+) -> redis.Redis:
     """Create a synchronous Redis client with configured parameters."""
     raw_host = override_host or config.redis_host
     # On Windows, using 127.0.0.1 avoids IPv6 resolution delays when Redis is not running
@@ -56,9 +56,9 @@ def get_redis_client(
 
 def probe_redis_connectivity(
     config: DataLayerConfig,
-    redis_client: redis.Redis[Any] | None = None,
+    redis_client: redis.Redis | None = None,
     timeout: float = 0.5,
-) -> tuple[bool, redis.Redis[Any] | None, str]:
+) -> tuple[bool, redis.Redis | None, str]:
     """Test Redis connectivity fast with strict timeout to prevent socket hangs."""
     if redis_client is not None:
         try:
@@ -172,7 +172,7 @@ def cmd_init_db(
 # Subcommand: ping
 # ==============================================================================
 def cmd_ping(
-    redis_client: redis.Redis[Any] | None = None,
+    redis_client: redis.Redis | None = None,
     db_path: str | None = None,
     config: DataLayerConfig | None = None,
 ) -> int:
@@ -253,7 +253,7 @@ def cmd_ping(
 # Subcommand: status
 # ==============================================================================
 def cmd_status(
-    redis_client: redis.Redis[Any] | None = None,
+    redis_client: redis.Redis | None = None,
     db_path: str | None = None,
     config: DataLayerConfig | None = None,
 ) -> int:
@@ -356,7 +356,7 @@ def cmd_status(
 # Subcommand: inspect-state
 # ==============================================================================
 def cmd_inspect_state(
-    redis_client: redis.Redis[Any] | None = None,
+    redis_client: redis.Redis | None = None,
     acquirer_id: str | None = None,
     as_json: bool = False,
     config: DataLayerConfig | None = None,
@@ -473,7 +473,7 @@ def cmd_inspect_state(
 # Subcommand: reset-demo
 # ==============================================================================
 def cmd_reset_demo(
-    redis_client: redis.Redis[Any] | None = None,
+    redis_client: redis.Redis | None = None,
     db_path: str | None = None,
     force: bool = False,
     skip_redis: bool = False,

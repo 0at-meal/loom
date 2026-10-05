@@ -25,7 +25,7 @@ class EventPublisher:
 
     def __init__(
         self,
-        redis_client: redis.Redis[Any] | None = None,
+        redis_client: redis.Redis | None = None,
         config: DataLayerConfig | None = None,
         routing_channel: str | None = None,
         health_channel: str | None = None,
@@ -78,7 +78,7 @@ class EventPublisher:
             return self._sequence_number
 
     @property
-    def redis_client(self) -> redis.Redis[Any]:
+    def redis_client(self) -> redis.Redis:
         """Return the underlying Redis client."""
         return self._redis
 
@@ -183,7 +183,7 @@ class AsyncEventPublisher:
 
     def __init__(
         self,
-        redis_client: aioredis.Redis[Any] | None = None,
+        redis_client: aioredis.Redis | None = None,
         config: DataLayerConfig | None = None,
         routing_channel: str | None = None,
         health_channel: str | None = None,
@@ -333,7 +333,7 @@ class EventSubscriber:
 
     def __init__(
         self,
-        redis_client: redis.Redis[Any] | None = None,
+        redis_client: redis.Redis | None = None,
         config: DataLayerConfig | None = None,
         channels: list[str] | str | None = None,
     ) -> None:
@@ -356,7 +356,7 @@ class EventSubscriber:
                 decode_responses=True,
             )
 
-        self._pubsub = self._redis.pubsub()
+        self._pubsub = self._redis.pubsub()  # type: ignore[no-untyped-call]
         target_channels: list[str]
         if channels is None:
             target_channels = [f"{prefix}{self._config.redis_channel_routing}"]
@@ -462,7 +462,7 @@ class AsyncEventSubscriber:
 
     def __init__(
         self,
-        redis_client: aioredis.Redis[Any] | None = None,
+        redis_client: aioredis.Redis | None = None,
         config: DataLayerConfig | None = None,
         channels: list[str] | str | None = None,
     ) -> None:

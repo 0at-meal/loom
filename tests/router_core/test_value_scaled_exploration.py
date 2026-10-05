@@ -216,9 +216,9 @@ class TestHighValueVsLowValueDecisionSeparation:
         assert pct_high >= 99.5, f"Expected high-value Alpha win rate >= 99.5%, got {pct_high}%"
 
         # Measurable, statistically significant difference
-        assert (
-            pct_high > pct_low + 10.0
-        ), f"High-value ({pct_high}%) should measurably favor leader over low-value ({pct_low}%)"
+        assert pct_high > pct_low + 10.0, (
+            f"High-value ({pct_high}%) should measurably favor leader over low-value ({pct_low}%)"
+        )
 
 
 class TestBanditRouterIntegrationAndParity:
@@ -266,9 +266,9 @@ class TestBanditRouterIntegrationAndParity:
         # Verify alpha did NOT increase by $50,000!
         # Initial alpha was 1.0. One success with decay=0.98 gives 1.0 + 0.98*(1.0-1.0) + 1.0 = 2.0.
         state = router.get_state("acquirer_alpha")
-        assert math.isclose(
-            state.alpha, 2.0, rel_tol=1e-5
-        ), f"Alpha should be 2.0 after 1 success, got {state.alpha}!"
+        assert math.isclose(state.alpha, 2.0, rel_tol=1e-5), (
+            f"Alpha should be 2.0 after 1 success, got {state.alpha}!"
+        )
         assert state.success_count == 1
         assert state.total_count == 1
 
