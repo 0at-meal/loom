@@ -124,16 +124,16 @@ class TestPipelineEndToEnd:
                 None,
             )
             assert first_switch_index is not None, "Router never switched away from dead Alpha"
-            assert (
-                first_switch_index < 10
-            ), f"Router took too long to switch: {first_switch_index} calls"
+            assert first_switch_index < 10, (
+                f"Router took too long to switch: {first_switch_index} calls"
+            )
 
             # In the final 15 transactions (outage sustained), Beta should capture >= 90% of traffic
             late_choices = routes_chosen[15:]
             beta_late_count = sum(1 for c in late_choices if c == "acquirer_beta")
-            assert (
-                beta_late_count >= 13
-            ), f"Expected near 100% hard-switch to Beta, got: {late_choices}"
+            assert beta_late_count >= 13, (
+                f"Expected near 100% hard-switch to Beta, got: {late_choices}"
+            )
 
             # Verify Alpha's health and Beta parameters reflect the outage
             alpha_snap = router.get_state("acquirer_alpha")

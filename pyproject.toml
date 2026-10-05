@@ -47,6 +47,7 @@ exclude = [
     ".venv",
     "__pycache__",
     "dashboard",
+    "*.md",  # newer ruff formats code blocks in Markdown; docs are not formatter-managed
 ]
 
 [tool.ruff.lint]
@@ -120,6 +121,8 @@ addopts = "-v --strict-markers --tb=short"
 filterwarnings = [
     "error",
     "ignore::DeprecationWarning",
+    # Starlette >=1.7 warns (as a UserWarning subclass) when TestClient runs on httpx.
+    "ignore:Using `httpx` with `starlette.testclient` is deprecated",
 ]
 [[tool.mypy.overrides]]
 module = "tests.*"

@@ -270,9 +270,9 @@ class TestPhase5EndToEndPipelineQA:
             # ==================================================================
             # VERIFICATION 3: Redis Pub/Sub Delivery & Monotonicity
             # ==================================================================
-            assert (
-                len(received_events) == 150
-            ), f"Pub/Sub subscriber must receive all 150 events (got {len(received_events)})"
+            assert len(received_events) == 150, (
+                f"Pub/Sub subscriber must receive all 150 events (got {len(received_events)})"
+            )
 
             for idx, event in enumerate(received_events, start=1):
                 # Check monotonic sequence numbers
@@ -302,16 +302,16 @@ class TestPhase5EndToEndPipelineQA:
             cursor = conn.cursor()
             cursor.execute("SELECT COUNT(*) FROM acquirer_outcomes;")
             outcome_count = int(cursor.fetchone()[0])
-            assert (
-                outcome_count == 150
-            ), f"Acquirer outcomes must hold 150 rows (got {outcome_count})"
+            assert outcome_count == 150, (
+                f"Acquirer outcomes must hold 150 rows (got {outcome_count})"
+            )
 
             # Gap check & uniqueness check
             cursor.execute("SELECT transaction_id FROM transactions ORDER BY id ASC;")
             db_tx_ids = [r[0] for r in cursor.fetchall()]
-            assert (
-                db_tx_ids == tx_ids
-            ), "Database transaction IDs must match routing order with zero gaps"
+            assert db_tx_ids == tx_ids, (
+                "Database transaction IDs must match routing order with zero gaps"
+            )
 
             # Check PSR computation matches ledger
             psr_stats = metrics_store.get_psr_metrics()

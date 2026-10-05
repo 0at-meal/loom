@@ -35,27 +35,27 @@ class TestQAControlledPairedValueScaling:
         high_row = next(r for r in summary if r["amount"] == 1000.0)
 
         # 1. Low-value explores
-        assert (
-            low_row["beta_win_pct"] >= 15.0
-        ), f"Expected low-value Beta exploration >= 15%, got {low_row['beta_win_pct']}%"
+        assert low_row["beta_win_pct"] >= 15.0, (
+            f"Expected low-value Beta exploration >= 15%, got {low_row['beta_win_pct']}%"
+        )
 
         # 2. High-value exploits confident arm
-        assert (
-            high_row["alpha_win_pct"] >= 99.9
-        ), f"Expected high-value Alpha win rate >= 99.9%, got {high_row['alpha_win_pct']}%"
+        assert high_row["alpha_win_pct"] >= 99.9, (
+            f"Expected high-value Alpha win rate >= 99.9%, got {high_row['alpha_win_pct']}%"
+        )
         assert high_row["beta_win_pct"] <= 0.1
 
         # 3. Monotonic increase in Alpha win rate
         win_rates = [r["alpha_win_pct"] for r in summary]
-        assert win_rates == sorted(
-            win_rates
-        ), f"Alpha win rates must be monotonically non-decreasing: {win_rates}"
+        assert win_rates == sorted(win_rates), (
+            f"Alpha win rates must be monotonically non-decreasing: {win_rates}"
+        )
 
         # 4. Monotonic decrease in effective sampling width (std dev)
         std_devs = [r["sample_std_a"] for r in summary]
-        assert std_devs == sorted(
-            std_devs, reverse=True
-        ), f"Sample standard deviations must decrease monotonically: {std_devs}"
+        assert std_devs == sorted(std_devs, reverse=True), (
+            f"Sample standard deviations must decrease monotonically: {std_devs}"
+        )
 
 
 class TestQAOutageRegressionParity:

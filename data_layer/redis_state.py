@@ -35,7 +35,7 @@ class RedisStateStore:
 
     def __init__(
         self,
-        redis_client: redis.Redis[Any] | None = None,
+        redis_client: redis.Redis | None = None,
         config: DataLayerConfig | None = None,
         key_prefix: str = "",
     ) -> None:
@@ -48,7 +48,7 @@ class RedisStateStore:
             self._prefix = effective_prefix
 
         if redis_client is not None:
-            self._redis: redis.Redis[Any] = redis_client
+            self._redis: redis.Redis = redis_client
         else:
             self._redis = redis.Redis(
                 host=self._config.redis_host,
@@ -60,7 +60,7 @@ class RedisStateStore:
             )
 
     @property
-    def redis(self) -> redis.Redis[Any]:
+    def redis(self) -> redis.Redis:
         """Return the underlying Redis client."""
         return self._redis
 
@@ -259,7 +259,7 @@ class RedisStateStore:
         for attempt in range(max_retries):
             pipe = self._redis.pipeline()
             try:
-                pipe.watch(b_key, h_key)
+                pipe.watch(b_key, h_key)  # type: ignore[no-untyped-call]
                 b_raw: Any = pipe.hgetall(b_key)
                 h_raw: Any = pipe.hgetall(h_key)
 
@@ -431,7 +431,7 @@ class RedisBanditStateRegistry(BanditStateRegistry):
 
     def __init__(
         self,
-        redis_client: redis.Redis[Any] | None = None,
+        redis_client: redis.Redis | None = None,
         config: DataLayerConfig | None = None,
         default_config: AcquirerStateConfig | None = None,
         key_prefix: str = "",
