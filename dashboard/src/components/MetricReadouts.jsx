@@ -4,7 +4,7 @@ import React from 'react';
  * MetricReadouts Component: Projector-Scale Headline Telemetry & Single-Row Acquirers
  *
  * Phase 7 Revision 4 Contract:
- * - The two headline numbers (PSR, lift) are the largest text on the page by a clear margin
+ * - The two headline numbers (PSR, transactions routed) are the largest text on the page by a clear margin
  *   rendered in Space Mono (text-6xl sm:text-7xl font-bold tracking-tight)
  * - Zero container box, zero border, zero panel background
  * - Everything else (labels, secondary text) stays small and quiet by contrast
@@ -26,9 +26,6 @@ export function MetricReadouts({
 
   // Derive PSR color: Accent when healthy (>= 80%), Alert when in danger (< 80%)
   const psrColor = rollingPSR < 80.0 ? '#E5484D' : '#5B8DEF';
-
-  // Phase 6 baseline comparison calculation (M=1 overreaction baseline collapsed to 76%)
-  const baselineLift = rollingPSR > 0 ? (rollingPSR - 76.0).toFixed(1) : '+10.0';
 
   const acquirers = [
     {
@@ -68,17 +65,13 @@ export function MetricReadouts({
           </span>
         </div>
 
-        {/* Right Headline: PSR Lift vs Baseline */}
+        {/* Right Headline: Transactions routed this session */}
         <div className="flex flex-col gap-1">
           <span className="text-xs text-[#8B8F98]">
-            PSR lift vs baseline
+            Transactions routed
           </span>
-          <span className="font-mono text-6xl sm:text-7xl font-bold tracking-tight text-[#5B8DEF]">
-            {totalCount > 0
-              ? Number(baselineLift) >= 0
-                ? `+${baselineLift}%`
-                : `${baselineLift}%`
-              : '+10.0%'}
+          <span className="font-mono text-6xl sm:text-7xl font-bold tracking-tight text-[#E4E6EB]">
+            {totalCount > 0 ? totalCount.toLocaleString() : '--'}
           </span>
         </div>
       </div>

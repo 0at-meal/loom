@@ -28,7 +28,7 @@ export function OperatorControls({
             Benchmark scenario gauntlet presets
           </span>
           <span className="text-[11px] text-[#8B8F98]">
-            Inject pre-calibrated test scenarios to evaluate closed-loop PID routing against static circuit-breaker fallbacks.
+            Inject test scenarios to compare Loom's routing with static circuit-breaker fallbacks.
           </span>
         </div>
 
