@@ -253,9 +253,9 @@ class TestBanditRouterExecutionPipeline:
         """Verify BanditRouter works cleanly within async with block."""
         config = make_test_router_config()
         async with BanditRouter(config=config) as router:
-            assert router._client is not None
+            assert router.client_for(config.routes[0].acquirer_id) is not None
             assert router.list_acquirer_ids() == ["acquirer_alpha", "acquirer_beta"]
-        assert router._client is None
+        assert router._acquirer_clients == {}
 
 
 class TestRouterFastAPIApp:

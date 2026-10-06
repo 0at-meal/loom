@@ -219,6 +219,7 @@ def create_router_app(
             "registered_acquirers": active_router.list_acquirer_ids(),
             "active_websockets": len(telemetry),
             "telemetry_dropped": telemetry.dropped,
+            "router_pool_timeouts": active_router.pool_timeouts,
         }
 
     @app.get(

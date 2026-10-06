@@ -63,8 +63,14 @@ class BanditRouter:
                 )
 
         self._rng = rng if rng is not None else np.random.default_rng(config.seed)
+        # A caller-supplied client is shared by every route and never closed here.
+        # Otherwise each acquirer gets its own pool (a bulkhead, AUDIT F-16).
         self._client = http_client
         self._owns_client = http_client is None
+        self._acquirer_clients: dict[str, httpx.AsyncClient] = {}
+        # Payments that failed because the router had no free connection (not booked
+        # against any acquirer).
+        self.pool_timeouts = 0
 
         # Phase 4 PID state initialization
         self._pid_config: PIDConfig | None = config.pid_config
@@ -125,25 +131,34 @@ class BanditRouter:
         return self._last_diagnostics
 
     async def start(self) -> None:
-        """Initialize pooled HTTP client if owned."""
-        if self._client is None:
+        """Create one pooled HTTP client per acquirer unless a client was supplied."""
+        if self._client is None and not self._acquirer_clients:
             limits = httpx.Limits(
                 max_connections=self._config.max_connections,
                 max_keepalive_connections=self._config.max_keepalive_connections,
             )
-            self._client = httpx.AsyncClient(limits=limits)
+            for acquirer_id in self._routes:
+                self._acquirer_clients[acquirer_id] = httpx.AsyncClient(limits=limits)
             logger.debug(
-                "Initialized pooled AsyncClient (max=%d, keepalive=%d)",
+                "Initialized %d per-acquirer AsyncClients (max=%d, keepalive=%d each)",
+                len(self._acquirer_clients),
                 self._config.max_connections,
                 self._config.max_keepalive_connections,
             )
 
     async def close(self) -> None:
-        """Close pooled HTTP client if owned."""
-        if self._owns_client and self._client is not None:
-            await self._client.aclose()
-            self._client = None
-            logger.debug("Closed pooled AsyncClient")
+        """Close the per-acquirer HTTP clients this router created."""
+        if self._owns_client:
+            for client in self._acquirer_clients.values():
+                await client.aclose()
+            self._acquirer_clients.clear()
+            logger.debug("Closed per-acquirer AsyncClients")
+
+    def client_for(self, acquirer_id: str) -> httpx.AsyncClient:
+        """Return the HTTP client used to reach ``acquirer_id``."""
+        if self._client is not None:
+            return self._client
+        return self._acquirer_clients[acquirer_id]
 
     async def __aenter__(self) -> BanditRouter:
         """Async context manager entry."""
@@ -283,20 +298,20 @@ class BanditRouter:
         url = route_info.get_authorize_url()
 
         # 2. HTTP Dispatch to Acquirer
-        if self._client is None:
+        if self._client is None and not self._acquirer_clients:
             await self.start()
-        assert self._client is not None
+        client = self.client_for(selected_id)
 
         t_dispatch_start = time.perf_counter()
         status: Literal["AUTHORIZED", "DECLINED", "ERROR"]
         authorized: bool
         success: bool
-        outcome: Outcome
+        outcome: Outcome | None
         response_payload: AuthorizeResponse | None = None
         error_msg: str | None = None
 
         try:
-            resp = await self._client.post(
+            resp = await client.post(
                 url,
                 json=request.model_dump(),
                 timeout=route_info.timeout_sec,
@@ -347,6 +362,15 @@ class BanditRouter:
                 outcome = Outcome.TECHNICAL_FAILURE
                 error_msg = f"Acquirer HTTP {resp.status_code}: {resp.text}"
 
+        except httpx.PoolTimeout as err:
+            # The router had no free connection: the request never reached the acquirer,
+            # so it is not evidence about the acquirer (AUDIT F-16).
+            self.pool_timeouts += 1
+            status = "ERROR"
+            authorized = False
+            success = False
+            outcome = None
+            error_msg = f"Router connection pool exhausted for {selected_id}: PoolTimeout ({err})"
         except (httpx.TransportError, UnexpectedAcquirerResponse) as err:
             # Timeouts, connection and protocol errors, and unreadable 200 bodies
             status = "ERROR"
@@ -361,12 +385,15 @@ class BanditRouter:
         # 3. State feedback. The acquirer has already answered, so a failure here must not
         # turn an authorized payment into an error for the caller (AUDIT F-07).
         try:
-            updated_snapshot = self._registry.record_outcome(
-                acquirer_id=selected_id,
-                success=success,
-                timestamp=self._clock(),
-                outcome=outcome,
-            )
+            if outcome is None:
+                updated_snapshot = self._registry.get_state(selected_id)
+            else:
+                updated_snapshot = self._registry.record_outcome(
+                    acquirer_id=selected_id,
+                    success=success,
+                    timestamp=self._clock(),
+                    outcome=outcome,
+                )
         except Exception as exc:  # noqa: BLE001 - best-effort after dispatch
             logger.error(
                 "State update failed after dispatch: tx_id=%s acquirer=%s outcome=%s: %s",

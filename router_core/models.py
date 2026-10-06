@@ -64,12 +64,12 @@ class RouterConfig(BaseModel):
     max_connections: int = Field(
         default=100,
         gt=0,
-        description="Maximum pooled HTTP client connections.",
+        description="Maximum pooled HTTP connections per acquirer (each has its own pool).",
     )
     max_keepalive_connections: int = Field(
         default=20,
         gt=0,
-        description="Maximum idle keepalive HTTP connections.",
+        description="Maximum idle keepalive HTTP connections per acquirer.",
     )
     seed: int | None = Field(
         default=None,
