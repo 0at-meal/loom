@@ -221,8 +221,8 @@ class TestBanditRouterExecutionPipeline:
 
         await router.close()
 
-    async def test_http_422_raises_without_penalizing_state(self) -> None:
-        """Verify HTTP 422 schema rejection raises ValueError without mutating bandit belief."""
+    async def test_http_422_is_a_technical_failure(self) -> None:
+        """An acquirer 422 is an integration fault: ERROR result, charged to the acquirer."""
         config = make_test_router_config()
 
         def handler(request: httpx.Request) -> httpx.Response:
@@ -237,14 +237,15 @@ class TestBanditRouterExecutionPipeline:
         }
 
         req = AuthorizeRequest(transaction_id="tx_test_5", amount=10.0)
-        with pytest.raises(ValueError, match="HTTP 422"):
-            await router.route(req)
+        result = await router.route(req)
+        assert result.status == "ERROR"
+        assert result.authorized is False
+        assert "HTTP 422" in (result.error_message or "")
 
-        # Verify acquirer state was NOT penalized
+        # The route's technical belief takes the failure (AUDIT F-07)
         alpha_snap = router.get_state("acquirer_alpha")
-        assert alpha_snap.alpha == pytest.approx(1.0)
-        assert alpha_snap.beta == pytest.approx(1.0)
-        assert alpha_snap.total_count == 0
+        assert alpha_snap.beta == pytest.approx(2.0)
+        assert alpha_snap.total_count == 1
 
         await router.close()
 

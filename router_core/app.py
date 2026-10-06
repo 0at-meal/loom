@@ -24,6 +24,7 @@ from router_core.models import AcquirerRouteConfig, RouterConfig, RoutingResult
 from router_core.pid import PIDConfig
 from router_core.router import BanditRouter
 from router_core.state import AcquirerStateSnapshot
+from router_core.telemetry import TelemetryBroadcaster
 
 logger = logging.getLogger("loom.router_core.app")
 
@@ -60,29 +61,15 @@ def create_router_app(
             )
         )
 
-    active_websockets: set[WebSocket] = set()
+    # Per-client bounded queues: publishing never waits on a dashboard (AUDIT F-05).
+    telemetry = TelemetryBroadcaster()
     ws_sequence_number = 0
-    ws_lock = asyncio.Lock()
 
-    async def broadcast_payload(payload: dict[str, Any]) -> None:
-        """Broadcast JSON payload to all active WebSocket clients non-blockingly."""
-        if not active_websockets:
-            return
-        message = json.dumps(payload, default=str)
-        dead_websockets: set[WebSocket] = set()
-        for ws in list(active_websockets):
-            try:
-                await ws.send_text(message)
-            except (WebSocketDisconnect, RuntimeError, ConnectionResetError, OSError):
-                dead_websockets.add(ws)
-        active_websockets.difference_update(dead_websockets)
-
-    async def broadcast_routing_result(result: RoutingResult) -> None:
-        """Broadcast a routing result envelope to connected WebSocket subscribers."""
+    def broadcast_routing_result(result: RoutingResult) -> None:
+        """Queue a routing result envelope for connected WebSocket subscribers."""
         nonlocal ws_sequence_number
-        async with ws_lock:
-            ws_sequence_number += 1
-            seq = ws_sequence_number
+        ws_sequence_number += 1
+        seq = ws_sequence_number
 
         weight: float = 1.0
         if result.smoothed_allocation and result.selected_acquirer in result.smoothed_allocation:
@@ -124,7 +111,7 @@ def create_router_app(
             "allocation_weight": weight,
             "updated_state": updated_state,
         }
-        await broadcast_payload(event_payload)
+        telemetry.publish(event_payload)
 
     forwarder_stop = asyncio.Event()
 
@@ -140,8 +127,8 @@ def create_router_app(
             async with AsyncEventSubscriber(channels=["events:routing", "events:health"]) as sub:
                 while not forwarder_stop.is_set():
                     event = await sub.get_event(timeout=0.5)
-                    if event is not None and active_websockets:
-                        await broadcast_payload(event.model_dump())
+                    if event is not None and len(telemetry):
+                        telemetry.publish(event.model_dump())
         except (ConnectionError, OSError, TimeoutError) as exc:
             logger.debug("Redis forwarder loop idle or stopped: %s", exc)
 
@@ -158,6 +145,7 @@ def create_router_app(
             await redis_task
         except asyncio.CancelledError:
             pass
+        await telemetry.close()
         await active_router.close()
 
     app = FastAPI(
@@ -179,7 +167,7 @@ def create_router_app(
     )
 
     app.state.router = active_router
-    app.state.active_websockets = active_websockets
+    app.state.telemetry = telemetry
 
     # -------------------------------------------------------------------------
     # Exception Handlers
@@ -214,7 +202,12 @@ def create_router_app(
     async def route_transaction(request: AuthorizeRequest) -> RoutingResult:
         """Execute Thompson Sampling route selection, dispatch to acquirer, and update state."""
         result = await active_router.route(request)
-        await broadcast_routing_result(result)
+        try:
+            broadcast_routing_result(result)
+        except Exception as exc:  # noqa: BLE001 - telemetry must never fail a payment
+            logger.warning(
+                "Failed to publish routing telemetry for %s: %s", request.transaction_id, exc
+            )
         return result
 
     @app.get("/health", tags=["Operational"])
@@ -224,7 +217,8 @@ def create_router_app(
             "status": "healthy",
             "timestamp": time.time(),
             "registered_acquirers": active_router.list_acquirer_ids(),
-            "active_websockets": len(active_websockets),
+            "active_websockets": len(telemetry),
+            "telemetry_dropped": telemetry.dropped,
         }
 
     @app.get(
@@ -259,7 +253,6 @@ def create_router_app(
     async def websocket_telemetry_endpoint(websocket: WebSocket) -> None:
         """Stream real-time RoutingEvents and HealthAlertEvents to browser."""
         await websocket.accept()
-        active_websockets.add(websocket)
         logger.info("Dashboard WebSocket client connected from %s", websocket.client)
 
         # 1. Send initial cold-start bootstrap snapshot
@@ -284,20 +277,20 @@ def create_router_app(
             "registered_acquirers": active_router.list_acquirer_ids(),
         }
         await websocket.send_text(json.dumps(bootstrap_payload))
+        # Events queue behind the bootstrap frame; one sender task writes to this socket.
+        telemetry.register(websocket)
 
         try:
             while True:
                 data = await websocket.receive_text()
                 if data == "ping":
-                    await websocket.send_text(
-                        json.dumps({"event_type": "PONG", "timestamp": time.time()})
-                    )
+                    telemetry.send_to(websocket, {"event_type": "PONG", "timestamp": time.time()})
         except (WebSocketDisconnect, ConnectionResetError):
             logger.info("Dashboard WebSocket client disconnected")
         except (RuntimeError, OSError) as exc:
             logger.debug("WebSocket client dropped: %s", exc)
         finally:
-            active_websockets.discard(websocket)
+            telemetry.unregister(websocket)
 
     # -------------------------------------------------------------------------
     # Simulator Proxy Endpoints (Phase 7 Ticket C)
@@ -345,7 +338,7 @@ def create_router_app(
             "severity": "CRITICAL" if payload.active else "INFO",
             "message": f"Outage {'injected' if payload.active else 'cleared'} on {acquirer_id}",
         }
-        await broadcast_payload(alert_payload)
+        telemetry.publish(alert_payload)
         return data
 
     @app.post(
