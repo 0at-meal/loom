@@ -13,7 +13,7 @@ class OutageBehavior(StrEnum):
 
     RETURN_DECLINE = "RETURN_DECLINE"  # HTTP 200 with status=DECLINED (default payment behavior)
     HTTP_503 = "HTTP_503"  # HTTP 503 Service Unavailable (gateway failure)
-    LATENCY_SPIKE = "LATENCY_SPIKE"  # Injects massive delay before declining
+    LATENCY_SPIKE = "LATENCY_SPIKE"  # Delays past the router's 2 s timeout, then declines
 
 
 class LatencyConfig(BaseModel):
@@ -34,10 +34,13 @@ class LatencyConfig(BaseModel):
         examples=[5.0],
     )
     outage_spike_ms: float = Field(
-        default=500.0,
+        default=2500.0,
         ge=0.0,
-        description="Additional latency injected when outage_behavior is LATENCY_SPIKE.",
-        examples=[500.0],
+        description=(
+            "Additional latency injected when outage_behavior is LATENCY_SPIKE. The default "
+            "exceeds the router's 2 s timeout, so the spike is seen as a timeout."
+        ),
+        examples=[2500.0],
     )
 
 

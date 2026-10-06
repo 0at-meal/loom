@@ -121,8 +121,8 @@ class TestBanditRouterExecutionPipeline:
 
         await router.close()
 
-    async def test_declined_authorization_updates_beta(self) -> None:
-        """Verify HTTP 200 declined updates beta on the selected acquirer."""
+    async def test_issuer_decline_updates_approval_not_health(self) -> None:
+        """An HTTP 200 DO_NOT_HONOR is an issuer decline: approval falls, health does not."""
         config = make_test_router_config()
 
         def handler(request: httpx.Request) -> httpx.Response:
@@ -153,12 +153,13 @@ class TestBanditRouterExecutionPipeline:
         assert result.authorized is False
         assert result.success is False
 
-        # Verify state update: beta = 1.0 + 0.9*(1.0-1.0) + 1.0 = 2.0
+        # The acquirer processed the payment: technical alpha = 1 + 0.9*(1-1) + 1 = 2.0
         alpha_snap = router.get_state("acquirer_alpha")
-        assert alpha_snap.alpha == pytest.approx(1.0)
-        assert alpha_snap.beta == pytest.approx(2.0)
-        assert alpha_snap.failure_count == 1
-        assert alpha_snap.health_score == pytest.approx(0.90)  # 0.90 * 1.0 + 0.10 * 0.0
+        assert alpha_snap.alpha == pytest.approx(2.0)
+        assert alpha_snap.beta == pytest.approx(1.0)
+        assert alpha_snap.approval_beta == pytest.approx(2.0)
+        assert alpha_snap.failure_count == 1  # lifetime counters count authorizations
+        assert alpha_snap.health_score == pytest.approx(1.0)
 
         await router.close()
 

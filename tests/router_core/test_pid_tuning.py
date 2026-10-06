@@ -48,12 +48,12 @@ async def _run_outage_scenario(pid_config: PIDConfig | None) -> OutageScenarioRe
                 AcquirerRouteConfig(
                     acquirer_id="acquirer_alpha",
                     base_url="http://testserver",
-                    state_config=AcquirerStateConfig(decay_factor=0.95),
+                    state_config=AcquirerStateConfig(alpha_prior=1.0, decay_factor=0.95),
                 ),
                 AcquirerRouteConfig(
                     acquirer_id="acquirer_beta",
                     base_url="http://testserver",
-                    state_config=AcquirerStateConfig(decay_factor=0.95),
+                    state_config=AcquirerStateConfig(alpha_prior=1.0, decay_factor=0.95),
                 ),
             ],
             pid_config=pid_config,
@@ -128,9 +128,10 @@ class TestPIDTuningVerification:
         # Baseline hard switches 0.0 <-> 1.0 (100% jump)
         assert max_delta == 1.0
 
-        # Post-recovery (Tx 101-150), Alpha receives 0 transactions (dormant route starvation)
+        # Post-recovery (Tx 101-150), Alpha is still nearly starved: only the approval belief
+        # and decay to the prior bring it a few transactions (Phase 3 measured 0).
         recovery_routes = routes[100:]
-        assert recovery_routes.count("acquirer_alpha") == 0
+        assert recovery_routes.count("acquirer_alpha") <= 5
 
     async def test_tuned_pid_eases_smoothly_without_excessive_step(self) -> None:
         """Verify tuned PID limits single-step delta <= 15% and eliminates step functions."""
@@ -153,9 +154,10 @@ class TestPIDTuningVerification:
         assert max_delta <= 0.15
         assert max_delta < 0.13  # Specifically observed ~11.77%
 
-        # Alpha allocation at start of outage vs end of outage
-        # Alpha begins outage around 0.72 - 0.82 and smoothly decays to floor ~0.03
-        assert alloc[53] > 0.70
+        # Alpha allocation at start of outage vs end of outage. Alpha (95%) and Beta (94%) are
+        # technically identical and their approval rates differ by 1 pt, so the warmup split is
+        # near even; Alpha starts the outage above 0.5 and decays smoothly to the ~0.03 floor.
+        assert alloc[53] > 0.50
         assert alloc[99] <= 0.05
 
         # Recovers probe traffic: Alpha must receive probe transactions during recovery

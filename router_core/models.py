@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from acquirer_sim.models import AuthorizeResponse
 from router_core.pid import PIDConfig, PIDDiagnostics
-from router_core.state import AcquirerStateConfig, AcquirerStateSnapshot
+from router_core.state import AcquirerStateConfig, AcquirerStateSnapshot, Outcome
 from router_core.value_policy import ValueScaledExplorationConfig
 
 
@@ -89,6 +89,13 @@ class RouterConfig(BaseModel):
             "If None or disabled, router uses standard Thompson Sampling."
         ),
     )
+    technical_decline_codes: list[str] = Field(
+        default_factory=lambda: ["ACQUIRER_OUTAGE"],
+        description=(
+            "Decline codes that mean the acquirer failed to process the payment. Any other "
+            "decline is attributed to the issuer and only lowers the approval belief."
+        ),
+    )
 
 
 class RoutingResult(BaseModel):
@@ -123,8 +130,16 @@ class RoutingResult(BaseModel):
     )
     success: bool = Field(
         ...,
-        description="Binary outcome feedback value x fed back to update the bandit state.",
+        description="Whether the payment was authorized.",
         examples=[True],
+    )
+    outcome: Outcome | None = Field(
+        default=None,
+        description=(
+            "Which belief the result was booked against: AUTHORIZED, ISSUER_DECLINE "
+            "(approval only) or TECHNICAL_FAILURE (acquirer health only)."
+        ),
+        examples=["AUTHORIZED"],
     )
     response_payload: AuthorizeResponse | None = Field(
         default=None,

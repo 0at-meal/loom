@@ -16,7 +16,9 @@ from router_core.state import (
     AcquirerState,
     AcquirerStateConfig,
     AcquirerStateSnapshot,
+    Outcome,
     decay_beliefs,
+    step_approval,
     step_beliefs,
 )
 
@@ -179,8 +181,8 @@ class RedisStateStore:
 
     def read_snapshot_and_decay_time(
         self, acquirer_id: str
-    ) -> tuple[AcquirerStateSnapshot, float] | None:
-        """Read a snapshot and the time its wall-clock decay was last applied up to."""
+    ) -> tuple[AcquirerStateSnapshot, float, float] | None:
+        """Read a snapshot and the times its technical and approval decay were applied up to."""
         b_key = self.beta_key(acquirer_id)
         h_key = self.health_key(acquirer_id)
 
@@ -205,6 +207,7 @@ class RedisStateStore:
         total_count = int(b_data.get("total_count", success_count + failure_count))
         last_updated_at = float(b_data.get("last_updated_at", time.time()))
         decayed_at = float(b_data.get("decayed_at", last_updated_at))
+        approval_decayed_at = float(b_data.get("approval_decayed_at", decayed_at))
 
         snapshot = AcquirerStateSnapshot(
             acquirer_id=acquirer_id,
@@ -217,8 +220,10 @@ class RedisStateStore:
             last_updated_at=last_updated_at,
             alpha_prior=alpha_prior,
             beta_prior=beta_prior,
+            approval_alpha=float(b_data.get("approval_alpha", 1.0)),
+            approval_beta=float(b_data.get("approval_beta", 1.0)),
         )
-        return snapshot, decayed_at
+        return snapshot, decayed_at, approval_decayed_at
 
     def write_snapshot(
         self,
@@ -247,6 +252,9 @@ class RedisStateStore:
                 "beta_prior": str(snapshot.beta_prior),
                 "decay": describe_decay(config or AcquirerStateConfig()),
                 "decayed_at": str(snapshot.last_updated_at),
+                "approval_alpha": str(snapshot.approval_alpha),
+                "approval_beta": str(snapshot.approval_beta),
+                "approval_decayed_at": str(snapshot.last_updated_at),
                 "success_count": str(snapshot.success_count),
                 "failure_count": str(snapshot.failure_count),
                 "total_count": str(snapshot.total_count),
@@ -263,8 +271,10 @@ class RedisStateStore:
         success: bool,
         timestamp: float | None = None,
         max_retries: int = 5,
+        outcome: Outcome | None = None,
     ) -> AcquirerStateSnapshot:
         """Record outcome atomically in Redis using optimistic locking and the shared math."""
+        kind = Outcome.from_success(success, outcome)
         b_key = self.beta_key(acquirer_id)
         h_key = self.health_key(acquirer_id)
         acquirers_k = self.acquirers_key()
@@ -292,6 +302,11 @@ class RedisStateStore:
                     decayed_at = float(
                         b_data.get("decayed_at", b_data.get("last_updated_at", now_ts))
                     )
+                    curr_app_alpha = float(
+                        b_data.get("approval_alpha", config.approval_alpha_prior)
+                    )
+                    curr_app_beta = float(b_data.get("approval_beta", config.approval_beta_prior))
+                    app_decayed_at = float(b_data.get("approval_decayed_at", decayed_at))
                 else:
                     curr_alpha = a0
                     curr_beta = b0
@@ -299,14 +314,24 @@ class RedisStateStore:
                     curr_success = 0
                     curr_failure = 0
                     decayed_at = now_ts
+                    curr_app_alpha = config.approval_alpha_prior
+                    curr_app_beta = config.approval_beta_prior
+                    app_decayed_at = now_ts
 
                 new_alpha, new_beta, new_health = step_beliefs(
                     config,
                     curr_alpha,
                     curr_beta,
                     curr_health,
-                    success,
+                    kind != Outcome.TECHNICAL_FAILURE,
                     max(0.0, now_ts - decayed_at),
+                )
+                new_app_alpha, new_app_beta = step_approval(
+                    config,
+                    curr_app_alpha,
+                    curr_app_beta,
+                    None if kind == Outcome.TECHNICAL_FAILURE else kind == Outcome.AUTHORIZED,
+                    max(0.0, now_ts - app_decayed_at),
                 )
 
                 # 3. Counters
@@ -331,6 +356,9 @@ class RedisStateStore:
                         "beta_prior": str(b0),
                         "decay": describe_decay(config),
                         "decayed_at": str(max(decayed_at, now_ts)),
+                        "approval_alpha": str(new_app_alpha),
+                        "approval_beta": str(new_app_beta),
+                        "approval_decayed_at": str(max(app_decayed_at, now_ts)),
                         "success_count": str(new_success),
                         "failure_count": str(new_failure),
                         "total_count": str(new_total),
@@ -351,6 +379,8 @@ class RedisStateStore:
                     last_updated_at=now_ts,
                     alpha_prior=a0,
                     beta_prior=b0,
+                    approval_alpha=new_app_alpha,
+                    approval_beta=new_app_beta,
                 )
 
             except WatchError:
@@ -417,11 +447,14 @@ class RedisAcquirerState(AcquirerState):
         self._success_count = snapshot.success_count
         self._failure_count = snapshot.failure_count
         self._last_updated_at = snapshot.last_updated_at
+        self._approval_alpha = snapshot.approval_alpha
+        self._approval_beta = snapshot.approval_beta
 
     def record_outcome(
         self,
         success: bool,
         timestamp: float | None = None,
+        outcome: Outcome | None = None,
     ) -> AcquirerStateSnapshot:
         """Atomically record outcome in Redis and return updated state snapshot."""
         snapshot = self._store.record_outcome(
@@ -429,6 +462,7 @@ class RedisAcquirerState(AcquirerState):
             config=self._config,
             success=success,
             timestamp=timestamp,
+            outcome=outcome,
         )
         self._snapshot = snapshot
         self._sync_from_snapshot(snapshot)
@@ -441,6 +475,14 @@ class RedisAcquirerState(AcquirerState):
         generator = rng if rng is not None else np.random.default_rng()
         return float(generator.beta(fresh_snap.alpha, fresh_snap.beta))
 
+    def sample_approval(
+        self, rng: np.random.Generator | None = None, now: float | None = None
+    ) -> float:
+        """Draw a Thompson sample from the approval belief stored in Redis."""
+        fresh_snap = self.get_state(now=now)
+        generator = rng if rng is not None else np.random.default_rng()
+        return float(generator.beta(fresh_snap.approval_alpha, fresh_snap.approval_beta))
+
     def get_state(self, now: float | None = None) -> AcquirerStateSnapshot:
         """Return a snapshot from Redis, decayed to ``now`` when given.
 
@@ -448,24 +490,38 @@ class RedisAcquirerState(AcquirerState):
         """
         found = self._store.read_snapshot_and_decay_time(self._acquirer_id)
         if found is not None:
-            snapshot, decayed_at = found
+            snapshot, decayed_at, approval_decayed_at = found
             self._snapshot = snapshot
             self._sync_from_snapshot(snapshot)
-            if now is not None and self._config.uses_wall_clock and now > decayed_at:
+            if now is not None:
                 alpha, beta = decay_beliefs(
-                    self._config, snapshot.alpha, snapshot.beta, now - decayed_at
+                    self._config, snapshot.alpha, snapshot.beta, max(0.0, now - decayed_at)
+                )
+                app_alpha, app_beta = step_approval(
+                    self._config,
+                    snapshot.approval_alpha,
+                    snapshot.approval_beta,
+                    None,
+                    max(0.0, now - approval_decayed_at),
+                )
+                health = (
+                    self._config.wall_clock_health(alpha, beta)
+                    if self._config.uses_wall_clock
+                    else snapshot.health_score
                 )
                 return AcquirerStateSnapshot(
                     acquirer_id=snapshot.acquirer_id,
                     alpha=alpha,
                     beta=beta,
-                    health_score=self._config.wall_clock_health(alpha, beta),
+                    health_score=health,
                     success_count=snapshot.success_count,
                     failure_count=snapshot.failure_count,
                     total_count=snapshot.total_count,
                     last_updated_at=snapshot.last_updated_at,
                     alpha_prior=snapshot.alpha_prior,
                     beta_prior=snapshot.beta_prior,
+                    approval_alpha=app_alpha,
+                    approval_beta=app_beta,
                 )
         return self._snapshot
 
@@ -525,6 +581,7 @@ class RedisBanditStateRegistry(BanditStateRegistry):
         acquirer_id: str,
         success: bool,
         timestamp: float | None = None,
+        outcome: Outcome | None = None,
     ) -> AcquirerStateSnapshot:
         """Record outcome for a specific acquirer in Redis and return updated snapshot."""
         state = self._redis_acquirers.get(acquirer_id)
@@ -534,15 +591,16 @@ class RedisBanditStateRegistry(BanditStateRegistry):
                 state = self.register_acquirer(acquirer_id)
             else:
                 raise KeyError(f"Acquirer '{acquirer_id}' not found in registry")
-        return state.record_outcome(success=success, timestamp=timestamp)
+        return state.record_outcome(success=success, timestamp=timestamp, outcome=outcome)
 
     def sample_all(
         self, rng: np.random.Generator | None = None, now: float | None = None
     ) -> dict[str, float]:
-        """Draw independent Thompson samples across all registered acquirers."""
+        """Draw Thompson scores (technical times approval) across registered acquirers."""
         generator = rng if rng is not None else np.random.default_rng()
         return {
             acquirer_id: state.sample(rng=generator, now=now)
+            * state.sample_approval(rng=generator, now=now)
             for acquirer_id, state in self._redis_acquirers.items()
         }
 

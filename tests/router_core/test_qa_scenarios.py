@@ -124,7 +124,7 @@ class TestQAFiveStepFailureDrag:
 
         Compares System A (1 failure, then 5 successes) against System B (6 successes).
         """
-        config = AcquirerStateConfig(decay_factor=gamma, initial_health=1.0)
+        config = AcquirerStateConfig(alpha_prior=1.0, decay_factor=gamma, initial_health=1.0)
 
         # System A: 1 Failure at t=1, followed by 5 Successes (t=2..6)
         state_a = AcquirerState("system_a", config=config, initial_timestamp=0.0)
@@ -172,7 +172,7 @@ class TestQAFiveStepFailureDrag:
         results: dict[float, dict[str, float]] = {}
 
         for gamma in [0.90, 0.95, 0.98]:
-            config = AcquirerStateConfig(decay_factor=gamma, initial_health=1.0)
+            config = AcquirerStateConfig(alpha_prior=1.0, decay_factor=gamma, initial_health=1.0)
             state = AcquirerState(f"acq_{gamma}", config=config)
             state.record_outcome(success=False)  # t=1 Failure
             for _ in range(5):
@@ -203,7 +203,7 @@ class TestQARouteFlappingAndStress:
 
     def test_flapping_route_oscillates_around_fifty_percent(self) -> None:
         """Verify that a 50% flapping route (alternating success and failure) converges to 0.50."""
-        config = AcquirerStateConfig(decay_factor=0.95, initial_health=1.0)
+        config = AcquirerStateConfig(alpha_prior=1.0, decay_factor=0.95, initial_health=1.0)
         state = AcquirerState("flapping_acquirer", config=config)
 
         # Alternating: [Success, Failure] x 100
@@ -239,10 +239,11 @@ class TestQARouteFlappingAndStress:
         assert state_c.total_count == 0
         assert state_c.success_count == 0
         assert state_c.failure_count == 0
-        assert state_c.alpha == 1.0
+        assert state_c.alpha == 4.0  # default technical prior Beta(4, 1)
         assert state_c.beta == 1.0
+        assert (state_c.approval_alpha, state_c.approval_beta) == (1.0, 1.0)
         assert state_c.health_score == 1.0
-        assert state_c.expected_success_rate == 0.50
+        assert state_c.expected_success_rate == pytest.approx(0.80)
 
         # Verify A is deeply degraded while B is healthy
         state_a = registry.get_state("acquirer_a")
@@ -292,12 +293,12 @@ class TestQABanditOscillationAndHardSwitching:
                     AcquirerRouteConfig(
                         acquirer_id="acquirer_alpha",
                         base_url="http://testserver",
-                        state_config=AcquirerStateConfig(decay_factor=0.95),
+                        state_config=AcquirerStateConfig(alpha_prior=1.0, decay_factor=0.95),
                     ),
                     AcquirerRouteConfig(
                         acquirer_id="acquirer_beta",
                         base_url="http://testserver",
-                        state_config=AcquirerStateConfig(decay_factor=0.95),
+                        state_config=AcquirerStateConfig(alpha_prior=1.0, decay_factor=0.95),
                     ),
                 ],
                 seed=777,
@@ -383,12 +384,12 @@ class TestQABanditOscillationAndHardSwitching:
                     AcquirerRouteConfig(
                         acquirer_id="acquirer_alpha",
                         base_url="http://testserver",
-                        state_config=AcquirerStateConfig(decay_factor=0.95),
+                        state_config=AcquirerStateConfig(alpha_prior=1.0, decay_factor=0.95),
                     ),
                     AcquirerRouteConfig(
                         acquirer_id="acquirer_beta",
                         base_url="http://testserver",
-                        state_config=AcquirerStateConfig(decay_factor=0.95),
+                        state_config=AcquirerStateConfig(alpha_prior=1.0, decay_factor=0.95),
                     ),
                 ],
                 seed=777,

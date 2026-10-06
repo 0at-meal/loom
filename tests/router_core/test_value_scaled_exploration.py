@@ -161,16 +161,21 @@ class TestHighValueVsLowValueDecisionSeparation:
         acq_a = router.registry._acquirers["acquirer_alpha"]
         acq_b = router.registry._acquirers["acquirer_beta"]
 
-        # Leader: 19 successes, 1 failure -> mean = 0.95
-        acq_a._alpha = 19.0
-        acq_a._beta = 1.0
+        # Both acquirers are technically always up; they differ in issuer approvals.
+        for acq in (acq_a, acq_b):
+            acq._alpha = 1e6
+            acq._beta = 1.0
 
-        # Competitor: 18 successes, 2 failures -> mean = 0.90
-        acq_b._alpha = 18.0
-        acq_b._beta = 2.0
+        # Leader: 19 approvals, 1 decline -> approval mean = 0.95
+        acq_a._approval_alpha = 19.0
+        acq_a._approval_beta = 1.0
 
-        assert math.isclose(acq_a.get_state().expected_success_rate, 0.95, rel_tol=1e-5)
-        assert math.isclose(acq_b.get_state().expected_success_rate, 0.90, rel_tol=1e-5)
+        # Competitor: 18 approvals, 2 declines -> approval mean = 0.90
+        acq_b._approval_alpha = 18.0
+        acq_b._approval_beta = 2.0
+
+        assert math.isclose(acq_a.get_state().expected_psr, 0.95, rel_tol=1e-5)
+        assert math.isclose(acq_b.get_state().expected_psr, 0.90, rel_tol=1e-5)
 
         trials = 1000
         low_val_alpha_wins = 0
@@ -180,9 +185,7 @@ class TestHighValueVsLowValueDecisionSeparation:
         for _ in range(trials):
             # Draw raw samples
             raw_samples = router.registry.sample_all(rng=router._rng)
-            means = {
-                aid: s.expected_success_rate for aid, s in router.registry.get_all_states().items()
-            }
+            means = {aid: s.expected_psr for aid, s in router.registry.get_all_states().items()}
 
             # 1. Low-value transaction ($1.00)
             adj_low, _ = apply_value_scaled_policy(

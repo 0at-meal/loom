@@ -18,7 +18,7 @@ from typing import Any
 import numpy as np
 
 from router_core.pid import PIDConfig, PIDState, calculate_pid_step, project_to_bounded_simplex
-from router_core.state import DEFAULT_HALF_LIFE_SEC, AcquirerState, AcquirerStateConfig
+from router_core.state import DEFAULT_HALF_LIFE_SEC, AcquirerState, AcquirerStateConfig, Outcome
 from scripts.compare_psr import execute_scenario
 
 BETA_DRAW_SEED = 7
@@ -44,7 +44,7 @@ def section_4_thompson() -> list[str]:
 def section_5_decay() -> list[str]:
     """Section 5: offset-decay updates, memory length and the outage example."""
     out = ["[5.2] Per-observation offset decay from Beta(1,1), gamma=0.98, outcomes S S S F S"]
-    state = AcquirerState("example", AcquirerStateConfig(decay_factor=0.98))
+    state = AcquirerState("example", AcquirerStateConfig(alpha_prior=1.0, decay_factor=0.98))
     for outcome in (True, True, True, False, True):
         snap = state.record_outcome(outcome, timestamp=0.0)
         out.append(
@@ -59,7 +59,7 @@ def section_5_decay() -> list[str]:
             f"alpha ceiling {1 + 1 / (1 - gamma):.0f}"
         )
     for gamma, n_fail in ((0.95, (1, 3, 5, 10)), (0.98, (10,))):
-        state = AcquirerState("example", AcquirerStateConfig(decay_factor=gamma))
+        state = AcquirerState("example", AcquirerStateConfig(alpha_prior=1.0, decay_factor=gamma))
         for _ in range(200):
             snap = state.record_outcome(True, timestamp=0.0)
         line = (
@@ -111,7 +111,24 @@ def section_5_decay() -> list[str]:
             f"  idle arm after 20 failures, {secs:.1f} s later: "
             f"Beta({snap.alpha:.2f},{snap.beta:.2f}) mean={snap.expected_success_rate:.3f}"
         )
-    state = AcquirerState("example", AcquirerStateConfig(decay_factor=0.98))
+    out.append("[5.6] Technical and approval beliefs (default priors Beta(4,1) and Beta(1,1))")
+    for label, burst in (
+        ("issuer declines", Outcome.ISSUER_DECLINE),
+        ("technical failures", Outcome.TECHNICAL_FAILURE),
+    ):
+        state = AcquirerState("example", cfg, initial_timestamp=0.0)
+        t = 0.0
+        for _ in range(300):
+            t += 1 / 15
+            state.record_outcome(True, timestamp=t, outcome=Outcome.AUTHORIZED)
+        for _ in range(10):
+            t += 1 / 15
+            snap = state.record_outcome(False, timestamp=t, outcome=burst)
+        out.append(
+            f"  300 approvals then 10 {label} at 15 TPS: technical {snap.expected_success_rate:.3f}"
+            f" approval {snap.expected_approval_rate:.3f} expected PSR {snap.expected_psr:.3f}"
+        )
+    state = AcquirerState("example", AcquirerStateConfig(alpha_prior=1.0, decay_factor=0.98))
     snap = state.record_outcome(False, timestamp=0.0)
     out.append(f"[5.4] Per-observation health after one failure from 1.0: {snap.health_score:.2f}")
     return out

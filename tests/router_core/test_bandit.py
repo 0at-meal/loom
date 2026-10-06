@@ -20,7 +20,7 @@ class TestBanditStateRegistry:
 
         snapshot = registry.get_state("acquirer_1")
         assert snapshot.acquirer_id == "acquirer_1"
-        assert snapshot.alpha == 1.0
+        assert snapshot.alpha == 4.0  # default technical prior Beta(4, 1)
         assert snapshot.beta == 1.0
 
     def test_duplicate_registration_raises(self) -> None:

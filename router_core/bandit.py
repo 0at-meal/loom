@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from router_core.state import AcquirerState, AcquirerStateConfig, AcquirerStateSnapshot
+from router_core.state import AcquirerState, AcquirerStateConfig, AcquirerStateSnapshot, Outcome
 
 
 class BanditStateRegistry:
@@ -43,20 +43,26 @@ class BanditStateRegistry:
         acquirer_id: str,
         success: bool,
         timestamp: float | None = None,
+        outcome: Outcome | None = None,
     ) -> AcquirerStateSnapshot:
         """Record outcome for a specific acquirer and return updated snapshot."""
         state = self._acquirers.get(acquirer_id)
         if state is None:
             raise KeyError(f"Acquirer '{acquirer_id}' not found in registry")
-        return state.record_outcome(success=success, timestamp=timestamp)
+        return state.record_outcome(success=success, timestamp=timestamp, outcome=outcome)
 
     def sample_all(
         self, rng: np.random.Generator | None = None, now: float | None = None
     ) -> dict[str, float]:
-        """Draw independent Thompson samples, decaying beliefs to ``now`` when given."""
+        """Draw Thompson scores, decaying beliefs to ``now`` when given.
+
+        Each score is a technical sample times an approval sample: a draw of the chance
+        a payment sent to that acquirer succeeds.
+        """
         generator = rng if rng is not None else np.random.default_rng()
         return {
             acquirer_id: state.sample(rng=generator, now=now)
+            * state.sample_approval(rng=generator, now=now)
             for acquirer_id, state in self._acquirers.items()
         }
 

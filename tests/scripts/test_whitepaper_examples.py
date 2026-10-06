@@ -23,11 +23,15 @@ async def test_whitepaper_figures_are_reproduced(capsys: pytest.CaptureFixture[s
         "arm at 100% of 15 TPS: steady-state memory 49.8 observations",
         "arm at 97% of 15 TPS: steady-state memory 48.3 observations",
         "arm at 3% of 15 TPS: steady-state memory 1.5 observations",
-        "all 15 TPS: after 200 successes Beta(50.4,1.0) mean=0.981; after 1 failures 0.961 "
-        "after 3 failures 0.923 after 5 failures 0.887 after 10 failures 0.803",
-        "idle arm after 20 failures, 2.3 s later: Beta(1.00,11.00) mean=0.083",
-        "idle arm after 20 failures, 10.0 s later: Beta(1.00,1.98) mean=0.335",
-        "idle arm after 20 failures, 30.0 s later: Beta(1.00,1.00) mean=0.499",
+        "all 15 TPS: after 200 successes Beta(53.4,1.0) mean=0.982; after 1 failures 0.963 "
+        "after 3 failures 0.928 after 5 failures 0.893 after 10 failures 0.814",
+        "idle arm after 20 failures, 2.3 s later: Beta(4.00,11.00) mean=0.267",
+        "idle arm after 20 failures, 10.0 s later: Beta(4.00,1.98) mean=0.669",
+        "idle arm after 20 failures, 30.0 s later: Beta(4.00,1.00) mean=0.800",
+        "300 approvals then 10 issuer declines at 15 TPS: technical 0.982 approval 0.961 "
+        "expected PSR 0.943",
+        "300 approvals then 10 technical failures at 15 TPS: technical 0.816 approval 0.996 "
+        "expected PSR 0.813",
         "at 15 TPS that is 3.4 s for an acquirer at 97% of traffic and 111 s for one at the 3% "
         "floor",
         "step 2: e_A=+0.4375 P=+0.0525 I=+0.0047 D=-0.0156 w_A=0.6041",
@@ -39,13 +43,13 @@ async def test_whitepaper_figures_are_reproduced(capsys: pytest.CaptureFixture[s
         "static M=3               PSR  92.00% (138/150) outage  82.0% fail_alpha  4",
         "static M=1               PSR  76.00% (114/150) outage  38.0% fail_alpha 30",
         "Loom with PID            PSR  86.00% (129/150) outage  72.0% fail_alpha 11 "
-        "dw_max  11.77% outage_flips 13 recovery_alpha_tx 4",
-        "Loom raw bandit          PSR  89.33% (134/150) outage  80.0% fail_alpha  6 "
-        "dw_max 100.00% outage_flips 10 recovery_alpha_tx 5",
-        "Loom with PID, gray 60%  PSR  90.00% (135/150) outage  84.0% fail_alpha  6 "
-        "dw_max  11.83% outage_flips 28",
-        "Alpha share at Tx 50-62: 0.72, 0.75, 0.78, 0.80, 0.82, 0.72, 0.65, 0.58, 0.53, 0.47",
-        "Alpha share at Tx 150: 0.35",
+        "dw_max  11.65% outage_flips 15 recovery_alpha_tx 6",
+        "Loom raw bandit          PSR  91.33% (137/150) outage  88.0% fail_alpha  3 "
+        "dw_max 100.00% outage_flips  5 recovery_alpha_tx 13",
+        "Loom with PID, gray 60%  PSR  89.33% (134/150) outage  84.0% fail_alpha  7 "
+        "dw_max  11.57% outage_flips 31",
+        "Alpha share at Tx 50-62: 0.68, 0.73, 0.63, 0.69, 0.71, 0.74, 0.64, 0.71, 0.60, 0.55",
+        "Alpha share at Tx 150: 0.14",
     ]
     for line in expected:
         assert line in out, line

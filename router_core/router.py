@@ -15,7 +15,7 @@ from acquirer_sim.models import AuthorizeRequest, AuthorizeResponse
 from router_core.bandit import BanditStateRegistry
 from router_core.models import AcquirerRouteConfig, RouterConfig, RoutingResult
 from router_core.pid import PIDConfig, PIDDiagnostics, PIDState, calculate_pid_step
-from router_core.state import AcquirerStateSnapshot
+from router_core.state import AcquirerStateSnapshot, Outcome
 from router_core.value_policy import ValueScaledExplorationConfig, apply_value_scaled_policy
 
 if TYPE_CHECKING:
@@ -46,6 +46,7 @@ class BanditRouter:
         self._config = config
         self._clock: Callable[[], float] = clock if clock is not None else time.time
         self._routes: dict[str, AcquirerRouteConfig] = {r.acquirer_id: r for r in config.routes}
+        self._technical_codes = frozenset(config.technical_decline_codes)
         self._registry = registry if registry is not None else BanditStateRegistry()
         self._event_publisher = event_publisher
         self._metrics_logger = metrics_logger
@@ -158,7 +159,7 @@ class BanditRouter:
             and amount > 0.0
         ):
             states = self._registry.get_all_states()
-            means = {aid: s.expected_success_rate for aid, s in states.items()}
+            means = {aid: s.expected_psr for aid, s in states.items()}
             adjusted_samples, _ = apply_value_scaled_policy(
                 samples=raw_samples,
                 posterior_means=means,
@@ -192,7 +193,7 @@ class BanditRouter:
             and request.amount > 0.0
         ):
             states = self._registry.get_all_states()
-            means = {aid: s.expected_success_rate for aid, s in states.items()}
+            means = {aid: s.expected_psr for aid, s in states.items()}
             adjusted_samples, shrinkage = apply_value_scaled_policy(
                 samples=raw_samples,
                 posterior_means=means,
@@ -286,6 +287,7 @@ class BanditRouter:
         status: Literal["AUTHORIZED", "DECLINED", "ERROR"]
         authorized: bool
         success: bool
+        outcome: Outcome
         response_payload: AuthorizeResponse | None = None
         error_msg: str | None = None
 
@@ -302,10 +304,18 @@ class BanditRouter:
                 authorized = payload.authorized
                 success = payload.authorized  # True if AUTHORIZED, False if DECLINED
                 status = "AUTHORIZED" if success else "DECLINED"
+                if success:
+                    outcome = Outcome.AUTHORIZED
+                elif payload.decline_code in self._technical_codes:
+                    outcome = Outcome.TECHNICAL_FAILURE
+                else:
+                    # Issuer declines (e.g. DO_NOT_HONOR) say nothing about the acquirer
+                    outcome = Outcome.ISSUER_DECLINE
             elif resp.status_code == 503:
                 status = "ERROR"
                 authorized = False
                 success = False
+                outcome = Outcome.TECHNICAL_FAILURE
                 error_msg = f"Acquirer HTTP 503 Outage: {resp.text}"
             elif resp.status_code == 422:
                 # Schema bug from client; do not penalize acquirer
@@ -320,12 +330,14 @@ class BanditRouter:
                 status = "ERROR"
                 authorized = False
                 success = False
+                outcome = Outcome.TECHNICAL_FAILURE
                 error_msg = f"Acquirer HTTP {resp.status_code}: {resp.text}"
 
         except (httpx.TimeoutException, httpx.NetworkError) as err:
             status = "ERROR"
             authorized = False
             success = False
+            outcome = Outcome.TECHNICAL_FAILURE
             error_msg = f"Transport error to {selected_id}: {type(err).__name__} ({err})"
 
         t_dispatch_end = time.perf_counter()
@@ -336,6 +348,7 @@ class BanditRouter:
             acquirer_id=selected_id,
             success=success,
             timestamp=self._clock(),
+            outcome=outcome,
         )
 
         t_end = time.perf_counter()
@@ -364,6 +377,7 @@ class BanditRouter:
             status=status,
             authorized=authorized,
             success=success,
+            outcome=outcome,
             response_payload=response_payload,
             error_message=error_msg,
             routing_latency_ms=routing_latency_ms,
