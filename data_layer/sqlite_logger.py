@@ -245,8 +245,17 @@ INSERT INTO acquirer_outcomes (
 """
 
 
+# Queued by close() so the drain loop finishes its batch and exits instead of being cancelled.
+_STOP = object()
+
+
 class MetricsLogger:
-    """Asynchronous, batch-buffered SQLite metrics logger for high-throughput routing."""
+    """Asynchronous, batch-buffered SQLite metrics logger for high-throughput routing.
+
+    Records that cannot be kept are counted, not just logged: ``dropped_count`` (not
+    started, shutting down or queue full) and ``failed_count`` (rejected by SQLite, e.g. a
+    duplicate transaction_id).
+    """
 
     def __init__(
         self,
@@ -265,13 +274,15 @@ class MetricsLogger:
         self._max_queue_size = max_queue_size or self._config.sqlite_max_queue_size
         self._raise_on_error = raise_on_error
 
-        self._queue: asyncio.Queue[RoutingResult] = asyncio.Queue(maxsize=self._max_queue_size)
+        self._queue: asyncio.Queue[Any] = asyncio.Queue(maxsize=self._max_queue_size)
         self._conn: aiosqlite.Connection | None = None
         self._drain_task: asyncio.Task[None] | None = None
         self._started = False
         self._stopping = False
         self._write_lock = asyncio.Lock()
         self._total_written = 0
+        self._dropped_count = 0
+        self._failed_count = 0
 
     @property
     def db_path(self) -> str:
@@ -282,6 +293,16 @@ class MetricsLogger:
     def total_written(self) -> int:
         """Return count of transactions written to SQLite storage."""
         return self._total_written
+
+    @property
+    def dropped_count(self) -> int:
+        """Return count of records dropped before reaching the queue."""
+        return self._dropped_count
+
+    @property
+    def failed_count(self) -> int:
+        """Return count of records SQLite rejected (e.g. duplicate transaction_id)."""
+        return self._failed_count
 
     async def start(self) -> None:
         """Initialize database schema and launch background queue consumer."""
@@ -309,6 +330,7 @@ class MetricsLogger:
     def log_routing_result(self, result: RoutingResult) -> None:
         """Enqueue RoutingResult into buffer without blocking the transaction hot-path."""
         if not self._started or self._stopping:
+            self._dropped_count += 1
             if self._raise_on_error:
                 raise RuntimeError("MetricsLogger is not running or is shutting down")
             logger.warning(
@@ -320,6 +342,7 @@ class MetricsLogger:
         try:
             self._queue.put_nowait(result)
         except asyncio.QueueFull:
+            self._dropped_count += 1
             logger.error(
                 "MetricsLogger queue is full (size=%d), dropping tx=%s",
                 self._max_queue_size,
@@ -331,28 +354,35 @@ class MetricsLogger:
     async def log_routing_result_async(self, result: RoutingResult) -> None:
         """Asynchronously enqueue result, waiting if buffer is full."""
         if not self._started or self._stopping:
+            self._dropped_count += 1
             if self._raise_on_error:
                 raise RuntimeError("MetricsLogger is not running or is shutting down")
             return
         await self._queue.put(result)
 
     async def _drain_loop(self) -> None:
-        """Background coroutine accumulating batches and flushing to SQLite."""
-        while not self._stopping or not self._queue.empty():
+        """Accumulate batches and write them until close() queues the stop marker."""
+        while True:
             batch: list[RoutingResult] = []
             deadline = time.perf_counter() + self._flush_interval_sec
+            stop = False
 
             while len(batch) < self._batch_size:
                 timeout = max(0.001, deadline - time.perf_counter())
                 try:
                     item = await asyncio.wait_for(self._queue.get(), timeout=timeout)
-                    batch.append(item)
-                    self._queue.task_done()
                 except TimeoutError:
                     break
+                self._queue.task_done()
+                if item is _STOP:
+                    stop = True
+                    break
+                batch.append(item)
 
             if batch:
                 await self._write_batch(batch)
+            if stop:
+                return
 
     async def _write_batch(self, batch: Sequence[RoutingResult]) -> None:
         """Write a batch of RoutingResults within an atomic SQLite transaction."""
@@ -380,9 +410,40 @@ class MetricsLogger:
                     await self._conn.execute("ROLLBACK;")
                 except (aiosqlite.Error, sqlite3.Error):
                     pass
-                logger.error("Failed to insert batch of %d records: %s", len(batch), exc)
+                logger.error(
+                    "Failed to insert batch of %d records (%s); retrying row by row",
+                    len(batch),
+                    exc,
+                )
                 if self._raise_on_error:
                     raise
+                await self._write_rows_individually(tx_rows, outcome_rows, batch)
+
+    async def _write_rows_individually(
+        self,
+        tx_rows: list[Any],
+        outcome_rows: list[Any],
+        batch: Sequence[RoutingResult],
+    ) -> None:
+        """Insert each record in its own transaction so one bad row loses only itself.
+
+        Must be called with ``_write_lock`` held.
+        """
+        assert self._conn is not None
+        for t_row, o_row, res in zip(tx_rows, outcome_rows, batch, strict=True):
+            try:
+                await self._conn.execute("BEGIN TRANSACTION;")
+                await self._conn.execute(SQL_INSERT_TRANSACTION, t_row)
+                await self._conn.execute(SQL_INSERT_OUTCOME, o_row)
+                await self._conn.commit()
+                self._total_written += 1
+            except (aiosqlite.Error, sqlite3.Error) as exc:
+                try:
+                    await self._conn.execute("ROLLBACK;")
+                except (aiosqlite.Error, sqlite3.Error):
+                    pass
+                self._failed_count += 1
+                logger.error("Rejected record tx=%s: %s", res.transaction_id, exc)
 
     async def flush(self) -> None:
         """Flush all pending items from the in-memory queue to disk immediately."""
@@ -390,8 +451,9 @@ class MetricsLogger:
         while not self._queue.empty():
             try:
                 item = self._queue.get_nowait()
-                items.append(item)
                 self._queue.task_done()
+                if item is not _STOP:
+                    items.append(item)
             except asyncio.QueueEmpty:
                 break
 
@@ -404,15 +466,17 @@ class MetricsLogger:
             return
 
         self._stopping = True
-        await self.flush()
 
         if self._drain_task is not None:
-            self._drain_task.cancel()
+            # Let the drain loop finish everything queued, including the batch it holds.
+            await self._queue.put(_STOP)
             try:
                 await self._drain_task
-            except asyncio.CancelledError:
-                pass
+            except Exception as exc:  # noqa: BLE001 - still close the connection
+                logger.error("MetricsLogger drain task failed during close: %s", exc)
             self._drain_task = None
+
+        await self.flush()
 
         if self._conn is not None:
             await self._conn.close()
