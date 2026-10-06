@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Literal
 
@@ -124,6 +125,13 @@ class PIDStepResult:
     diagnostics: PIDDiagnostics
 
 
+def _require_finite(name: str, values: dict[str, float]) -> None:
+    """Raise ValueError if any value is NaN or infinite (AUDIT F-32)."""
+    bad = {k: v for k, v in values.items() if not math.isfinite(v)}
+    if bad:
+        raise ValueError(f"{name} must be finite, got {bad}")
+
+
 def project_to_bounded_simplex(
     weights: dict[str, float],
     min_floor: float = 0.0,
@@ -132,7 +140,10 @@ def project_to_bounded_simplex(
 
     Ensures that for all i:
         w_i >= min_floor and sum(w_i) == 1.0
+
+    Raises ValueError for NaN or infinite weights rather than mapping them to the floor.
     """
+    _require_finite("weights", weights)
     k = len(weights)
     if k == 0:
         return {}
@@ -199,8 +210,12 @@ def calculate_pid_step(
     - Zero derivative kick when config.derivative_on_measurement is True.
     - Bounded simplex projection enforcing w_i >= config.min_allocation.
     """
+    if not math.isfinite(dt):
+        raise ValueError(f"dt must be finite, got {dt}")
     if dt <= 0.0:
         raise ValueError(f"dt must be strictly positive, got {dt}")
+    _require_finite("target_allocation", target_allocation)
+    _require_finite("current_allocation", current_allocation)
 
     keys = sorted(target_allocation.keys())
     if len(keys) == 0:
