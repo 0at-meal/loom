@@ -10,9 +10,9 @@ A multi-armed bandit (Thompson Sampling) estimates which payment acquirer is hea
 
 ### Known results and limitations (read this first)
 
-- **Hard outages:** Loom **loses** to a standard 3-consecutive-failure circuit breaker: −2.93 pp PSR over 100 paired seeds (95% CI [−3.46, −2.39]), winning only 10 of 100.
-- **Gray failures (partial brownout):** Loom **beats** the same breaker: +2.77 pp, 95% CI [+2.13, +3.40], when Alpha degrades to 60%.
-- **Healthy acquirers that differ slightly:** beliefs fade with a half-life of a few seconds (2.3 s by default, about 50 observations for an acquirer carrying all of 15 TPS), so the bandit cannot settle on the better of two close acquirers. With Alpha at 95% and Beta at 94% it keeps sending about 46% of traffic to Beta, and that share does not shrink with more traffic.
+- **Hard outages:** Loom **loses** to a standard 3-consecutive-failure circuit breaker: −3.09 pp PSR over 100 paired seeds (95% CI [−3.74, −2.44]), winning only 14 of 100.
+- **Gray failures (partial brownout):** Loom **beats** the same breaker: +1.97 pp, 95% CI [+1.14, +2.80], when Alpha degrades to 60%.
+- **Healthy acquirers that differ slightly:** Loom keeps sending a large share of traffic to the worse of two close acquirers. With Alpha at 95% and Beta at 94% and no outage, it sends Beta 36.8% of transactions 501–2000 (10 seeds, benchmark configuration; 43.9% in the served configuration), down from about 46% before issuer declines got their own longer-memory belief. `python scripts/steady_state_share.py` reproduces this.
 
 See [Known Limitations & Open Risks](#known-limitations--open-risks) for the rest.
 
@@ -27,9 +27,9 @@ Primary Acquirer Alpha (95% base PSR) vs Backup Acquirer Beta (94% base PSR), si
 | **Static Baseline ($M=5$, Conservative)** | **90.67%** | 94.0% | 80.0% | 98.0% | 136 / 150 | 6 | 100.0% | 3 |
 | **Static Baseline ($M=3$, Snapback)** | **90.67%** | 94.0% | 80.0% | 98.0% | 136 / 150 | 6 | 100.0% | 3 |
 | **Static Baseline ($M=3$, Gray Failure 60%)** | **88.67%** | 94.0% | 78.0% | 94.0% | 133 / 150 | 8 | 100.0% | 2 |
-| **Loom Phase 4 PID (Gray Failure 60%)** | **90.00%** | 90.0% | 84.0% | 96.0% | 135 / 150 | 6 | 11.83% | — |
-| **Loom Phase 3 (Raw Bandit, no PID)** | **89.33%** | 92.0% | 80.0% | 96.0% | 134 / 150 | 6 | 100.0% | 10 |
-| **Loom Phase 4 (Tuned PID)** | **86.00%** | 90.0% | 72.0% | 96.0% | 129 / 150 | 11 | 11.77% | 13 |
+| **Loom Phase 4 PID (Gray Failure 60%)** | **89.33%** | 90.0% | 84.0% | 94.0% | 134 / 150 | 7 | 11.57% | 31 |
+| **Loom Phase 3 (Raw Bandit, no PID)** | **91.33%** | 90.0% | 88.0% | 96.0% | 137 / 150 | 3 | 100.0% | 5 |
+| **Loom Phase 4 (Tuned PID)** | **86.00%** | 90.0% | 72.0% | 96.0% | 129 / 150 | 11 | 11.65% | 15 |
 
 *Loom's $\Delta w$ is the change in its continuous allocation weight; the static router's is its 0/1 dispatch indicator. These are different quantities: every individual Loom transaction still goes 100% to one acquirer.
 
@@ -37,22 +37,22 @@ Primary Acquirer Alpha (95% base PSR) vs Backup Acquirer Beta (94% base PSR), si
 
 ### Multi-seed results (100 paired seeds, same schedule and configuration as the table)
 
-Seed 42 above is one draw. The table below comes from `python scripts/compare_psr.py --n-seeds 100` (simulator seeds 42, 52, …, 1032 paired with Loom seeds 777–876; 95% CIs use the t-distribution). Across seeds, Loom's own PSR ranges from 80.67% to 96.00% (mean 89.36%); 10 of 100 seeds score below the 86.00% shown above.
+Seed 42 above is one draw. The table below comes from `python scripts/compare_psr.py --n-seeds 100` (simulator seeds 42, 52, …, 1032 paired with Loom seeds 777–876; 95% CIs use the t-distribution). Across seeds, Loom's own PSR ranges from 80.00% to 96.67% (mean 89.19%); 14 of 100 seeds score below the 86.00% shown above.
 
 | Comparison | Mean PSR difference (Loom − other) | 95% CI | Loom wins / ties / losses |
 | :--- | :---: | :---: | :---: |
-| vs Static $M=1$ | **+13.73 pp** | [+12.36, +15.11] | 91 / 1 / 8 |
-| vs Static $M=3$ | **−2.93 pp** | [−3.46, −2.39] | 10 / 5 / 85 |
-| vs Static $M=5$ | **−1.69 pp** | [−2.21, −1.16] | 21 / 7 / 72 |
-| vs Static $M=3$, gray failure (Alpha at 60%) | **+2.77 pp** | [+2.13, +3.40] | 73 / 10 / 17 |
-| PID Loom vs raw bandit (no PID) | **−1.43 pp** | [−1.76, −1.10] | 16 / 11 / 73 |
+| vs Static $M=1$ | **+13.57 pp** | [+12.13, +15.00] | 91 / 0 / 9 |
+| vs Static $M=3$ | **−3.09 pp** | [−3.74, −2.44] | 14 / 5 / 81 |
+| vs Static $M=5$ | **−1.85 pp** | [−2.50, −1.21] | 24 / 6 / 70 |
+| vs Static $M=3$, gray failure (Alpha at 60%) | **+1.97 pp** | [+1.14, +2.80] | 63 / 7 / 30 |
+| PID Loom vs raw bandit (no PID) | **−1.45 pp** | [−1.84, −1.05] | 16 / 6 / 78 |
 
 ### Reading the Numbers
 
-1. **The +1000 bps result is against the $M=1$ breaker, a weak baseline.** At seed 42 a single routine issuer decline (`DO_NOT_HONOR`) on Beta at Tx 57 trips Beta; with both routes tripped, the exhaustion fallback sends Tx 58–86 to the dead primary, collapsing outage PSR to 38.00% and global PSR to 76.00% (Loom: 86.00%). That breaker counts issuer declines as route failures and falls back to a route it knows is dead. Loom also counts issuer declines as failures (both routers use `success = payload.authorized`); its bandit just reacts more softly.
-2. **Against the standard $M=3$ breaker, Loom loses**: 86.00% vs 92.00% at seed 42, −2.93 pp across 100 seeds. Loom's ramp absorbed 11 failures on Alpha during the outage: +7 over the $M=3$ static cliff (4) and +5 over the raw bandit (6). The simulator gives backup acquirers unlimited capacity, so any benefit from avoiding a 100% traffic shift is not measured anywhere in this repo.
-3. **Smoothing, and what it costs.** The tuned PID ($K_p=0.12, K_i=0.005, K_d=0.25, I_{\text{max}}=1.0$) keeps the largest per-transaction change in allocation weight between 9.71% and 12.45% across 100 seeds. It does not reduce route flips: with deficit actuation consecutive transactions alternate acquirers (12.80 outage flips on average, vs 7.59 for the raw bandit and 3.01 for static $M=3$). The weight curve is not monotonic; it can move toward the failed acquirer for a few transactions after the outage starts. The PID costs 1.43 pp of PSR vs the raw bandit.
-4. **Recovered acquirers come back slowly.** In Phase 3 (raw bandit, per-observation decay), recovered Alpha received 0 of the 50 recovery transactions because unselected arms never updated. Beliefs now decay on the clock, so Alpha's outage evidence fades even without traffic: at seed 42 PID Loom sends Alpha 4 of the 50 recovery transactions (2 under per-observation decay) and the raw bandit 5 (0 before). Alpha's weight climbs from the 0.03 floor back to 0.35 by Tx 150, so routing is only partly restored within the benchmark window.
+1. **The +1000 bps result is against the $M=1$ breaker, a weak baseline.** At seed 42 a single routine issuer decline (`DO_NOT_HONOR`) on Beta at Tx 57 trips Beta; with both routes tripped, the exhaustion fallback sends Tx 58–86 to the dead primary, collapsing outage PSR to 38.00% and global PSR to 76.00% (Loom: 86.00%). That breaker counts issuer declines as route failures and falls back to a route it knows is dead. Loom no longer does: it books `DO_NOT_HONOR` against a separate approval belief, not against the acquirer's health.
+2. **Against the standard $M=3$ breaker, Loom loses**: 86.00% vs 92.00% at seed 42, −3.09 pp across 100 seeds. Loom's ramp absorbed 11 failures on Alpha during the outage: +7 over the $M=3$ static cliff (4) and +8 over the raw bandit (3). The simulator gives backup acquirers unlimited capacity, so any benefit from avoiding a 100% traffic shift is not measured anywhere in this repo.
+3. **Smoothing, and what it costs.** The tuned PID ($K_p=0.12, K_i=0.005, K_d=0.25, I_{\text{max}}=1.0$) keeps the largest per-transaction change in allocation weight between 11.62% and 12.45% across 100 seeds. It does not reduce route flips: with deficit actuation consecutive transactions alternate acquirers (12.13 outage flips on average, vs 7.13 for the raw bandit and 3.01 for static $M=3$). The weight curve is not monotonic; it can move toward the failed acquirer for a few transactions after the outage starts. The PID costs 1.45 pp of PSR vs the raw bandit.
+4. **Recovered acquirers come back slowly.** In Phase 3 (raw bandit, per-observation decay), recovered Alpha received 0 of the 50 recovery transactions because unselected arms never updated. Beliefs now decay on the clock, so Alpha's outage evidence fades even without traffic: at seed 42 PID Loom sends Alpha 6 of the 50 recovery transactions (2 under per-observation decay) and the raw bandit 13 (0 before); across 100 seeds the means are 5.79 and 7.67. Alpha's weight climbs from the 0.03 floor back to 0.14 by Tx 150, so routing is only partly restored within the benchmark window.
 5. **Real-time telemetry (local loopback, single runs).** `POST /route` → WebSocket frame receipt: mean 8.20 ms, p95 11.87 ms (Phase 7 script, 150 serial transactions, no warmup; includes the routing request). Pure server-to-client push: mean 0.58 ms, max 1.98 ms (91 frames on the live demo). Operator outage trigger round-trip: 30.78 ms (one sample). WebSocket reconnect + `BOOTSTRAP` frame: 3.80 ms with a Python client; the dashboard's own reconnect backoff starts at ≥500 ms, and `BOOTSTRAP` carries current in-memory beliefs only.
 
 ---
@@ -102,23 +102,23 @@ Loom's pipeline is built from four stages behind separate module boundaries. In 
 ```
 
 ### 1. Router Core (`router_core/`)
-- **Bayesian Belief State (`state.py`, `bandit.py`)**: Maintains $\alpha_i, \beta_i$ for each acquirer. The offset decay $\alpha_t = \alpha_0 + f(\alpha_{t-1} - \alpha_0) + x$ keeps parameters at or above their priors. Decay is on the **wall clock**: $f = 0.5^{\Delta t / h}$ with half-life $h$ (default 2.3 s), applied to every acquirer before each Thompson draw and outcome, so an acquirer receiving no traffic drifts back to its prior. The router reads time from an injectable clock; the benchmark passes a virtual 15 TPS clock. Setting `decay_factor` instead selects the old per-observation decay. A separate health score (the decayed success fraction) is computed and logged but not used for routing.
+- **Bayesian Belief State (`state.py`, `bandit.py`)**: Maintains $\alpha_i, \beta_i$ for each acquirer. The offset decay $\alpha_t = \alpha_0 + f(\alpha_{t-1} - \alpha_0) + x$ keeps parameters at or above their priors. Decay is on the **wall clock**: $f = 0.5^{\Delta t / h}$ with half-life $h$ (default 2.3 s), applied to every acquirer before each Thompson draw and outcome, so an acquirer receiving no traffic drifts back to its prior. The router reads time from an injectable clock; the benchmark passes a virtual 15 TPS clock. Setting `decay_factor` instead selects the old per-observation decay. Each acquirer has two such beliefs: a **technical** one (did the acquirer process the payment; outages, 5xx, timeouts and unreadable replies count against it; 2.3 s half-life, prior $\text{Beta}(4,1)$) and an **approval** one (did the issuer approve, given the acquirer answered; `DO_NOT_HONOR` counts against it; 60 s half-life, prior $\text{Beta}(1,1)$). Thompson Sampling multiplies one draw from each. A separate health score (the decayed technical success fraction) is computed and logged but not used for routing.
 - **PID Smoothing Engine (`pid.py`)**: A pure-function step engine with immutable state snapshots. Its setpoint is the one-hot winner of the current Thompson draw and its measured variable is its own previous output weight, so in effect it is a low-pass filter on the bandit's choices. Derivative action is computed on the measurement ($-K_d \frac{dw}{dt}$); anti-windup clamps to $[-I_{\text{max}}, +I_{\text{max}}]$ before zero-sum centring.
 - **Actuator Simplex Projection**: Projects the smoothed weights onto $\sum w_i = 1.0, w_i \ge w_{\text{min}}$ (3% exploration floor), then picks the acquirer by deficit round-robin (`actuation_mode="deficit"`, used by the benchmark) or a categorical draw (`"stochastic"`, the `PIDConfig` default used by the served app).
 
 ### 2. Simulation Harness (`acquirer_sim/`)
 - Independent FastAPI processes that can run on separate local ports.
-- `POST /acquirers/{id}/authorize` returns structured JSON declines (`decline_code: 'ACQUIRER_OUTAGE'` during outages, `'DO_NOT_HONOR'` for ordinary declines), transport-level `HTTP 503`, or latency spikes. `LATENCY_SPIKE` adds 500 ms by default, below the router's 2 s timeout, so it behaves like a decline outage.
-- Admin endpoints (`POST /admin/outage`, `POST /admin/success-rate`, `POST /admin/reset`) enable live, scriptable fault injection. Unknown acquirer IDs are auto-registered rather than rejected.
+- `POST /acquirers/{id}/authorize` returns structured JSON declines (`decline_code: 'ACQUIRER_OUTAGE'` during outages, `'DO_NOT_HONOR'` for ordinary declines), transport-level `HTTP 503`, or latency spikes. `LATENCY_SPIKE` adds 2.5 s by default, longer than the router's 2 s timeout, so the router sees a timeout.
+- Admin endpoints (`POST /admin/outage`, `POST /admin/success-rate`, `POST /admin/reset`) enable live, scriptable fault injection. Admin calls on unknown acquirer IDs return 404; authorization calls still auto-register them.
 
 ### 3. Data Layer (`data_layer/`)
 - **Redis State & Pub/Sub (`redis_state.py`, `redis_pubsub.py`)**: Belief state in Redis hashes, updated with `WATCH`/`MULTI` optimistic transactions (up to 5 retries, synchronous client; no Lua scripts). Pub/Sub publishes typed telemetry (`RoutingEvent`, `HealthAlertEvent`), at-most-once by design.
-- **SQLite Analytical Ledger (`sqlite_logger.py`, `schema.sql`)**: Micro-batched asynchronous writer draining an in-memory queue via `aiosqlite.executemany` into Write-Ahead Logging (WAL) storage. Records still in its queue at shutdown can be lost.
+- **SQLite Analytical Ledger (`sqlite_logger.py`, `schema.sql`)**: Micro-batched asynchronous writer draining an in-memory queue via `aiosqlite.executemany` into Write-Ahead Logging (WAL) storage. `close()` waits for everything queued; a batch that fails is retried row by row, so a duplicate `transaction_id` loses only itself. Records dropped because the queue was full or the logger was not running are counted in `dropped_count`, and rows SQLite rejects in `failed_count`.
 - **Append-only guard triggers**: `prevent_transactions_update`, `prevent_transactions_delete`, `prevent_acquirer_outcomes_update` and `prevent_acquirer_outcomes_delete` raise `RAISE(ABORT)` on `UPDATE` or `DELETE`. They guard against accidental mutation; the error is an ordinary, catchable `sqlite3.IntegrityError`. They are not tamper-proofing: `DROP TRIGGER`, `INSERT OR REPLACE`, `DROP TABLE`, replacing the file, and `reset-demo` all bypass them.
 - **Not wired into the served app.** `router_core/app.py`, `router_core/server.py` and `scripts/run_demo.py` do not connect `MetricsLogger`, `EventPublisher` or the Redis state registry. The data layer is exercised only by tests and by scripts such as `scripts/compare_psr.py` and `scripts/run_phase5_e2e_verification.py`. A running router keeps its beliefs in process memory, and they are lost on restart.
 
 ### 4. Mission-Control Dashboard (`dashboard/`)
-- React application built with Vite and Tailwind CSS. Connects via native WebSocket to `/ws/telemetry`.
+- React application built with Vite and Tailwind CSS. Connects via native WebSocket to `/ws/telemetry`. The router gives each connection its own bounded queue (256 events, oldest dropped first) and sender task, so a slow or stalled browser never delays `/route`; `/health` reports `telemetry_dropped`.
 - Keeps the latest 120 routing events in React state and re-renders on each message.
 - On connect, the server sends a `BOOTSTRAP` frame with the current in-memory acquirer beliefs; no transaction history is loaded.
 - Sensor-actuator colocation: individual acquirer health readouts are paired with their trigger controls. Collapsible disclosures isolate diagnostics and advanced simulator settings.
@@ -331,7 +331,13 @@ python scripts/compare_psr.py --seed 52 --loom-seed 778
 python scripts/compare_psr.py --n-seeds 100 --out-json dashboard/src/data/baselineComparison.json
 ```
 
-The report header prints the $M$ and $N$ actually used. The remaining single-seed rows in the results table come from `python scripts/run_qa_baseline_scenario.py`.
+The report header prints the $M$ and $N$ actually used. `--alpha-prior` sets Loom's technical prior $\text{Beta}(N, 1)$ (default 4); the multi-seed report also prints the mean number of recovery transactions sent to Alpha. The static rows of the single-seed results table come from `python scripts/run_qa_baseline_scenario.py`; the Loom rows come from `python scripts/whitepaper_examples.py`, which runs this script's scenario (`run_qa_baseline_scenario.py` still runs Loom with the Phase 6 per-observation configuration).
+
+```bash
+# 5. Steady state: share of traffic sent to the worse of two healthy acquirers (about 10 minutes)
+python scripts/steady_state_share.py
+python scripts/steady_state_share.py --config served
+```
 
 ---
 
@@ -505,8 +511,8 @@ Phase 8 adds [`router_core/value_policy.py`](router_core/value_policy.py), which
 ### Known Limitations & Open Risks
 
 - **Loses to a standard breaker on hard outages; wins on gray failures**: see [Multi-seed results](#multi-seed-results-100-paired-seeds-same-schedule-and-configuration-as-the-table).
-- **Steady-state regret from short memory**: With a 2.3 s half-life at 15 TPS, the leading acquirer's belief reflects about 50 observations, too little to separate acquirers a few points apart. With Alpha at 95% and no outage, the share of transactions 500–2000 sent to the worse Beta (10 seeds, measured under the earlier per-observation decay, AUDIT F-03) was 46.8% / 29.2% / 19.2% for Beta at 94% / 92% / 90% in the served config, and 46.3% / 38.6% / 30.5% in the benchmark config ($\gamma=0.95$, deficit).
-- **Issuer declines count as acquirer failures**: `success = payload.authorized` in both routers, so an ordinary `DO_NOT_HONOR` lowers the chosen acquirer's belief exactly like an outage.
+- **Steady-state regret**: with Alpha at 95% and no outage, the share of transactions 501–2000 sent to the worse Beta (10 seeds) is 36.8% / 16.6% / 10.3% for Beta at 94% / 92% / 90% in the benchmark configuration and 43.9% / 9.0% / 6.3% in the served configuration (`scripts/steady_state_share.py`; the floor alone would give 3%). Before the approval belief (AUDIT F-03, per-observation decay) these were 46.3% / 38.6% / 30.5% and 46.8% / 29.2% / 19.2%.
+- **Decline classification is minimal**: only `ACQUIRER_OUTAGE` (plus HTTP errors, timeouts and unreadable replies) counts against an acquirer's technical belief; every other decline code is treated as an issuer decline. The static baseline still counts every decline as a route failure. A gray failure made of issuer declines, as the simulator models it, is learned through the 60 s approval memory, so Loom reacts to it more slowly than to an outage.
 - **Transaction-clocked control**: The PID steps once per transaction ($\Delta t = 1.0$), not per wall-clock second, so ramp time and memory scale inversely with traffic volume.
 - **Exploration Floor Reliability Tax**: The 3% floor keeps sending 3% of traffic to a failing route for the whole outage.
 - **Data layer not wired into the served router**: No live decision is logged or published (see Data Layer above).
@@ -521,7 +527,7 @@ Phase 8 adds [`router_core/value_policy.py`](router_core/value_policy.py), which
 Per the PRD roadmap and architectural risks log:
 
 1. **Wire the data layer into the served router**: logging and publishing for every live decision.
-2. **Classify declines**: count only acquirer-attributable failures (outages, 5xx, timeouts) toward health, not issuer declines.
+2. **Map real decline codes**: technical vs issuer classification exists, but only for the simulator's two codes.
 3. **Secondary Capacity Throttling**: connection-pool limits and HTTP 429 rate limiting on simulated backup gateways, so the herd-migration argument for smoothing can actually be measured.
 4. **Time-based probing**: decay is now on the wall clock; the exploration floor is still a share of traffic, and the PID still steps once per transaction.
 5. **Distributed Infrastructure Topology**: Redis Sentinel / ElastiCache and PostgreSQL / ClickHouse for multi-node deployments.
@@ -532,6 +538,6 @@ Per the PRD roadmap and architectural risks log:
 ## Architecture Summary
 
 - **Smooths allocation weights, not individual routing decisions**: the weight changes by at most ~12.5% per transaction, but each transaction still goes to one acquirer (PID filter).
-- **Learns acquirer success rates from the last few seconds of outcomes** (2.3 s half-life; about 50 observations for an acquirer carrying all of 15 TPS), counting issuer declines as failures (Thompson Sampling with wall-clock decay).
+- **Learns whether each acquirer is up from the last few seconds of outcomes** (2.3 s half-life) **and its issuer approval rate from the last minute** (60 s half-life), so issuer declines do not count against the acquirer (Thompson Sampling over the product of two wall-clock-decayed beliefs).
 - **Logs decisions to an append-only SQLite ledger and publishes them over Redis Pub/Sub only when wired in by a script or test**; the served router keeps state in memory.
 - **Updates beliefs and pushes a WebSocket frame for every transaction** (in-process broadcast from the router).

@@ -28,6 +28,7 @@ def test_parser_defaults_and_flags() -> None:
     assert defaults.loom_seed == 777
     assert defaults.n_seeds == 1
     assert defaults.out_json is None
+    assert defaults.alpha_prior == 4.0
     assert defaults.base_db == DEFAULT_BASE_DB
     assert defaults.loom_db == DEFAULT_LOOM_DB
     assert "loom_metrics.db" not in (defaults.base_db, defaults.loom_db)
@@ -190,3 +191,21 @@ async def test_loom_runs_on_a_virtual_clock(monkeypatch: pytest.MonkeyPatch) -> 
     await execute_scenario("loom", ":memory:", 2, 2, 2)
     # Six transactions at 15 TPS: the clock ends at 6/15 s whatever the wall time.
     assert max(readings) == pytest.approx(6 / compare_psr.BENCH_TPS)
+
+
+async def test_alpha_prior_flag_reaches_loom_and_recovery_is_reported(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """--alpha-prior changes Loom's prior only; the report includes recovery dispatches."""
+    monkeypatch.chdir(tmp_path)
+    await main(["--n-seeds", "2", "--alpha-prior", "1", "--out-json", "p1.json"])
+    assert "technical prior Beta(1, 1)" in capsys.readouterr().out
+    await main(["--n-seeds", "2", "--alpha-prior", "9", "--out-json", "p9.json"])
+    p1 = json.loads((tmp_path / "p1.json").read_text(encoding="utf-8"))
+    p9 = json.loads((tmp_path / "p9.json").read_text(encoding="utf-8"))
+    assert (p1["alpha_prior"], p9["alpha_prior"]) == (1.0, 9.0)
+    for cfg in ("static_m1", "static_m3", "static_m5", "static_m3_gray"):
+        assert p1["configs"][cfg] == p9["configs"][cfg]
+    assert p1["configs"]["loom"] != p9["configs"]["loom"]
+    expected = sum(r["loom"]["recovery_txs_alpha"] for r in p1["rows"]) / 2
+    assert p1["configs"]["loom"]["mean_recovery_txs_alpha"] == pytest.approx(expected)
