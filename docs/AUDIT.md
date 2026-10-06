@@ -1,6 +1,6 @@
 # Loom: Independent Adversarial Audit
 
-> **Status note (added when this file was committed to `docs/`).** This audit describes the code at commit `8001acb`; its file paths, line numbers and results refer to that commit. Later pull requests address its findings: PR #1 corrected the README against §3 and §4 and fixed CI (part of F-14), and PR #2 adds the multi-seed benchmark harness and a data-driven dashboard card (F-15, F-06, F-11, F-29 in part). The text below is the audit as written, apart from trailing whitespace removed by the pre-commit hook.
+> **Status note (added when this file was committed to `docs/`).** This audit describes the code at commit `8001acb`; its file paths, line numbers and results refer to that commit. Later pull requests address its findings: PR #1 corrected the README against §3 and §4 and fixed CI (part of F-14), and PR #2 adds the multi-seed benchmark harness and a data-driven dashboard card (F-15, F-06, F-11, F-29 in part). PR #3 replaces per-observation belief decay with wall-clock decay (F-23; F-34 was already fixed by PR #1). The text below is the audit as written, apart from trailing whitespace removed by the pre-commit hook.
 
 **Audited commit:** `8001acb` (main, clean tree).
 **Audit date:** 2026-10-01/02.

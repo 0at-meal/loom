@@ -57,7 +57,7 @@ class TestBanditRouterSelection:
         router = BanditRouter(config=config)
 
         # Mock sample_all to return identical values
-        router._registry.sample_all = lambda rng=None: {  # type: ignore[method-assign]
+        router._registry.sample_all = lambda rng=None, now=None: {  # type: ignore[method-assign]
             "acquirer_beta": 0.85,
             "acquirer_alpha": 0.85,
         }
@@ -92,7 +92,7 @@ class TestBanditRouterExecutionPipeline:
         router = BanditRouter(config=config, http_client=mock_client)
 
         # Force alpha selection
-        router._registry.sample_all = lambda rng=None: {  # type: ignore[method-assign]
+        router._registry.sample_all = lambda rng=None, now=None: {  # type: ignore[method-assign]
             "acquirer_alpha": 0.99,
             "acquirer_beta": 0.10,
         }
@@ -140,7 +140,7 @@ class TestBanditRouterExecutionPipeline:
         mock_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
         router = BanditRouter(config=config, http_client=mock_client)
 
-        router._registry.sample_all = lambda rng=None: {  # type: ignore[method-assign]
+        router._registry.sample_all = lambda rng=None, now=None: {  # type: ignore[method-assign]
             "acquirer_alpha": 0.99,
             "acquirer_beta": 0.10,
         }
@@ -172,7 +172,7 @@ class TestBanditRouterExecutionPipeline:
         mock_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
         router = BanditRouter(config=config, http_client=mock_client)
 
-        router._registry.sample_all = lambda rng=None: {  # type: ignore[method-assign]
+        router._registry.sample_all = lambda rng=None, now=None: {  # type: ignore[method-assign]
             "acquirer_alpha": 0.95,
             "acquirer_beta": 0.05,
         }
@@ -201,7 +201,7 @@ class TestBanditRouterExecutionPipeline:
         mock_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
         router = BanditRouter(config=config, http_client=mock_client)
 
-        router._registry.sample_all = lambda rng=None: {  # type: ignore[method-assign]
+        router._registry.sample_all = lambda rng=None, now=None: {  # type: ignore[method-assign]
             "acquirer_alpha": 0.95,
             "acquirer_beta": 0.05,
         }
@@ -230,7 +230,7 @@ class TestBanditRouterExecutionPipeline:
         mock_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
         router = BanditRouter(config=config, http_client=mock_client)
 
-        router._registry.sample_all = lambda rng=None: {  # type: ignore[method-assign]
+        router._registry.sample_all = lambda rng=None, now=None: {  # type: ignore[method-assign]
             "acquirer_alpha": 0.95,
             "acquirer_beta": 0.05,
         }

@@ -2,22 +2,9 @@
 
 from __future__ import annotations
 
-import math
-
 import numpy as np
 
 from router_core.state import AcquirerState, AcquirerStateConfig, AcquirerStateSnapshot
-
-
-def calculate_gamma_from_half_life(half_life_seconds: float, expected_tps: float) -> float:
-    """Derive discrete per-outcome decay factor from half-life and transaction rate."""
-    if half_life_seconds <= 0.0:
-        raise ValueError(f"half_life_seconds must be > 0.0, got {half_life_seconds}")
-    if expected_tps <= 0.0:
-        raise ValueError(f"expected_tps must be > 0.0, got {expected_tps}")
-
-    n_half = half_life_seconds * expected_tps
-    return math.pow(0.5, 1.0 / n_half)
 
 
 class BanditStateRegistry:
@@ -63,24 +50,28 @@ class BanditStateRegistry:
             raise KeyError(f"Acquirer '{acquirer_id}' not found in registry")
         return state.record_outcome(success=success, timestamp=timestamp)
 
-    def sample_all(self, rng: np.random.Generator | None = None) -> dict[str, float]:
-        """Draw independent Thompson samples across all registered acquirers."""
+    def sample_all(
+        self, rng: np.random.Generator | None = None, now: float | None = None
+    ) -> dict[str, float]:
+        """Draw independent Thompson samples, decaying beliefs to ``now`` when given."""
         generator = rng if rng is not None else np.random.default_rng()
         return {
-            acquirer_id: state.sample(rng=generator)
+            acquirer_id: state.sample(rng=generator, now=now)
             for acquirer_id, state in self._acquirers.items()
         }
 
-    def get_state(self, acquirer_id: str) -> AcquirerStateSnapshot:
+    def get_state(self, acquirer_id: str, now: float | None = None) -> AcquirerStateSnapshot:
         """Return state snapshot for a single acquirer."""
         state = self._acquirers.get(acquirer_id)
         if state is None:
             raise KeyError(f"Acquirer '{acquirer_id}' not found in registry")
-        return state.get_state()
+        return state.get_state(now=now)
 
-    def get_all_states(self) -> dict[str, AcquirerStateSnapshot]:
+    def get_all_states(self, now: float | None = None) -> dict[str, AcquirerStateSnapshot]:
         """Return state snapshots for all registered acquirers."""
-        return {acquirer_id: state.get_state() for acquirer_id, state in self._acquirers.items()}
+        return {
+            acquirer_id: state.get_state(now=now) for acquirer_id, state in self._acquirers.items()
+        }
 
     def list_acquirer_ids(self) -> list[str]:
         """Return list of all currently registered acquirer identifiers."""

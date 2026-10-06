@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 
 import uvicorn
@@ -11,7 +12,7 @@ import uvicorn
 from router_core.app import create_router_app
 from router_core.models import AcquirerRouteConfig, RouterConfig
 from router_core.pid import PIDConfig
-from router_core.state import AcquirerStateConfig
+from router_core.state import DEFAULT_HALF_LIFE_SEC, AcquirerStateConfig
 
 
 def parse_args(args: list[str] | None = None) -> argparse.Namespace:
@@ -43,11 +44,21 @@ def parse_args(args: list[str] | None = None) -> argparse.Namespace:
         default="http://127.0.0.1:8001",
         help="Default base URL for acquirers if URL not specified per route (default: http://127.0.0.1:8001)",
     )
-    parser.add_argument(
+    decay = parser.add_mutually_exclusive_group()
+    decay.add_argument(
+        "--half-life-sec",
+        type=float,
+        default=None,
+        help=(
+            "Seconds for an observation's weight to halve (default: $DECAY_HALF_LIFE_SEC, "
+            f"else {DEFAULT_HALF_LIFE_SEC})"
+        ),
+    )
+    decay.add_argument(
         "--decay-factor",
         type=float,
-        default=0.98,
-        help="Bandit decay factor gamma in (0.0, 1.0) (default: 0.98)",
+        default=None,
+        help="Use per-observation decay with this gamma in (0.0, 1.0) instead of a half-life",
     )
     parser.add_argument(
         "--log-level",
@@ -97,7 +108,14 @@ def parse_args(args: list[str] | None = None) -> argparse.Namespace:
 def build_router_config(parsed: argparse.Namespace) -> RouterConfig:
     """Construct RouterConfig from parsed command line options."""
     routes: list[AcquirerRouteConfig] = []
-    state_cfg = AcquirerStateConfig(decay_factor=parsed.decay_factor)
+    decay_factor = getattr(parsed, "decay_factor", None)
+    if decay_factor is not None:
+        state_cfg = AcquirerStateConfig(decay_factor=decay_factor)
+    else:
+        half_life = getattr(parsed, "half_life_sec", None)
+        if half_life is None:
+            half_life = float(os.environ.get("DECAY_HALF_LIFE_SEC", DEFAULT_HALF_LIFE_SEC))
+        state_cfg = AcquirerStateConfig(half_life_sec=half_life)
 
     for item in parsed.acquirers:
         if "=" in item:

@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
+from router_core.router import BanditRouter
 from scripts.compare_psr import (
     COMPARISONS,
     DEFAULT_BASE_DB,
@@ -163,3 +165,28 @@ async def test_multi_seed_cli_is_paired_and_reproducible(
 async def test_n_seeds_must_be_positive() -> None:
     with pytest.raises(SystemExit):
         await main(["--n-seeds", "0"])
+
+
+async def test_loom_runs_on_a_virtual_clock(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Loom's decay is timed by the benchmark's virtual 15 TPS clock, not the machine's."""
+    import scripts.compare_psr as compare_psr
+
+    readings: list[float] = []
+    real_router = BanditRouter
+
+    def recording_router(*args: Any, **kwargs: Any) -> BanditRouter:
+        clock = kwargs["clock"]
+        assert callable(clock)
+
+        def spy() -> float:
+            value = float(clock())
+            readings.append(value)
+            return value
+
+        kwargs["clock"] = spy
+        return real_router(*args, **kwargs)
+
+    monkeypatch.setattr(compare_psr, "BanditRouter", recording_router)
+    await execute_scenario("loom", ":memory:", 2, 2, 2)
+    # Six transactions at 15 TPS: the clock ends at 6/15 s whatever the wall time.
+    assert max(readings) == pytest.approx(6 / compare_psr.BENCH_TPS)

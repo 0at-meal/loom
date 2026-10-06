@@ -10,9 +10,9 @@ A multi-armed bandit (Thompson Sampling) estimates which payment acquirer is hea
 
 ### Known results and limitations (read this first)
 
-- **Hard outages:** Loom **loses** to a standard 3-consecutive-failure circuit breaker: −3.19 pp PSR over 100 paired seeds (95% CI [−3.69, −2.69]), winning only 6 of 100.
-- **Gray failures (partial brownout):** Loom **beats** the same breaker: +2.71 pp, 95% CI [+2.08, +3.35], when Alpha degrades to 60%.
-- **Healthy acquirers that differ slightly:** beliefs decay per observation (≈50 observations of memory per acquirer at γ=0.98), so the bandit cannot settle on the better of two close acquirers. With Alpha at 95% and Beta at 94% it keeps sending about 46% of traffic to Beta, and that share does not shrink with more traffic.
+- **Hard outages:** Loom **loses** to a standard 3-consecutive-failure circuit breaker: −2.93 pp PSR over 100 paired seeds (95% CI [−3.46, −2.39]), winning only 10 of 100.
+- **Gray failures (partial brownout):** Loom **beats** the same breaker: +2.77 pp, 95% CI [+2.13, +3.40], when Alpha degrades to 60%.
+- **Healthy acquirers that differ slightly:** beliefs fade with a half-life of a few seconds (2.3 s by default, about 50 observations for an acquirer carrying all of 15 TPS), so the bandit cannot settle on the better of two close acquirers. With Alpha at 95% and Beta at 94% it keeps sending about 46% of traffic to Beta, and that share does not shrink with more traffic.
 
 See [Known Limitations & Open Risks](#known-limitations--open-risks) for the rest.
 
@@ -27,32 +27,32 @@ Primary Acquirer Alpha (95% base PSR) vs Backup Acquirer Beta (94% base PSR), si
 | **Static Baseline ($M=5$, Conservative)** | **90.67%** | 94.0% | 80.0% | 98.0% | 136 / 150 | 6 | 100.0% | 3 |
 | **Static Baseline ($M=3$, Snapback)** | **90.67%** | 94.0% | 80.0% | 98.0% | 136 / 150 | 6 | 100.0% | 3 |
 | **Static Baseline ($M=3$, Gray Failure 60%)** | **88.67%** | 94.0% | 78.0% | 94.0% | 133 / 150 | 8 | 100.0% | 2 |
-| **Loom Phase 4 PID (Gray Failure 60%)** | **90.00%** | 90.0% | 84.0% | 96.0% | 135 / 150 | 6 | 11.89% | — |
-| **Loom Phase 3 (Raw Bandit, no PID)** | **88.67%** | 92.0% | 78.0% | 96.0% | 133 / 150 | 7 | 100.0% | 12 |
+| **Loom Phase 4 PID (Gray Failure 60%)** | **90.00%** | 90.0% | 84.0% | 96.0% | 135 / 150 | 6 | 11.83% | — |
+| **Loom Phase 3 (Raw Bandit, no PID)** | **89.33%** | 92.0% | 80.0% | 96.0% | 134 / 150 | 6 | 100.0% | 10 |
 | **Loom Phase 4 (Tuned PID)** | **86.00%** | 90.0% | 72.0% | 96.0% | 129 / 150 | 11 | 11.77% | 13 |
 
 *Loom's $\Delta w$ is the change in its continuous allocation weight; the static router's is its 0/1 dispatch indicator. These are different quantities: every individual Loom transaction still goes 100% to one acquirer.
 
-**Phase 7 live run (different configuration, not comparable to the table):** `scripts/qa_phase7_live_verification.py` uses three acquirers (Alpha 0.95, Beta 0.90, Gamma 0.85), stochastic actuation and decay 0.95. It produces Warmup 90.0% / Outage 72.0% / Recovery 94.0%, lifetime 85.3% (128 / 150), and a peak weight change of 11.94%.
+**Phase 7 live run (different configuration, not comparable to the table):** `scripts/qa_phase7_live_verification.py` uses three acquirers (Alpha 0.95, Beta 0.90, Gamma 0.85), stochastic actuation and per-observation decay γ=0.95. It produces Warmup 90.0% / Outage 72.0% / Recovery 94.0%, lifetime 85.3% (128 / 150), and a peak weight change of 11.94%.
 
 ### Multi-seed results (100 paired seeds, same schedule and configuration as the table)
 
-Seed 42 above is one draw. The table below comes from `python scripts/compare_psr.py --n-seeds 100` (simulator seeds 42, 52, …, 1032 paired with Loom seeds 777–876; 95% CIs use the t-distribution). Across seeds, Loom's own PSR ranges from 82.00% to 96.00% (mean 89.10%); 15 of 100 seeds score below the 86.00% shown above.
+Seed 42 above is one draw. The table below comes from `python scripts/compare_psr.py --n-seeds 100` (simulator seeds 42, 52, …, 1032 paired with Loom seeds 777–876; 95% CIs use the t-distribution). Across seeds, Loom's own PSR ranges from 80.67% to 96.00% (mean 89.36%); 10 of 100 seeds score below the 86.00% shown above.
 
 | Comparison | Mean PSR difference (Loom − other) | 95% CI | Loom wins / ties / losses |
 | :--- | :---: | :---: | :---: |
-| vs Static $M=1$ | **+13.47 pp** | [+12.10, +14.84] | 91 / 1 / 8 |
-| vs Static $M=3$ | **−3.19 pp** | [−3.69, −2.69] | 6 / 4 / 90 |
-| vs Static $M=5$ | **−1.95 pp** | [−2.44, −1.45] | 15 / 8 / 77 |
-| vs Static $M=3$, gray failure (Alpha at 60%) | **+2.71 pp** | [+2.08, +3.35] | 77 / 7 / 16 |
-| PID Loom vs raw bandit (no PID) | **−1.71 pp** | [−1.99, −1.44] | 5 / 8 / 87 |
+| vs Static $M=1$ | **+13.73 pp** | [+12.36, +15.11] | 91 / 1 / 8 |
+| vs Static $M=3$ | **−2.93 pp** | [−3.46, −2.39] | 10 / 5 / 85 |
+| vs Static $M=5$ | **−1.69 pp** | [−2.21, −1.16] | 21 / 7 / 72 |
+| vs Static $M=3$, gray failure (Alpha at 60%) | **+2.77 pp** | [+2.13, +3.40] | 73 / 10 / 17 |
+| PID Loom vs raw bandit (no PID) | **−1.43 pp** | [−1.76, −1.10] | 16 / 11 / 73 |
 
 ### Reading the Numbers
 
 1. **The +1000 bps result is against the $M=1$ breaker, a weak baseline.** At seed 42 a single routine issuer decline (`DO_NOT_HONOR`) on Beta at Tx 57 trips Beta; with both routes tripped, the exhaustion fallback sends Tx 58–86 to the dead primary, collapsing outage PSR to 38.00% and global PSR to 76.00% (Loom: 86.00%). That breaker counts issuer declines as route failures and falls back to a route it knows is dead. Loom also counts issuer declines as failures (both routers use `success = payload.authorized`); its bandit just reacts more softly.
-2. **Against the standard $M=3$ breaker, Loom loses**: 86.00% vs 92.00% at seed 42, −3.19 pp across 100 seeds. Loom's ramp absorbed 11 failures on Alpha during the outage: +7 over the $M=3$ static cliff (4) and +4 over the raw bandit (7). The simulator gives backup acquirers unlimited capacity, so any benefit from avoiding a 100% traffic shift is not measured anywhere in this repo.
-3. **Smoothing, and what it costs.** The tuned PID ($K_p=0.12, K_i=0.005, K_d=0.25, I_{\text{max}}=1.0$) keeps the per-transaction change in allocation weight between 9.63% and 12.37% across 100 seeds, and the weight crosses 50% a mean of 0.98 times during the outage. It does not reduce route flips: with deficit actuation consecutive transactions alternate acquirers (13.05 outage flips on average, vs 7.66 for the raw bandit and 3.01 for static $M=3$). The weight curve is not monotonic; it can move toward the failed acquirer for a few transactions after the outage starts. The PID costs 1.71 pp of PSR vs the raw bandit.
-4. **Dormant route starvation is reduced, not resolved.** In Phase 3 (raw bandit), recovered Alpha received 0 of the 50 recovery transactions because unselected arms never update. With PID, the 3% exploration floor ($w_{\text{min}} = 0.03$) sends Alpha 2 probe transactions, raising its posterior mean from 0.496 (Tx 100) to 0.521 (Tx 103) to 0.544 (Tx 136). Alpha's weight is still at the 0.03 floor at Tx 150: routing back to Alpha is not restored within the benchmark window.
+2. **Against the standard $M=3$ breaker, Loom loses**: 86.00% vs 92.00% at seed 42, −2.93 pp across 100 seeds. Loom's ramp absorbed 11 failures on Alpha during the outage: +7 over the $M=3$ static cliff (4) and +5 over the raw bandit (6). The simulator gives backup acquirers unlimited capacity, so any benefit from avoiding a 100% traffic shift is not measured anywhere in this repo.
+3. **Smoothing, and what it costs.** The tuned PID ($K_p=0.12, K_i=0.005, K_d=0.25, I_{\text{max}}=1.0$) keeps the largest per-transaction change in allocation weight between 9.71% and 12.45% across 100 seeds. It does not reduce route flips: with deficit actuation consecutive transactions alternate acquirers (12.80 outage flips on average, vs 7.59 for the raw bandit and 3.01 for static $M=3$). The weight curve is not monotonic; it can move toward the failed acquirer for a few transactions after the outage starts. The PID costs 1.43 pp of PSR vs the raw bandit.
+4. **Recovered acquirers come back slowly.** In Phase 3 (raw bandit, per-observation decay), recovered Alpha received 0 of the 50 recovery transactions because unselected arms never updated. Beliefs now decay on the clock, so Alpha's outage evidence fades even without traffic: at seed 42 PID Loom sends Alpha 4 of the 50 recovery transactions (2 under per-observation decay) and the raw bandit 5 (0 before). Alpha's weight climbs from the 0.03 floor back to 0.35 by Tx 150, so routing is only partly restored within the benchmark window.
 5. **Real-time telemetry (local loopback, single runs).** `POST /route` → WebSocket frame receipt: mean 8.20 ms, p95 11.87 ms (Phase 7 script, 150 serial transactions, no warmup; includes the routing request). Pure server-to-client push: mean 0.58 ms, max 1.98 ms (91 frames on the live demo). Operator outage trigger round-trip: 30.78 ms (one sample). WebSocket reconnect + `BOOTSTRAP` frame: 3.80 ms with a Python client; the dashboard's own reconnect backoff starts at ≥500 ms, and `BOOTSTRAP` carries current in-memory beliefs only.
 
 ---
@@ -71,7 +71,7 @@ Loom's pipeline is built from four stages behind separate module boundaries. In 
 │  ┌──────────────────────────────────────────────────────────────────────────────────┐  │
 │  │ 1. ROUTER CORE (router_core/)                                                    │  │
 │  │    ├── Bayesian Perception: Thompson Sampling Beta(α, β) with mean-reverting     │  │
-│  │    │   per-observation decay; each draw yields a one-hot target w_target.        │  │
+│  │    │   wall-clock decay; each draw yields a one-hot target w_target.             │  │
 │  │    ├── PID Smoothing: Derivative-on-measurement (-Kd·dw/dt) and anti-windup      │  │
 │  │    │   clamping (I_max=1.0) low-pass filters the target into w_smoothed.         │  │
 │  │    ├── Simplex Actuation: Simplex projection enforces exploration floor          │  │
@@ -102,7 +102,7 @@ Loom's pipeline is built from four stages behind separate module boundaries. In 
 ```
 
 ### 1. Router Core (`router_core/`)
-- **Bayesian Belief State (`state.py`, `bandit.py`)**: Maintains $\alpha_i, \beta_i$ for each acquirer. The offset decay $\alpha_t = \alpha_0 + \gamma(\alpha_{t-1} - \alpha_0) + x$ keeps parameters at or above their priors. Decay is applied **per observation, only to the selected acquirer**; there is no wall-clock decay, so an acquirer receiving no traffic keeps its last belief. A separate EWMA health score ($H_t = \gamma H_{t-1} + (1-\gamma)x$) is computed and logged but not used for routing.
+- **Bayesian Belief State (`state.py`, `bandit.py`)**: Maintains $\alpha_i, \beta_i$ for each acquirer. The offset decay $\alpha_t = \alpha_0 + f(\alpha_{t-1} - \alpha_0) + x$ keeps parameters at or above their priors. Decay is on the **wall clock**: $f = 0.5^{\Delta t / h}$ with half-life $h$ (default 2.3 s), applied to every acquirer before each Thompson draw and outcome, so an acquirer receiving no traffic drifts back to its prior. The router reads time from an injectable clock; the benchmark passes a virtual 15 TPS clock. Setting `decay_factor` instead selects the old per-observation decay. A separate health score (the decayed success fraction) is computed and logged but not used for routing.
 - **PID Smoothing Engine (`pid.py`)**: A pure-function step engine with immutable state snapshots. Its setpoint is the one-hot winner of the current Thompson draw and its measured variable is its own previous output weight, so in effect it is a low-pass filter on the bandit's choices. Derivative action is computed on the measurement ($-K_d \frac{dw}{dt}$); anti-windup clamps to $[-I_{\text{max}}, +I_{\text{max}}]$ before zero-sum centring.
 - **Actuator Simplex Projection**: Projects the smoothed weights onto $\sum w_i = 1.0, w_i \ge w_{\text{min}}$ (3% exploration floor), then picks the acquirer by deficit round-robin (`actuation_mode="deficit"`, used by the benchmark) or a categorical draw (`"stochastic"`, the `PIDConfig` default used by the served app).
 
@@ -168,7 +168,7 @@ cp .env.example .env
 ```
 
 > [!IMPORTANT]
-> **Configuration Notice**: Only the data-layer keys in `.env` are read (`REDIS_*`, `KEY_PREFIX`, `REDIS_CHANNEL_*`, `SQLITE_*`, via `data_layer/config.py`). `PID_KP`, `PID_KI`, `PID_KD`, `DECAY_HALF_LIFE_SEC`, `APP_ENV` and `LOG_LEVEL` are never read. PID gains default to $K_p=0.12, K_i=0.005, K_d=0.25, I_{\text{max}}=1.0, w_{\text{min}}=0.03$ in `PIDConfig` and are overridden via server CLI arguments (`--kp`, `--ki`, `--kd`, `--min-allocation`).
+> **Configuration Notice**: Only the data-layer keys in `.env` are read (`REDIS_*`, `KEY_PREFIX`, `REDIS_CHANNEL_*`, `SQLITE_*`, via `data_layer/config.py`). `DECAY_HALF_LIFE_SEC` is read by `router_core.server` as the default for `--half-life-sec`. `PID_KP`, `PID_KI`, `PID_KD`, `APP_ENV` and `LOG_LEVEL` are never read. PID gains default to $K_p=0.12, K_i=0.005, K_d=0.25, I_{\text{max}}=1.0, w_{\text{min}}=0.03$ in `PIDConfig` and are overridden via server CLI arguments (`--kp`, `--ki`, `--kd`, `--min-allocation`).
 
 > [!NOTE]
 > **Running the tests:** `pytest` collects and runs 262 tests; CI runs the same suite with coverage. Dependencies are unpinned, and `pyproject.toml` turns warnings into errors, so a new library release can still break collection. A few tests assert wall-clock latency and can fail on a loaded machine.
@@ -258,7 +258,7 @@ python scripts/generate_transactions.py --tps 15 --duration 120
 cd dashboard && npm run dev
 ```
 
-The served router uses three acquirers by default (`acquirer_alpha`, `acquirer_beta`, `acquirer_gamma`), decay $\gamma=0.98$ and stochastic actuation, which differs from the benchmark configuration (two acquirers, $\gamma=0.95$, deficit actuation).
+The served router uses three acquirers by default (`acquirer_alpha`, `acquirer_beta`, `acquirer_gamma`), a 2.3 s decay half-life and stochastic actuation, which differs from the benchmark configuration (two acquirers, 0.9 s half-life on a virtual 15 TPS clock, deficit actuation).
 
 ---
 
@@ -423,11 +423,11 @@ This defect was missed by three phase sign-offs and caught by live testing (reco
 
 - **The Issue**: The PID engine, anti-windup clamping and simplex projection were implemented and unit-tested in Phase 4, but the production entrypoints (`router_core/server.py`, `router_core/app.py`) never instantiated `PIDConfig`. The running service used Phase 3 winner-take-all switching through the Phase 4, 5 and 6 sign-offs, because unit tests did not cover the entrypoints.
 - **How It Was Caught**: In Phase 7, end-to-end testing over real TCP sockets showed $0\% \leftrightarrow 100\%$ square-wave allocations on the live dashboard instead of the expected easing curve.
-- **The Fix**: PID enabled by default in both entrypoints (with a `--no-pid` flag), default gains set to Phase 4's tuned values ($K_p=0.12, K_i=0.005, K_d=0.25, I_{\text{max}}=1.0, w_{\text{min}}=0.03$), and regression tests added in [`tests/router_core/test_server_cli.py`](tests/router_core/test_server_cli.py). The served configuration still differs from the benchmark (stochastic actuation, $\gamma=0.98$).
+- **The Fix**: PID enabled by default in both entrypoints (with a `--no-pid` flag), default gains set to Phase 4's tuned values ($K_p=0.12, K_i=0.005, K_d=0.25, I_{\text{max}}=1.0, w_{\text{min}}=0.03$), and regression tests added in [`tests/router_core/test_server_cli.py`](tests/router_core/test_server_cli.py). The served configuration still differs from the benchmark (stochastic actuation, 2.3 s decay half-life).
 
 ### Other Issues Found During Development
 
-- **Dormant Route Starvation (Phase 3 QA)**: A disabled leader that recovered received 0 of 50 subsequent transactions, because decay only updates the selected arm. This led to the exploration floor ($w_{\text{min}} = 0.03$) in Phase 4, which provides probe traffic but does not restore routing to the recovered acquirer within the benchmark window (see Results).
+- **Dormant Route Starvation (Phase 3 QA)**: A disabled leader that recovered received 0 of 50 subsequent transactions, because decay only updated the selected arm. This led to the exploration floor ($w_{\text{min}} = 0.03$) in Phase 4, and later to wall-clock decay, which lets an idle acquirer's belief fade back to its prior (see Results).
 - **Steady-State Integrator Saturation (Phase 4 QA)**: The one-hot target can never be reached under a 3% floor, so the integrator accumulates a permanent error; clamping ($I_{\text{max}} = 1.0$) bounds it. In the closed-loop stress script (`scripts/qa_pid_comparison_and_windup_stress.py`), bounded and unbounded integrators produced the same recovery behaviour.
 
 ---
@@ -505,7 +505,7 @@ Phase 8 adds [`router_core/value_policy.py`](router_core/value_policy.py), which
 ### Known Limitations & Open Risks
 
 - **Loses to a standard breaker on hard outages; wins on gray failures**: see [Multi-seed results](#multi-seed-results-100-paired-seeds-same-schedule-and-configuration-as-the-table).
-- **Steady-state regret from per-observation decay**: With $\gamma=0.98$ each belief reflects about the last 50 observations of that acquirer ($1/(1-\gamma)$), too little to separate acquirers a few points apart. With Alpha at 95% and no outage, the share of transactions 500–2000 sent to the worse Beta (10 seeds) was 46.8% / 29.2% / 19.2% for Beta at 94% / 92% / 90% in the served config, and 46.3% / 38.6% / 30.5% in the benchmark config ($\gamma=0.95$, deficit).
+- **Steady-state regret from short memory**: With a 2.3 s half-life at 15 TPS, the leading acquirer's belief reflects about 50 observations, too little to separate acquirers a few points apart. With Alpha at 95% and no outage, the share of transactions 500–2000 sent to the worse Beta (10 seeds, measured under the earlier per-observation decay, AUDIT F-03) was 46.8% / 29.2% / 19.2% for Beta at 94% / 92% / 90% in the served config, and 46.3% / 38.6% / 30.5% in the benchmark config ($\gamma=0.95$, deficit).
 - **Issuer declines count as acquirer failures**: `success = payload.authorized` in both routers, so an ordinary `DO_NOT_HONOR` lowers the chosen acquirer's belief exactly like an outage.
 - **Transaction-clocked control**: The PID steps once per transaction ($\Delta t = 1.0$), not per wall-clock second, so ramp time and memory scale inversely with traffic volume.
 - **Exploration Floor Reliability Tax**: The 3% floor keeps sending 3% of traffic to a failing route for the whole outage.
@@ -523,7 +523,7 @@ Per the PRD roadmap and architectural risks log:
 1. **Wire the data layer into the served router**: logging and publishing for every live decision.
 2. **Classify declines**: count only acquirer-attributable failures (outages, 5xx, timeouts) toward health, not issuer declines.
 3. **Secondary Capacity Throttling**: connection-pool limits and HTTP 429 rate limiting on simulated backup gateways, so the herd-migration argument for smoothing can actually be measured.
-4. **Wall-clock decay and probing**: replace per-observation decay and the volume-based exploration floor with time-based equivalents.
+4. **Time-based probing**: decay is now on the wall clock; the exploration floor is still a share of traffic, and the PID still steps once per transaction.
 5. **Distributed Infrastructure Topology**: Redis Sentinel / ElastiCache and PostgreSQL / ClickHouse for multi-node deployments.
 6. **In-Flight Virtual Loss Accounting**: temporary pessimistic penalties on uncompleted in-flight requests.
 
@@ -531,7 +531,7 @@ Per the PRD roadmap and architectural risks log:
 
 ## Architecture Summary
 
-- **Smooths allocation weights, not individual routing decisions**: the weight changes by at most ~12.4% per transaction, but each transaction still goes to one acquirer (PID filter).
-- **Learns acquirer success rates from roughly the last 50 observations of each acquirer**, counting issuer declines as failures (Thompson Sampling with per-observation decay).
+- **Smooths allocation weights, not individual routing decisions**: the weight changes by at most ~12.5% per transaction, but each transaction still goes to one acquirer (PID filter).
+- **Learns acquirer success rates from the last few seconds of outcomes** (2.3 s half-life; about 50 observations for an acquirer carrying all of 15 TPS), counting issuer declines as failures (Thompson Sampling with wall-clock decay).
 - **Logs decisions to an append-only SQLite ledger and publishes them over Redis Pub/Sub only when wired in by a script or test**; the served router keeps state in memory.
 - **Updates beliefs and pushes a WebSocket frame for every transaction** (in-process broadcast from the router).

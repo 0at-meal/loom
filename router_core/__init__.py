@@ -1,6 +1,6 @@
 """Router core package for dynamic payment routing."""
 
-from router_core.bandit import BanditStateRegistry, calculate_gamma_from_half_life
+from router_core.bandit import BanditStateRegistry
 from router_core.models import AcquirerRouteConfig, RouterConfig, RoutingResult
 from router_core.pid import (
     PIDConfig,
@@ -36,7 +36,6 @@ __all__ = [
     "RoutingResult",
     "ValueScaledExplorationConfig",
     "apply_value_scaled_policy",
-    "calculate_gamma_from_half_life",
     "calculate_pid_step",
     "project_to_bounded_simplex",
 ]

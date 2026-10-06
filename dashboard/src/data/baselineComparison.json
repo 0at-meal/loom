@@ -11,28 +11,29 @@
     "alpha_rate": 0.95,
     "beta_rate": 0.94,
     "gray_rate": 0.6,
-    "loom": "decay 0.95, PID kp=0.12 ki=0.005 kd=0.25, floor 0.03, deficit actuation"
+    "tps": 15.0,
+    "loom": "half-life 0.9 s, PID kp=0.12 ki=0.005 kd=0.25, floor 0.03, deficit actuation"
   },
   "configs": {
     "loom": {
       "router": "loom",
       "threshold_m": null,
       "gray_rate": null,
-      "mean_psr_pct": 89.1,
-      "mean_outage_flips": 13.05,
-      "mean_outage_failures_alpha": 8.19,
+      "mean_psr_pct": 89.36,
+      "mean_outage_flips": 12.8,
+      "mean_outage_failures_alpha": 7.82,
       "max_step_delta_range_pct": [
-        9.629381932775328,
-        12.36557218403932
+        9.70757831026075,
+        12.452697129575183
       ]
     },
     "raw": {
       "router": "raw",
       "threshold_m": null,
       "gray_rate": null,
-      "mean_psr_pct": 90.81333333333333,
-      "mean_outage_flips": 7.66,
-      "mean_outage_failures_alpha": 5.54,
+      "mean_psr_pct": 90.78666666666668,
+      "mean_outage_flips": 7.59,
+      "mean_outage_failures_alpha": 5.52,
       "max_step_delta_range_pct": [
         100.0,
         100.0
@@ -78,12 +79,12 @@
       "router": "loom",
       "threshold_m": null,
       "gray_rate": 0.6,
-      "mean_psr_pct": 91.07333333333332,
-      "mean_outage_flips": 21.34,
-      "mean_outage_failures_alpha": 5.55,
+      "mean_psr_pct": 91.12666666666667,
+      "mean_outage_flips": 20.87,
+      "mean_outage_failures_alpha": 5.4,
       "max_step_delta_range_pct": [
-        9.629381932775328,
-        12.377343401618434
+        10.872569013132997,
+        12.415480901618432
       ]
     },
     "static_m3_gray": {
@@ -105,9 +106,9 @@
       "first": "loom",
       "second": "static_m1",
       "n": 100,
-      "mean_diff_pp": 13.473333333333334,
-      "ci95_low_pp": 12.103225904850119,
-      "ci95_high_pp": 14.84344076181655,
+      "mean_diff_pp": 13.733333333333334,
+      "ci95_low_pp": 12.360428710330991,
+      "ci95_high_pp": 15.106237956335674,
       "wins": 91,
       "ties": 1,
       "losses": 8
@@ -117,48 +118,48 @@
       "first": "loom",
       "second": "static_m3",
       "n": 100,
-      "mean_diff_pp": -3.186666666666667,
-      "ci95_low_pp": -3.68679685702211,
-      "ci95_high_pp": -2.6865364763112236,
-      "wins": 6,
-      "ties": 4,
-      "losses": 90
+      "mean_diff_pp": -2.926666666666667,
+      "ci95_low_pp": -3.4587542056368346,
+      "ci95_high_pp": -2.3945791276965003,
+      "wins": 10,
+      "ties": 5,
+      "losses": 85
     },
     "loom_vs_m5": {
       "label": "Loom vs static M=5 (hard outage)",
       "first": "loom",
       "second": "static_m5",
       "n": 100,
-      "mean_diff_pp": -1.9466666666666663,
-      "ci95_low_pp": -2.442216911300771,
-      "ci95_high_pp": -1.451116422032562,
-      "wins": 15,
-      "ties": 8,
-      "losses": 77
+      "mean_diff_pp": -1.686666666666667,
+      "ci95_low_pp": -2.213264799392888,
+      "ci95_high_pp": -1.160068533940446,
+      "wins": 21,
+      "ties": 7,
+      "losses": 72
     },
     "loom_vs_m3_gray": {
       "label": "Loom vs static M=3 (gray failure, Alpha at 60%)",
       "first": "loom_gray",
       "second": "static_m3_gray",
       "n": 100,
-      "mean_diff_pp": 2.713333333333333,
-      "ci95_low_pp": 2.077333932550533,
-      "ci95_high_pp": 3.3493327341161323,
-      "wins": 77,
-      "ties": 7,
-      "losses": 16
+      "mean_diff_pp": 2.7666666666666657,
+      "ci95_low_pp": 2.1314681504220934,
+      "ci95_high_pp": 3.401865182911237,
+      "wins": 73,
+      "ties": 10,
+      "losses": 17
     },
     "pid_vs_raw": {
       "label": "Loom with PID vs raw bandit (hard outage)",
       "first": "loom",
       "second": "raw",
       "n": 100,
-      "mean_diff_pp": -1.7133333333333338,
-      "ci95_low_pp": -1.98660763639912,
-      "ci95_high_pp": -1.4400590302675476,
-      "wins": 5,
-      "ties": 8,
-      "losses": 87
+      "mean_diff_pp": -1.426666666666667,
+      "ci95_low_pp": -1.7561084124786102,
+      "ci95_high_pp": -1.097224920854724,
+      "wins": 16,
+      "ties": 11,
+      "losses": 73
     }
   },
   "rows": [
@@ -173,10 +174,10 @@
         "max_step_delta": 0.11773470631949312
       },
       "raw": {
-        "psr": 0.8866666666666667,
-        "outage_psr": 0.78,
-        "outage_failures_alpha": 7,
-        "outage_flips": 12,
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 6,
+        "outage_flips": 10,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -204,8 +205,8 @@
         "psr": 0.9,
         "outage_psr": 0.84,
         "outage_failures_alpha": 6,
-        "outage_flips": 29,
-        "max_step_delta": 0.11889777483969846
+        "outage_flips": 28,
+        "max_step_delta": 0.11831223963317022
       },
       "static_m3_gray": {
         "psr": 0.8866666666666667,
@@ -219,17 +220,17 @@
       "sim_seed": 52,
       "loom_seed": 778,
       "loom": {
-        "psr": 0.8933333333333333,
-        "outage_psr": 0.76,
-        "outage_failures_alpha": 9,
-        "outage_flips": 16,
-        "max_step_delta": 0.11674755399623733
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 7,
+        "outage_flips": 13,
+        "max_step_delta": 0.11753133581965453
       },
       "raw": {
-        "psr": 0.9133333333333333,
-        "outage_psr": 0.78,
-        "outage_failures_alpha": 6,
-        "outage_flips": 7,
+        "psr": 0.9,
+        "outage_psr": 0.76,
+        "outage_failures_alpha": 7,
+        "outage_flips": 9,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -254,11 +255,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.9066666666666666,
-        "outage_psr": 0.82,
-        "outage_failures_alpha": 6,
-        "outage_flips": 20,
-        "max_step_delta": 0.10364439736729086
+        "psr": 0.9,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 7,
+        "outage_flips": 21,
+        "max_step_delta": 0.11624999999999999
       },
       "static_m3_gray": {
         "psr": 0.8466666666666667,
@@ -272,17 +273,17 @@
       "sim_seed": 62,
       "loom_seed": 779,
       "loom": {
-        "psr": 0.9,
-        "outage_psr": 0.86,
-        "outage_failures_alpha": 6,
-        "outage_flips": 11,
-        "max_step_delta": 0.10353353429767664
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 5,
+        "outage_flips": 9,
+        "max_step_delta": 0.11624999999999999
       },
       "raw": {
-        "psr": 0.8733333333333333,
-        "outage_psr": 0.76,
-        "outage_failures_alpha": 10,
-        "outage_flips": 3,
+        "psr": 0.88,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 8,
+        "outage_flips": 6,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -307,11 +308,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.9133333333333333,
-        "outage_psr": 0.9,
-        "outage_failures_alpha": 4,
-        "outage_flips": 16,
-        "max_step_delta": 0.11647819818267821
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 5,
+        "outage_flips": 19,
+        "max_step_delta": 0.11624999999999999
       },
       "static_m3_gray": {
         "psr": 0.8133333333333334,
@@ -326,15 +327,15 @@
       "loom_seed": 780,
       "loom": {
         "psr": 0.86,
-        "outage_psr": 0.7,
-        "outage_failures_alpha": 11,
+        "outage_psr": 0.74,
+        "outage_failures_alpha": 10,
         "outage_flips": 15,
-        "max_step_delta": 0.11735333519180025
+        "max_step_delta": 0.11894286722428705
       },
       "raw": {
         "psr": 0.8733333333333333,
-        "outage_psr": 0.76,
-        "outage_failures_alpha": 9,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 8,
         "outage_flips": 7,
         "max_step_delta": 1.0
       },
@@ -361,9 +362,9 @@
       },
       "loom_gray": {
         "psr": 0.88,
-        "outage_psr": 0.8,
-        "outage_failures_alpha": 7,
-        "outage_flips": 21,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 6,
+        "outage_flips": 15,
         "max_step_delta": 0.12364765625
       },
       "static_m3_gray": {
@@ -378,15 +379,15 @@
       "sim_seed": 82,
       "loom_seed": 781,
       "loom": {
-        "psr": 0.9066666666666666,
-        "outage_psr": 0.8,
-        "outage_failures_alpha": 6,
-        "outage_flips": 12,
-        "max_step_delta": 0.11316331347524536
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 5,
+        "outage_flips": 10,
+        "max_step_delta": 0.12184654179359158
       },
       "raw": {
         "psr": 0.9133333333333333,
-        "outage_psr": 0.84,
+        "outage_psr": 0.86,
         "outage_failures_alpha": 4,
         "outage_flips": 8,
         "max_step_delta": 1.0
@@ -416,8 +417,8 @@
         "psr": 0.9266666666666666,
         "outage_psr": 0.86,
         "outage_failures_alpha": 4,
-        "outage_flips": 30,
-        "max_step_delta": 0.12074246711672365
+        "outage_flips": 26,
+        "max_step_delta": 0.12365666024487798
       },
       "static_m3_gray": {
         "psr": 0.8666666666666667,
@@ -431,17 +432,17 @@
       "sim_seed": 92,
       "loom_seed": 782,
       "loom": {
-        "psr": 0.92,
+        "psr": 0.9133333333333333,
         "outage_psr": 0.88,
         "outage_failures_alpha": 3,
         "outage_flips": 6,
         "max_step_delta": 0.12365337331194684
       },
       "raw": {
-        "psr": 0.9466666666666667,
-        "outage_psr": 0.94,
-        "outage_failures_alpha": 0,
-        "outage_flips": 0,
+        "psr": 0.92,
+        "outage_psr": 0.9,
+        "outage_failures_alpha": 2,
+        "outage_flips": 4,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -466,10 +467,10 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.9333333333333333,
-        "outage_psr": 0.9,
-        "outage_failures_alpha": 2,
-        "outage_flips": 6,
+        "psr": 0.92,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 3,
+        "outage_flips": 8,
         "max_step_delta": 0.12365337331194684
       },
       "static_m3_gray": {
@@ -484,17 +485,17 @@
       "sim_seed": 102,
       "loom_seed": 783,
       "loom": {
-        "psr": 0.9133333333333333,
+        "psr": 0.92,
         "outage_psr": 0.82,
         "outage_failures_alpha": 6,
-        "outage_flips": 10,
-        "max_step_delta": 0.1176246125187678
+        "outage_flips": 12,
+        "max_step_delta": 0.11624999999999999
       },
       "raw": {
         "psr": 0.92,
         "outage_psr": 0.82,
         "outage_failures_alpha": 6,
-        "outage_flips": 11,
+        "outage_flips": 12,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -519,11 +520,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.9266666666666666,
+        "psr": 0.9333333333333333,
         "outage_psr": 0.88,
         "outage_failures_alpha": 3,
-        "outage_flips": 21,
-        "max_step_delta": 0.11954268502678145
+        "outage_flips": 18,
+        "max_step_delta": 0.12374446546339822
       },
       "static_m3_gray": {
         "psr": 0.8933333333333333,
@@ -537,17 +538,17 @@
       "sim_seed": 112,
       "loom_seed": 784,
       "loom": {
-        "psr": 0.8733333333333333,
-        "outage_psr": 0.82,
-        "outage_failures_alpha": 8,
-        "outage_flips": 15,
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 6,
+        "outage_flips": 12,
         "max_step_delta": 0.11624999999999999
       },
       "raw": {
-        "psr": 0.8866666666666667,
-        "outage_psr": 0.84,
-        "outage_failures_alpha": 6,
-        "outage_flips": 12,
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 5,
+        "outage_flips": 10,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -575,8 +576,8 @@
         "psr": 0.88,
         "outage_psr": 0.84,
         "outage_failures_alpha": 7,
-        "outage_flips": 19,
-        "max_step_delta": 0.1185672179801763
+        "outage_flips": 22,
+        "max_step_delta": 0.11875143757324219
       },
       "static_m3_gray": {
         "psr": 0.8533333333333334,
@@ -590,17 +591,17 @@
       "sim_seed": 122,
       "loom_seed": 785,
       "loom": {
-        "psr": 0.8533333333333334,
-        "outage_psr": 0.64,
-        "outage_failures_alpha": 14,
-        "outage_flips": 17,
-        "max_step_delta": 0.11253389349097898
+        "psr": 0.8666666666666667,
+        "outage_psr": 0.68,
+        "outage_failures_alpha": 12,
+        "outage_flips": 18,
+        "max_step_delta": 0.11647819818267821
       },
       "raw": {
-        "psr": 0.8733333333333333,
-        "outage_psr": 0.68,
-        "outage_failures_alpha": 11,
-        "outage_flips": 9,
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.7,
+        "outage_failures_alpha": 10,
+        "outage_flips": 7,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -625,11 +626,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.9066666666666666,
-        "outage_psr": 0.8,
-        "outage_failures_alpha": 7,
-        "outage_flips": 32,
-        "max_step_delta": 0.11262471530535756
+        "psr": 0.9,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 8,
+        "outage_flips": 35,
+        "max_step_delta": 0.11099306504031348
       },
       "static_m3_gray": {
         "psr": 0.8733333333333333,
@@ -643,17 +644,17 @@
       "sim_seed": 132,
       "loom_seed": 786,
       "loom": {
-        "psr": 0.9,
-        "outage_psr": 0.84,
-        "outage_failures_alpha": 5,
-        "outage_flips": 9,
-        "max_step_delta": 0.1185672179801763
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 6,
+        "outage_flips": 10,
+        "max_step_delta": 0.11875143757324219
       },
       "raw": {
-        "psr": 0.92,
-        "outage_psr": 0.88,
-        "outage_failures_alpha": 1,
-        "outage_flips": 2,
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 3,
+        "outage_flips": 6,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -678,11 +679,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.9133333333333333,
-        "outage_psr": 0.88,
-        "outage_failures_alpha": 3,
-        "outage_flips": 15,
-        "max_step_delta": 0.12364765625
+        "psr": 0.9,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 4,
+        "outage_flips": 17,
+        "max_step_delta": 0.11864246261229758
       },
       "static_m3_gray": {
         "psr": 0.9066666666666666,
@@ -697,15 +698,15 @@
       "loom_seed": 787,
       "loom": {
         "psr": 0.8933333333333333,
-        "outage_psr": 0.84,
-        "outage_failures_alpha": 7,
-        "outage_flips": 13,
-        "max_step_delta": 0.12048994088485082
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 8,
+        "outage_flips": 16,
+        "max_step_delta": 0.11634833222533869
       },
       "raw": {
-        "psr": 0.9066666666666666,
-        "outage_psr": 0.86,
-        "outage_failures_alpha": 6,
+        "psr": 0.9,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 7,
         "outage_flips": 10,
         "max_step_delta": 1.0
       },
@@ -731,11 +732,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.92,
-        "outage_psr": 0.9,
-        "outage_failures_alpha": 4,
-        "outage_flips": 19,
-        "max_step_delta": 0.11624999999999999
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 5,
+        "outage_flips": 26,
+        "max_step_delta": 0.11647819818267821
       },
       "static_m3_gray": {
         "psr": 0.9333333333333333,
@@ -749,17 +750,17 @@
       "sim_seed": 152,
       "loom_seed": 788,
       "loom": {
-        "psr": 0.9,
-        "outage_psr": 0.8,
-        "outage_failures_alpha": 8,
-        "outage_flips": 13,
-        "max_step_delta": 0.10949387663591859
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 6,
+        "outage_flips": 12,
+        "max_step_delta": 0.11863366582466675
       },
       "raw": {
-        "psr": 0.9266666666666666,
-        "outage_psr": 0.88,
-        "outage_failures_alpha": 4,
-        "outage_flips": 7,
+        "psr": 0.92,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 5,
+        "outage_flips": 9,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -785,10 +786,10 @@
       },
       "loom_gray": {
         "psr": 0.9266666666666666,
-        "outage_psr": 0.86,
+        "outage_psr": 0.88,
         "outage_failures_alpha": 5,
-        "outage_flips": 21,
-        "max_step_delta": 0.11688230506821978
+        "outage_flips": 24,
+        "max_step_delta": 0.11811573049138863
       },
       "static_m3_gray": {
         "psr": 0.9133333333333333,
@@ -802,17 +803,17 @@
       "sim_seed": 162,
       "loom_seed": 789,
       "loom": {
-        "psr": 0.8866666666666667,
-        "outage_psr": 0.76,
-        "outage_failures_alpha": 9,
-        "outage_flips": 15,
-        "max_step_delta": 0.11506445163448131
+        "psr": 0.8733333333333333,
+        "outage_psr": 0.72,
+        "outage_failures_alpha": 11,
+        "outage_flips": 17,
+        "max_step_delta": 0.11624999999999999
       },
       "raw": {
-        "psr": 0.92,
-        "outage_psr": 0.86,
-        "outage_failures_alpha": 4,
-        "outage_flips": 3,
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 6,
+        "outage_flips": 10,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -837,11 +838,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.9,
-        "outage_psr": 0.8,
-        "outage_failures_alpha": 7,
-        "outage_flips": 21,
-        "max_step_delta": 0.12364765625
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 8,
+        "outage_flips": 23,
+        "max_step_delta": 0.11624999999999999
       },
       "static_m3_gray": {
         "psr": 0.8466666666666667,
@@ -855,17 +856,17 @@
       "sim_seed": 172,
       "loom_seed": 790,
       "loom": {
-        "psr": 0.8933333333333333,
-        "outage_psr": 0.78,
-        "outage_failures_alpha": 7,
-        "outage_flips": 12,
-        "max_step_delta": 0.11699511931291655
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.76,
+        "outage_failures_alpha": 8,
+        "outage_flips": 15,
+        "max_step_delta": 0.11758056946213322
       },
       "raw": {
-        "psr": 0.8933333333333333,
+        "psr": 0.9,
         "outage_psr": 0.78,
-        "outage_failures_alpha": 7,
-        "outage_flips": 11,
+        "outage_failures_alpha": 8,
+        "outage_flips": 9,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -890,10 +891,10 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.8933333333333333,
-        "outage_psr": 0.78,
-        "outage_failures_alpha": 7,
-        "outage_flips": 20,
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 6,
+        "outage_flips": 17,
         "max_step_delta": 0.11624999999999999
       },
       "static_m3_gray": {
@@ -909,16 +910,16 @@
       "loom_seed": 791,
       "loom": {
         "psr": 0.92,
-        "outage_psr": 0.84,
+        "outage_psr": 0.86,
         "outage_failures_alpha": 5,
         "outage_flips": 10,
-        "max_step_delta": 0.1167478804581071
+        "max_step_delta": 0.11624999999999999
       },
       "raw": {
-        "psr": 0.9466666666666667,
-        "outage_psr": 0.92,
-        "outage_failures_alpha": 1,
-        "outage_flips": 2,
+        "psr": 0.94,
+        "outage_psr": 0.9,
+        "outage_failures_alpha": 2,
+        "outage_flips": 4,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -946,7 +947,7 @@
         "psr": 0.92,
         "outage_psr": 0.86,
         "outage_failures_alpha": 5,
-        "outage_flips": 16,
+        "outage_flips": 10,
         "max_step_delta": 0.11624999999999999
       },
       "static_m3_gray": {
@@ -961,16 +962,16 @@
       "sim_seed": 192,
       "loom_seed": 792,
       "loom": {
-        "psr": 0.86,
-        "outage_psr": 0.7,
-        "outage_failures_alpha": 15,
-        "outage_flips": 17,
-        "max_step_delta": 0.11624999999999996
+        "psr": 0.8666666666666667,
+        "outage_psr": 0.72,
+        "outage_failures_alpha": 14,
+        "outage_flips": 11,
+        "max_step_delta": 0.11699511931291655
       },
       "raw": {
-        "psr": 0.88,
-        "outage_psr": 0.7,
-        "outage_failures_alpha": 12,
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.74,
+        "outage_failures_alpha": 10,
         "outage_flips": 11,
         "max_step_delta": 1.0
       },
@@ -996,11 +997,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.88,
-        "outage_psr": 0.76,
-        "outage_failures_alpha": 12,
-        "outage_flips": 21,
-        "max_step_delta": 0.11624999999999996
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 8,
+        "outage_flips": 15,
+        "max_step_delta": 0.11799389064195745
       },
       "static_m3_gray": {
         "psr": 0.8666666666666667,
@@ -1014,17 +1015,17 @@
       "sim_seed": 202,
       "loom_seed": 793,
       "loom": {
-        "psr": 0.8733333333333333,
+        "psr": 0.88,
         "outage_psr": 0.78,
         "outage_failures_alpha": 8,
-        "outage_flips": 16,
-        "max_step_delta": 0.11863366582466675
+        "outage_flips": 15,
+        "max_step_delta": 0.11624999999999999
       },
       "raw": {
-        "psr": 0.8866666666666667,
+        "psr": 0.9,
         "outage_psr": 0.82,
-        "outage_failures_alpha": 6,
-        "outage_flips": 11,
+        "outage_failures_alpha": 3,
+        "outage_flips": 6,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -1052,8 +1053,8 @@
         "psr": 0.8933333333333333,
         "outage_psr": 0.8,
         "outage_failures_alpha": 7,
-        "outage_flips": 32,
-        "max_step_delta": 0.11624999999999999
+        "outage_flips": 33,
+        "max_step_delta": 0.11698205986083246
       },
       "static_m3_gray": {
         "psr": 0.8733333333333333,
@@ -1067,17 +1068,17 @@
       "sim_seed": 212,
       "loom_seed": 794,
       "loom": {
-        "psr": 0.9066666666666666,
-        "outage_psr": 0.86,
-        "outage_failures_alpha": 5,
-        "outage_flips": 10,
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 9,
+        "outage_flips": 15,
         "max_step_delta": 0.11624999999999999
       },
       "raw": {
-        "psr": 0.9266666666666666,
-        "outage_psr": 0.88,
-        "outage_failures_alpha": 4,
-        "outage_flips": 8,
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.92,
+        "outage_failures_alpha": 3,
+        "outage_flips": 6,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -1103,10 +1104,10 @@
       },
       "loom_gray": {
         "psr": 0.9133333333333333,
-        "outage_psr": 0.88,
-        "outage_failures_alpha": 4,
-        "outage_flips": 12,
-        "max_step_delta": 0.11863366582466675
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 5,
+        "outage_flips": 21,
+        "max_step_delta": 0.11811573049138863
       },
       "static_m3_gray": {
         "psr": 0.9,
@@ -1124,13 +1125,13 @@
         "outage_psr": 0.84,
         "outage_failures_alpha": 7,
         "outage_flips": 14,
-        "max_step_delta": 0.10856770670449664
+        "max_step_delta": 0.11630179923327148
       },
       "raw": {
-        "psr": 0.9533333333333334,
-        "outage_psr": 0.9,
-        "outage_failures_alpha": 4,
-        "outage_flips": 7,
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 7,
+        "outage_flips": 13,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -1155,11 +1156,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.9533333333333334,
-        "outage_psr": 0.9,
-        "outage_failures_alpha": 4,
-        "outage_flips": 22,
-        "max_step_delta": 0.11624999999999999
+        "psr": 0.96,
+        "outage_psr": 0.92,
+        "outage_failures_alpha": 3,
+        "outage_flips": 16,
+        "max_step_delta": 0.11881147866139982
       },
       "static_m3_gray": {
         "psr": 0.8933333333333333,
@@ -1176,14 +1177,14 @@
         "psr": 0.8733333333333333,
         "outage_psr": 0.74,
         "outage_failures_alpha": 9,
-        "outage_flips": 13,
-        "max_step_delta": 0.10192205885186467
+        "outage_flips": 17,
+        "max_step_delta": 0.1156947719185879
       },
       "raw": {
         "psr": 0.8866666666666667,
-        "outage_psr": 0.78,
-        "outage_failures_alpha": 7,
-        "outage_flips": 11,
+        "outage_psr": 0.74,
+        "outage_failures_alpha": 9,
+        "outage_flips": 10,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -1208,11 +1209,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.88,
-        "outage_psr": 0.74,
-        "outage_failures_alpha": 9,
-        "outage_flips": 27,
-        "max_step_delta": 0.11368348861353283
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.76,
+        "outage_failures_alpha": 8,
+        "outage_flips": 28,
+        "max_step_delta": 0.11624999999999999
       },
       "static_m3_gray": {
         "psr": 0.8933333333333333,
@@ -1226,17 +1227,17 @@
       "sim_seed": 242,
       "loom_seed": 797,
       "loom": {
-        "psr": 0.9066666666666666,
-        "outage_psr": 0.78,
-        "outage_failures_alpha": 10,
-        "outage_flips": 15,
-        "max_step_delta": 0.1040589443369998
-      },
-      "raw": {
         "psr": 0.9333333333333333,
         "outage_psr": 0.86,
         "outage_failures_alpha": 6,
         "outage_flips": 12,
+        "max_step_delta": 0.11746235126935964
+      },
+      "raw": {
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 7,
+        "outage_flips": 5,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -1264,8 +1265,8 @@
         "psr": 0.9266666666666666,
         "outage_psr": 0.84,
         "outage_failures_alpha": 7,
-        "outage_flips": 17,
-        "max_step_delta": 0.11624999999999999
+        "outage_flips": 22,
+        "max_step_delta": 0.11751832344737484
       },
       "static_m3_gray": {
         "psr": 0.9066666666666666,
@@ -1279,10 +1280,10 @@
       "sim_seed": 252,
       "loom_seed": 798,
       "loom": {
-        "psr": 0.9133333333333333,
-        "outage_psr": 0.76,
-        "outage_failures_alpha": 10,
-        "outage_flips": 14,
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.74,
+        "outage_failures_alpha": 11,
+        "outage_flips": 16,
         "max_step_delta": 0.11624999999999999
       },
       "raw": {
@@ -1314,11 +1315,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.9333333333333333,
+        "psr": 0.9266666666666666,
         "outage_psr": 0.84,
         "outage_failures_alpha": 7,
-        "outage_flips": 18,
-        "max_step_delta": 0.11624999999999999
+        "outage_flips": 20,
+        "max_step_delta": 0.11875143757324219
       },
       "static_m3_gray": {
         "psr": 0.9266666666666666,
@@ -1335,14 +1336,14 @@
         "psr": 0.8933333333333333,
         "outage_psr": 0.78,
         "outage_failures_alpha": 8,
-        "outage_flips": 13,
-        "max_step_delta": 0.10565631679681098
+        "outage_flips": 14,
+        "max_step_delta": 0.11689788045810712
       },
       "raw": {
         "psr": 0.9133333333333333,
-        "outage_psr": 0.84,
-        "outage_failures_alpha": 4,
-        "outage_flips": 5,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 5,
+        "outage_flips": 9,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -1368,9 +1369,9 @@
       },
       "loom_gray": {
         "psr": 0.8866666666666667,
-        "outage_psr": 0.78,
-        "outage_failures_alpha": 9,
-        "outage_flips": 15,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 8,
+        "outage_flips": 18,
         "max_step_delta": 0.11624999999999999
       },
       "static_m3_gray": {
@@ -1385,17 +1386,17 @@
       "sim_seed": 272,
       "loom_seed": 800,
       "loom": {
-        "psr": 0.8466666666666667,
-        "outage_psr": 0.74,
-        "outage_failures_alpha": 9,
-        "outage_flips": 17,
-        "max_step_delta": 0.10902487508784425
+        "psr": 0.8666666666666667,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 6,
+        "outage_flips": 12,
+        "max_step_delta": 0.12425015276618435
       },
       "raw": {
-        "psr": 0.8733333333333333,
+        "psr": 0.88,
         "outage_psr": 0.78,
-        "outage_failures_alpha": 7,
-        "outage_flips": 7,
+        "outage_failures_alpha": 6,
+        "outage_flips": 9,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -1420,11 +1421,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.8866666666666667,
-        "outage_psr": 0.84,
-        "outage_failures_alpha": 4,
-        "outage_flips": 23,
-        "max_step_delta": 0.11624999999999999
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 3,
+        "outage_flips": 14,
+        "max_step_delta": 0.11813961378047544
       },
       "static_m3_gray": {
         "psr": 0.88,
@@ -1438,14 +1439,14 @@
       "sim_seed": 282,
       "loom_seed": 801,
       "loom": {
-        "psr": 0.9,
-        "outage_psr": 0.8,
-        "outage_failures_alpha": 10,
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 11,
         "outage_flips": 15,
-        "max_step_delta": 0.11365506722155594
+        "max_step_delta": 0.12415480901618432
       },
       "raw": {
-        "psr": 0.94,
+        "psr": 0.9333333333333333,
         "outage_psr": 0.9,
         "outage_failures_alpha": 4,
         "outage_flips": 8,
@@ -1473,11 +1474,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.92,
-        "outage_psr": 0.86,
-        "outage_failures_alpha": 7,
-        "outage_flips": 15,
-        "max_step_delta": 0.11973747233371523
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 8,
+        "outage_flips": 17,
+        "max_step_delta": 0.12415480901618432
       },
       "static_m3_gray": {
         "psr": 0.8533333333333334,
@@ -1492,9 +1493,9 @@
       "loom_seed": 802,
       "loom": {
         "psr": 0.9333333333333333,
-        "outage_psr": 0.88,
-        "outage_failures_alpha": 6,
-        "outage_flips": 12,
+        "outage_psr": 0.9,
+        "outage_failures_alpha": 5,
+        "outage_flips": 10,
         "max_step_delta": 0.11624999999999999
       },
       "raw": {
@@ -1526,11 +1527,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.94,
-        "outage_psr": 0.9,
-        "outage_failures_alpha": 5,
-        "outage_flips": 28,
-        "max_step_delta": 0.11799691951235997
+        "psr": 0.9466666666666667,
+        "outage_psr": 0.94,
+        "outage_failures_alpha": 3,
+        "outage_flips": 12,
+        "max_step_delta": 0.117671142769282
       },
       "static_m3_gray": {
         "psr": 0.8866666666666667,
@@ -1544,17 +1545,17 @@
       "sim_seed": 302,
       "loom_seed": 803,
       "loom": {
-        "psr": 0.9133333333333333,
-        "outage_psr": 0.82,
-        "outage_failures_alpha": 7,
-        "outage_flips": 12,
-        "max_step_delta": 0.11624999999999999
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.72,
+        "outage_failures_alpha": 12,
+        "outage_flips": 14,
+        "max_step_delta": 0.11995903797136231
       },
       "raw": {
-        "psr": 0.9266666666666666,
+        "psr": 0.9333333333333333,
         "outage_psr": 0.86,
         "outage_failures_alpha": 5,
-        "outage_flips": 9,
+        "outage_flips": 7,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -1579,11 +1580,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.9333333333333333,
+        "psr": 0.94,
         "outage_psr": 0.86,
-        "outage_failures_alpha": 5,
-        "outage_flips": 12,
-        "max_step_delta": 0.11863366582466675
+        "outage_failures_alpha": 6,
+        "outage_flips": 32,
+        "max_step_delta": 0.11649024887596492
       },
       "static_m3_gray": {
         "psr": 0.92,
@@ -1597,17 +1598,17 @@
       "sim_seed": 312,
       "loom_seed": 804,
       "loom": {
-        "psr": 0.9,
-        "outage_psr": 0.8,
-        "outage_failures_alpha": 5,
-        "outage_flips": 9,
-        "max_step_delta": 0.11685204442080208
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 4,
+        "outage_flips": 8,
+        "max_step_delta": 0.12364765625
       },
       "raw": {
-        "psr": 0.9,
-        "outage_psr": 0.8,
-        "outage_failures_alpha": 5,
-        "outage_flips": 9,
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 3,
+        "outage_flips": 6,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -1632,11 +1633,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.9266666666666666,
-        "outage_psr": 0.84,
-        "outage_failures_alpha": 3,
-        "outage_flips": 15,
-        "max_step_delta": 0.11875143757324219
+        "psr": 0.94,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 2,
+        "outage_flips": 12,
+        "max_step_delta": 0.11869215275611356
       },
       "static_m3_gray": {
         "psr": 0.86,
@@ -1650,17 +1651,17 @@
       "sim_seed": 322,
       "loom_seed": 805,
       "loom": {
-        "psr": 0.9066666666666666,
+        "psr": 0.9133333333333333,
         "outage_psr": 0.9,
         "outage_failures_alpha": 3,
         "outage_flips": 6,
-        "max_step_delta": 0.11624999999999999
+        "max_step_delta": 0.12396412151618433
       },
       "raw": {
-        "psr": 0.9066666666666666,
-        "outage_psr": 0.9,
+        "psr": 0.9,
+        "outage_psr": 0.92,
         "outage_failures_alpha": 3,
-        "outage_flips": 6,
+        "outage_flips": 4,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -1685,11 +1686,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.92,
-        "outage_psr": 0.96,
-        "outage_failures_alpha": 0,
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.94,
+        "outage_failures_alpha": 1,
         "outage_flips": 12,
-        "max_step_delta": 0.118346111913085
+        "max_step_delta": 0.11624999999999999
       },
       "static_m3_gray": {
         "psr": 0.88,
@@ -1703,16 +1704,16 @@
       "sim_seed": 332,
       "loom_seed": 806,
       "loom": {
-        "psr": 0.8866666666666667,
-        "outage_psr": 0.78,
-        "outage_failures_alpha": 10,
-        "outage_flips": 15,
-        "max_step_delta": 0.11624999999999999
+        "psr": 0.92,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 4,
+        "outage_flips": 8,
+        "max_step_delta": 0.1162978804581071
       },
       "raw": {
-        "psr": 0.9133333333333333,
-        "outage_psr": 0.82,
-        "outage_failures_alpha": 7,
+        "psr": 0.9,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 9,
         "outage_flips": 7,
         "max_step_delta": 1.0
       },
@@ -1738,11 +1739,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.92,
-        "outage_psr": 0.88,
-        "outage_failures_alpha": 5,
-        "outage_flips": 25,
-        "max_step_delta": 0.11648651585029877
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.9,
+        "outage_failures_alpha": 4,
+        "outage_flips": 26,
+        "max_step_delta": 0.11624999999999999
       },
       "static_m3_gray": {
         "psr": 0.8933333333333333,
@@ -1756,17 +1757,17 @@
       "sim_seed": 342,
       "loom_seed": 807,
       "loom": {
-        "psr": 0.84,
-        "outage_psr": 0.64,
-        "outage_failures_alpha": 14,
-        "outage_flips": 13,
+        "psr": 0.82,
+        "outage_psr": 0.62,
+        "outage_failures_alpha": 17,
+        "outage_flips": 17,
         "max_step_delta": 0.11624999999999999
       },
       "raw": {
-        "psr": 0.8466666666666667,
-        "outage_psr": 0.68,
-        "outage_failures_alpha": 12,
-        "outage_flips": 11,
+        "psr": 0.8666666666666667,
+        "outage_psr": 0.72,
+        "outage_failures_alpha": 10,
+        "outage_flips": 9,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -1791,11 +1792,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.8733333333333333,
-        "outage_psr": 0.74,
-        "outage_failures_alpha": 11,
-        "outage_flips": 26,
-        "max_step_delta": 0.11753133581965447
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 9,
+        "outage_flips": 25,
+        "max_step_delta": 0.11831805854985888
       },
       "static_m3_gray": {
         "psr": 0.8666666666666667,
@@ -1809,17 +1810,17 @@
       "sim_seed": 352,
       "loom_seed": 808,
       "loom": {
-        "psr": 0.8933333333333333,
-        "outage_psr": 0.78,
-        "outage_failures_alpha": 11,
-        "outage_flips": 17,
-        "max_step_delta": 0.11031355634750628
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 9,
+        "outage_flips": 13,
+        "max_step_delta": 0.11704788045810713
       },
       "raw": {
         "psr": 0.9266666666666666,
         "outage_psr": 0.88,
         "outage_failures_alpha": 6,
-        "outage_flips": 8,
+        "outage_flips": 9,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -1847,8 +1848,8 @@
         "psr": 0.9266666666666666,
         "outage_psr": 0.88,
         "outage_failures_alpha": 6,
-        "outage_flips": 27,
-        "max_step_delta": 0.11624999999999999
+        "outage_flips": 25,
+        "max_step_delta": 0.1168810765147465
       },
       "static_m3_gray": {
         "psr": 0.8533333333333334,
@@ -1863,16 +1864,16 @@
       "loom_seed": 809,
       "loom": {
         "psr": 0.88,
-        "outage_psr": 0.78,
-        "outage_failures_alpha": 4,
-        "outage_flips": 8,
-        "max_step_delta": 0.12364765625
-      },
-      "raw": {
-        "psr": 0.8866666666666667,
         "outage_psr": 0.8,
         "outage_failures_alpha": 3,
         "outage_flips": 6,
+        "max_step_delta": 0.12364765625
+      },
+      "raw": {
+        "psr": 0.8733333333333333,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 4,
+        "outage_flips": 7,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -1900,7 +1901,7 @@
         "psr": 0.8866666666666667,
         "outage_psr": 0.8,
         "outage_failures_alpha": 3,
-        "outage_flips": 14,
+        "outage_flips": 12,
         "max_step_delta": 0.12364765625
       },
       "static_m3_gray": {
@@ -1915,16 +1916,16 @@
       "sim_seed": 372,
       "loom_seed": 810,
       "loom": {
-        "psr": 0.8533333333333334,
-        "outage_psr": 0.66,
-        "outage_failures_alpha": 13,
-        "outage_flips": 15,
-        "max_step_delta": 0.11624999999999996
+        "psr": 0.8466666666666667,
+        "outage_psr": 0.64,
+        "outage_failures_alpha": 14,
+        "outage_flips": 17,
+        "max_step_delta": 0.11758056946213322
       },
       "raw": {
-        "psr": 0.8866666666666667,
-        "outage_psr": 0.76,
-        "outage_failures_alpha": 8,
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 7,
         "outage_flips": 9,
         "max_step_delta": 1.0
       },
@@ -1954,7 +1955,7 @@
         "outage_psr": 0.7,
         "outage_failures_alpha": 12,
         "outage_flips": 29,
-        "max_step_delta": 0.11624999999999999
+        "max_step_delta": 0.11758056946213322
       },
       "static_m3_gray": {
         "psr": 0.9066666666666666,
@@ -1968,17 +1969,17 @@
       "sim_seed": 382,
       "loom_seed": 811,
       "loom": {
-        "psr": 0.88,
-        "outage_psr": 0.76,
-        "outage_failures_alpha": 10,
-        "outage_flips": 17,
-        "max_step_delta": 0.11285915550438774
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 8,
+        "outage_flips": 13,
+        "max_step_delta": 0.11624999999999999
       },
       "raw": {
-        "psr": 0.8866666666666667,
-        "outage_psr": 0.78,
-        "outage_failures_alpha": 9,
-        "outage_flips": 5,
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 5,
+        "outage_flips": 7,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -2003,11 +2004,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.8933333333333333,
-        "outage_psr": 0.8,
-        "outage_failures_alpha": 8,
-        "outage_flips": 24,
-        "max_step_delta": 0.11624999999999999
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 6,
+        "outage_flips": 15,
+        "max_step_delta": 0.11699511931291655
       },
       "static_m3_gray": {
         "psr": 0.9133333333333333,
@@ -2021,17 +2022,17 @@
       "sim_seed": 392,
       "loom_seed": 812,
       "loom": {
-        "psr": 0.8866666666666667,
+        "psr": 0.8933333333333333,
         "outage_psr": 0.84,
         "outage_failures_alpha": 5,
         "outage_flips": 10,
-        "max_step_delta": 0.11255701105468985
+        "max_step_delta": 0.11624999999999999
       },
       "raw": {
         "psr": 0.9066666666666666,
         "outage_psr": 0.9,
         "outage_failures_alpha": 2,
-        "outage_flips": 3,
+        "outage_flips": 4,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -2074,17 +2075,17 @@
       "sim_seed": 402,
       "loom_seed": 813,
       "loom": {
-        "psr": 0.9,
-        "outage_psr": 0.78,
-        "outage_failures_alpha": 9,
-        "outage_flips": 18,
-        "max_step_delta": 0.09629381932775327
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 8,
+        "outage_flips": 13,
+        "max_step_delta": 0.1167478804581071
       },
       "raw": {
-        "psr": 0.92,
-        "outage_psr": 0.86,
-        "outage_failures_alpha": 6,
-        "outage_flips": 8,
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 7,
+        "outage_flips": 10,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -2109,11 +2110,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.9066666666666666,
-        "outage_psr": 0.78,
-        "outage_failures_alpha": 9,
-        "outage_flips": 18,
-        "max_step_delta": 0.09629381932775327
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 8,
+        "outage_flips": 13,
+        "max_step_delta": 0.1167478804581071
       },
       "static_m3_gray": {
         "psr": 0.92,
@@ -2127,17 +2128,17 @@
       "sim_seed": 412,
       "loom_seed": 814,
       "loom": {
-        "psr": 0.9066666666666666,
-        "outage_psr": 0.8,
-        "outage_failures_alpha": 8,
-        "outage_flips": 15,
-        "max_step_delta": 0.11624999999999999
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 7,
+        "outage_flips": 14,
+        "max_step_delta": 0.11816109598978072
       },
       "raw": {
-        "psr": 0.9466666666666667,
-        "outage_psr": 0.94,
-        "outage_failures_alpha": 2,
-        "outage_flips": 4,
+        "psr": 0.94,
+        "outage_psr": 0.92,
+        "outage_failures_alpha": 3,
+        "outage_flips": 6,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -2165,8 +2166,8 @@
         "psr": 0.92,
         "outage_psr": 0.86,
         "outage_failures_alpha": 5,
-        "outage_flips": 15,
-        "max_step_delta": 0.11624999999999999
+        "outage_flips": 14,
+        "max_step_delta": 0.11835314101113072
       },
       "static_m3_gray": {
         "psr": 0.8466666666666667,
@@ -2180,17 +2181,17 @@
       "sim_seed": 422,
       "loom_seed": 815,
       "loom": {
-        "psr": 0.9333333333333333,
+        "psr": 0.9266666666666666,
         "outage_psr": 0.94,
         "outage_failures_alpha": 3,
-        "outage_flips": 6,
-        "max_step_delta": 0.12305940051225922
+        "outage_flips": 5,
+        "max_step_delta": 0.11647819818267821
       },
       "raw": {
-        "psr": 0.94,
+        "psr": 0.9333333333333333,
         "outage_psr": 0.94,
         "outage_failures_alpha": 2,
-        "outage_flips": 4,
+        "outage_flips": 3,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -2215,11 +2216,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.9333333333333333,
-        "outage_psr": 0.94,
-        "outage_failures_alpha": 3,
-        "outage_flips": 14,
-        "max_step_delta": 0.12305940051225922
+        "psr": 0.94,
+        "outage_psr": 0.96,
+        "outage_failures_alpha": 2,
+        "outage_flips": 12,
+        "max_step_delta": 0.1185672179801763
       },
       "static_m3_gray": {
         "psr": 0.88,
@@ -2233,17 +2234,17 @@
       "sim_seed": 432,
       "loom_seed": 816,
       "loom": {
-        "psr": 0.8866666666666667,
-        "outage_psr": 0.74,
-        "outage_failures_alpha": 11,
-        "outage_flips": 15,
-        "max_step_delta": 0.10975506317500006
+        "psr": 0.88,
+        "outage_psr": 0.72,
+        "outage_failures_alpha": 12,
+        "outage_flips": 17,
+        "max_step_delta": 0.11624999999999999
       },
       "raw": {
-        "psr": 0.9,
-        "outage_psr": 0.82,
-        "outage_failures_alpha": 7,
-        "outage_flips": 7,
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 6,
+        "outage_flips": 8,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -2272,7 +2273,7 @@
         "outage_psr": 0.78,
         "outage_failures_alpha": 9,
         "outage_flips": 21,
-        "max_step_delta": 0.11624999999999999
+        "max_step_delta": 0.1185672179801763
       },
       "static_m3_gray": {
         "psr": 0.9066666666666666,
@@ -2286,16 +2287,16 @@
       "sim_seed": 442,
       "loom_seed": 817,
       "loom": {
-        "psr": 0.9266666666666666,
+        "psr": 0.9333333333333333,
         "outage_psr": 0.88,
         "outage_failures_alpha": 4,
         "outage_flips": 8,
         "max_step_delta": 0.11624999999999999
       },
       "raw": {
-        "psr": 0.9133333333333333,
-        "outage_psr": 0.86,
-        "outage_failures_alpha": 5,
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 4,
         "outage_flips": 6,
         "max_step_delta": 1.0
       },
@@ -2321,11 +2322,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.94,
-        "outage_psr": 0.9,
-        "outage_failures_alpha": 3,
-        "outage_flips": 10,
-        "max_step_delta": 0.12364765625
+        "psr": 0.92,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 5,
+        "outage_flips": 14,
+        "max_step_delta": 0.11758056946213322
       },
       "static_m3_gray": {
         "psr": 0.9333333333333333,
@@ -2340,16 +2341,16 @@
       "loom_seed": 818,
       "loom": {
         "psr": 0.8933333333333333,
-        "outage_psr": 0.74,
+        "outage_psr": 0.78,
         "outage_failures_alpha": 11,
-        "outage_flips": 17,
-        "max_step_delta": 0.10974384034306184
+        "outage_flips": 15,
+        "max_step_delta": 0.11839505083871343
       },
       "raw": {
-        "psr": 0.9266666666666666,
-        "outage_psr": 0.8,
-        "outage_failures_alpha": 6,
-        "outage_flips": 10,
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.76,
+        "outage_failures_alpha": 8,
+        "outage_flips": 14,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -2374,11 +2375,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.9133333333333333,
-        "outage_psr": 0.82,
+        "psr": 0.92,
+        "outage_psr": 0.86,
         "outage_failures_alpha": 7,
-        "outage_flips": 33,
-        "max_step_delta": 0.11624999999999999
+        "outage_flips": 31,
+        "max_step_delta": 0.12366592623676491
       },
       "static_m3_gray": {
         "psr": 0.92,
@@ -2392,17 +2393,17 @@
       "sim_seed": 462,
       "loom_seed": 819,
       "loom": {
-        "psr": 0.84,
-        "outage_psr": 0.74,
-        "outage_failures_alpha": 13,
-        "outage_flips": 15,
-        "max_step_delta": 0.11863366582466683
+        "psr": 0.82,
+        "outage_psr": 0.68,
+        "outage_failures_alpha": 16,
+        "outage_flips": 17,
+        "max_step_delta": 0.11624999999999999
       },
       "raw": {
-        "psr": 0.88,
-        "outage_psr": 0.84,
-        "outage_failures_alpha": 7,
-        "outage_flips": 5,
+        "psr": 0.8733333333333333,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 8,
+        "outage_flips": 9,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -2430,8 +2431,8 @@
         "psr": 0.8733333333333333,
         "outage_psr": 0.82,
         "outage_failures_alpha": 9,
-        "outage_flips": 29,
-        "max_step_delta": 0.1185672179801763
+        "outage_flips": 23,
+        "max_step_delta": 0.12076188875570987
       },
       "static_m3_gray": {
         "psr": 0.8733333333333333,
@@ -2445,17 +2446,17 @@
       "sim_seed": 472,
       "loom_seed": 820,
       "loom": {
-        "psr": 0.8933333333333333,
-        "outage_psr": 0.72,
-        "outage_failures_alpha": 9,
-        "outage_flips": 18,
-        "max_step_delta": 0.12364765625
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.76,
+        "outage_failures_alpha": 7,
+        "outage_flips": 14,
+        "max_step_delta": 0.11699511931291655
       },
       "raw": {
         "psr": 0.92,
-        "outage_psr": 0.88,
-        "outage_failures_alpha": 6,
-        "outage_flips": 1,
+        "outage_psr": 0.9,
+        "outage_failures_alpha": 5,
+        "outage_flips": 10,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -2483,8 +2484,8 @@
         "psr": 0.9266666666666666,
         "outage_psr": 0.84,
         "outage_failures_alpha": 5,
-        "outage_flips": 36,
-        "max_step_delta": 0.10891011229489234
+        "outage_flips": 32,
+        "max_step_delta": 0.11789220212430744
       },
       "static_m3_gray": {
         "psr": 0.9066666666666666,
@@ -2498,17 +2499,17 @@
       "sim_seed": 482,
       "loom_seed": 821,
       "loom": {
-        "psr": 0.9133333333333333,
-        "outage_psr": 0.8,
-        "outage_failures_alpha": 6,
-        "outage_flips": 10,
-        "max_step_delta": 0.11624999999999999
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 4,
+        "outage_flips": 7,
+        "max_step_delta": 0.11792121552259732
       },
       "raw": {
         "psr": 0.9266666666666666,
         "outage_psr": 0.84,
         "outage_failures_alpha": 4,
-        "outage_flips": 7,
+        "outage_flips": 8,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -2533,11 +2534,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.94,
+        "psr": 0.92,
         "outage_psr": 0.84,
         "outage_failures_alpha": 4,
-        "outage_flips": 12,
-        "max_step_delta": 0.11796182670130628
+        "outage_flips": 14,
+        "max_step_delta": 0.121237491076018
       },
       "static_m3_gray": {
         "psr": 0.9,
@@ -2555,13 +2556,13 @@
         "outage_psr": 0.82,
         "outage_failures_alpha": 7,
         "outage_flips": 13,
-        "max_step_delta": 0.11624999999999999
+        "max_step_delta": 0.118062504208511
       },
       "raw": {
-        "psr": 0.9266666666666666,
-        "outage_psr": 0.86,
-        "outage_failures_alpha": 5,
-        "outage_flips": 9,
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 4,
+        "outage_flips": 8,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -2604,16 +2605,16 @@
       "sim_seed": 502,
       "loom_seed": 823,
       "loom": {
-        "psr": 0.8733333333333333,
+        "psr": 0.8666666666666667,
         "outage_psr": 0.76,
         "outage_failures_alpha": 10,
-        "outage_flips": 16,
-        "max_step_delta": 0.11104419191531756
+        "outage_flips": 17,
+        "max_step_delta": 0.1162978804581071
       },
       "raw": {
-        "psr": 0.9,
-        "outage_psr": 0.86,
-        "outage_failures_alpha": 4,
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 5,
         "outage_flips": 7,
         "max_step_delta": 1.0
       },
@@ -2639,11 +2640,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.8933333333333333,
-        "outage_psr": 0.82,
-        "outage_failures_alpha": 7,
-        "outage_flips": 16,
-        "max_step_delta": 0.11624999999999999
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 9,
+        "outage_flips": 23,
+        "max_step_delta": 0.11975233446233424
       },
       "static_m3_gray": {
         "psr": 0.8733333333333333,
@@ -2657,17 +2658,17 @@
       "sim_seed": 512,
       "loom_seed": 824,
       "loom": {
-        "psr": 0.92,
-        "outage_psr": 0.84,
-        "outage_failures_alpha": 5,
-        "outage_flips": 10,
-        "max_step_delta": 0.11699511931291655
-      },
-      "raw": {
         "psr": 0.9266666666666666,
         "outage_psr": 0.86,
         "outage_failures_alpha": 4,
-        "outage_flips": 8,
+        "outage_flips": 7,
+        "max_step_delta": 0.11689788045810712
+      },
+      "raw": {
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 3,
+        "outage_flips": 5,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -2692,11 +2693,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.92,
-        "outage_psr": 0.86,
-        "outage_failures_alpha": 4,
-        "outage_flips": 19,
-        "max_step_delta": 0.11766019804559
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 3,
+        "outage_flips": 8,
+        "max_step_delta": 0.11808530303779166
       },
       "static_m3_gray": {
         "psr": 0.8866666666666667,
@@ -2717,9 +2718,9 @@
         "max_step_delta": 0.11779406580447499
       },
       "raw": {
-        "psr": 0.94,
-        "outage_psr": 0.92,
-        "outage_failures_alpha": 2,
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.9,
+        "outage_failures_alpha": 3,
         "outage_flips": 4,
         "max_step_delta": 1.0
       },
@@ -2745,9 +2746,9 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.9333333333333333,
-        "outage_psr": 0.88,
-        "outage_failures_alpha": 4,
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 5,
         "outage_flips": 34,
         "max_step_delta": 0.11779406580447499
       },
@@ -2763,17 +2764,17 @@
       "sim_seed": 532,
       "loom_seed": 826,
       "loom": {
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.76,
+        "outage_failures_alpha": 10,
+        "outage_flips": 16,
+        "max_step_delta": 0.11624999999999999
+      },
+      "raw": {
         "psr": 0.9,
         "outage_psr": 0.78,
         "outage_failures_alpha": 9,
-        "outage_flips": 15,
-        "max_step_delta": 0.11993342399621532
-      },
-      "raw": {
-        "psr": 0.92,
-        "outage_psr": 0.84,
-        "outage_failures_alpha": 6,
-        "outage_flips": 9,
+        "outage_flips": 5,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -2798,11 +2799,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.9333333333333333,
-        "outage_psr": 0.88,
-        "outage_failures_alpha": 4,
-        "outage_flips": 19,
-        "max_step_delta": 0.12259206553843448
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 6,
+        "outage_flips": 24,
+        "max_step_delta": 0.1168810765147465
       },
       "static_m3_gray": {
         "psr": 0.92,
@@ -2816,15 +2817,15 @@
       "sim_seed": 542,
       "loom_seed": 827,
       "loom": {
-        "psr": 0.92,
+        "psr": 0.9266666666666666,
         "outage_psr": 0.86,
         "outage_failures_alpha": 4,
         "outage_flips": 8,
-        "max_step_delta": 0.11624999999999999
+        "max_step_delta": 0.12076188875570987
       },
       "raw": {
-        "psr": 0.9333333333333333,
-        "outage_psr": 0.9,
+        "psr": 0.94,
+        "outage_psr": 0.88,
         "outage_failures_alpha": 2,
         "outage_flips": 4,
         "max_step_delta": 1.0
@@ -2855,7 +2856,7 @@
         "outage_psr": 0.88,
         "outage_failures_alpha": 4,
         "outage_flips": 18,
-        "max_step_delta": 0.1167478804581071
+        "max_step_delta": 0.11624999999999999
       },
       "static_m3_gray": {
         "psr": 0.9133333333333333,
@@ -2869,17 +2870,17 @@
       "sim_seed": 552,
       "loom_seed": 828,
       "loom": {
-        "psr": 0.8733333333333333,
-        "outage_psr": 0.74,
-        "outage_failures_alpha": 12,
-        "outage_flips": 16,
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 10,
+        "outage_flips": 17,
         "max_step_delta": 0.1236557218403932
       },
       "raw": {
-        "psr": 0.8933333333333333,
-        "outage_psr": 0.8,
-        "outage_failures_alpha": 9,
-        "outage_flips": 7,
+        "psr": 0.9,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 8,
+        "outage_flips": 11,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -2904,10 +2905,10 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.9,
-        "outage_psr": 0.82,
-        "outage_failures_alpha": 8,
-        "outage_flips": 17,
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 7,
+        "outage_flips": 19,
         "max_step_delta": 0.1236557218403932
       },
       "static_m3_gray": {
@@ -2922,17 +2923,17 @@
       "sim_seed": 562,
       "loom_seed": 829,
       "loom": {
-        "psr": 0.8933333333333333,
-        "outage_psr": 0.76,
-        "outage_failures_alpha": 10,
+        "psr": 0.88,
+        "outage_psr": 0.72,
+        "outage_failures_alpha": 12,
         "outage_flips": 13,
         "max_step_delta": 0.11973052099432957
       },
       "raw": {
-        "psr": 0.94,
-        "outage_psr": 0.9,
-        "outage_failures_alpha": 3,
-        "outage_flips": 5,
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 5,
+        "outage_flips": 9,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -2957,11 +2958,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.92,
+        "psr": 0.9133333333333333,
         "outage_psr": 0.84,
         "outage_failures_alpha": 6,
         "outage_flips": 15,
-        "max_step_delta": 0.11624999999999999
+        "max_step_delta": 0.12364765625
       },
       "static_m3_gray": {
         "psr": 0.9133333333333333,
@@ -2975,17 +2976,17 @@
       "sim_seed": 572,
       "loom_seed": 830,
       "loom": {
-        "psr": 0.8533333333333334,
-        "outage_psr": 0.74,
-        "outage_failures_alpha": 11,
-        "outage_flips": 15,
-        "max_step_delta": 0.11382006867594896
+        "psr": 0.8666666666666667,
+        "outage_psr": 0.72,
+        "outage_failures_alpha": 9,
+        "outage_flips": 18,
+        "max_step_delta": 0.11725328245993756
       },
       "raw": {
-        "psr": 0.88,
-        "outage_psr": 0.76,
-        "outage_failures_alpha": 7,
-        "outage_flips": 11,
+        "psr": 0.86,
+        "outage_psr": 0.74,
+        "outage_failures_alpha": 9,
+        "outage_flips": 8,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -3010,11 +3011,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.88,
-        "outage_psr": 0.8,
-        "outage_failures_alpha": 8,
-        "outage_flips": 29,
-        "max_step_delta": 0.12364765625000002
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 5,
+        "outage_flips": 32,
+        "max_step_delta": 0.11072984818782623
       },
       "static_m3_gray": {
         "psr": 0.8733333333333333,
@@ -3028,17 +3029,17 @@
       "sim_seed": 582,
       "loom_seed": 831,
       "loom": {
-        "psr": 0.8866666666666667,
-        "outage_psr": 0.74,
-        "outage_failures_alpha": 13,
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 9,
         "outage_flips": 15,
-        "max_step_delta": 0.1151653357468222
+        "max_step_delta": 0.11863366582466675
       },
       "raw": {
-        "psr": 0.9,
-        "outage_psr": 0.76,
-        "outage_failures_alpha": 11,
-        "outage_flips": 9,
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 6,
+        "outage_flips": 5,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -3063,11 +3064,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.9333333333333333,
-        "outage_psr": 0.88,
-        "outage_failures_alpha": 6,
-        "outage_flips": 31,
-        "max_step_delta": 0.11624999999999999
+        "psr": 0.9466666666666667,
+        "outage_psr": 0.94,
+        "outage_failures_alpha": 3,
+        "outage_flips": 26,
+        "max_step_delta": 0.11682609163570928
       },
       "static_m3_gray": {
         "psr": 0.9266666666666666,
@@ -3081,17 +3082,17 @@
       "sim_seed": 592,
       "loom_seed": 832,
       "loom": {
-        "psr": 0.92,
-        "outage_psr": 0.86,
-        "outage_failures_alpha": 4,
-        "outage_flips": 8,
-        "max_step_delta": 0.11709851057016502
-      },
-      "raw": {
-        "psr": 0.92,
+        "psr": 0.9,
         "outage_psr": 0.84,
         "outage_failures_alpha": 5,
-        "outage_flips": 9,
+        "outage_flips": 10,
+        "max_step_delta": 0.11624999999999999
+      },
+      "raw": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 3,
+        "outage_flips": 5,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -3116,11 +3117,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.9266666666666666,
+        "psr": 0.92,
         "outage_psr": 0.88,
         "outage_failures_alpha": 3,
-        "outage_flips": 20,
-        "max_step_delta": 0.12364765625
+        "outage_flips": 16,
+        "max_step_delta": 0.12302953536655964
       },
       "static_m3_gray": {
         "psr": 0.88,
@@ -3134,17 +3135,17 @@
       "sim_seed": 602,
       "loom_seed": 833,
       "loom": {
-        "psr": 0.8533333333333334,
-        "outage_psr": 0.66,
-        "outage_failures_alpha": 13,
-        "outage_flips": 15,
-        "max_step_delta": 0.11625000000000008
+        "psr": 0.8666666666666667,
+        "outage_psr": 0.68,
+        "outage_failures_alpha": 11,
+        "outage_flips": 14,
+        "max_step_delta": 0.11835314101113072
       },
       "raw": {
-        "psr": 0.8733333333333333,
-        "outage_psr": 0.72,
-        "outage_failures_alpha": 10,
-        "outage_flips": 9,
+        "psr": 0.86,
+        "outage_psr": 0.66,
+        "outage_failures_alpha": 12,
+        "outage_flips": 6,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -3169,11 +3170,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.8933333333333333,
-        "outage_psr": 0.76,
-        "outage_failures_alpha": 8,
-        "outage_flips": 21,
-        "max_step_delta": 0.12193806551067218
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.74,
+        "outage_failures_alpha": 9,
+        "outage_flips": 25,
+        "max_step_delta": 0.1187207423907401
       },
       "static_m3_gray": {
         "psr": 0.8866666666666667,
@@ -3187,11 +3188,11 @@
       "sim_seed": 612,
       "loom_seed": 834,
       "loom": {
-        "psr": 0.86,
-        "outage_psr": 0.76,
-        "outage_failures_alpha": 11,
+        "psr": 0.8733333333333333,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 10,
         "outage_flips": 15,
-        "max_step_delta": 0.11962521315171015
+        "max_step_delta": 0.12364765625
       },
       "raw": {
         "psr": 0.9,
@@ -3222,11 +3223,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.9,
-        "outage_psr": 0.86,
-        "outage_failures_alpha": 6,
-        "outage_flips": 18,
-        "max_step_delta": 0.12377343401618435
+        "psr": 0.88,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 9,
+        "outage_flips": 23,
+        "max_step_delta": 0.11624999999999999
       },
       "static_m3_gray": {
         "psr": 0.8866666666666667,
@@ -3240,17 +3241,17 @@
       "sim_seed": 622,
       "loom_seed": 835,
       "loom": {
-        "psr": 0.8466666666666667,
-        "outage_psr": 0.74,
-        "outage_failures_alpha": 7,
+        "psr": 0.84,
+        "outage_psr": 0.72,
+        "outage_failures_alpha": 8,
         "outage_flips": 14,
-        "max_step_delta": 0.11534329884265052
+        "max_step_delta": 0.12048163303030618
       },
       "raw": {
-        "psr": 0.86,
+        "psr": 0.8466666666666667,
         "outage_psr": 0.78,
         "outage_failures_alpha": 5,
-        "outage_flips": 5,
+        "outage_flips": 8,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -3275,11 +3276,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.8533333333333334,
-        "outage_psr": 0.76,
-        "outage_failures_alpha": 7,
-        "outage_flips": 36,
-        "max_step_delta": 0.11715275575620207
+        "psr": 0.86,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 5,
+        "outage_flips": 28,
+        "max_step_delta": 0.10872569013132997
       },
       "static_m3_gray": {
         "psr": 0.8466666666666667,
@@ -3293,17 +3294,17 @@
       "sim_seed": 632,
       "loom_seed": 836,
       "loom": {
-        "psr": 0.9333333333333333,
+        "psr": 0.94,
         "outage_psr": 0.86,
-        "outage_failures_alpha": 5,
-        "outage_flips": 10,
-        "max_step_delta": 0.11701510228681558
+        "outage_failures_alpha": 4,
+        "outage_flips": 8,
+        "max_step_delta": 0.11821628163521794
       },
       "raw": {
-        "psr": 0.9466666666666667,
-        "outage_psr": 0.88,
-        "outage_failures_alpha": 3,
-        "outage_flips": 6,
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 5,
+        "outage_flips": 9,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -3329,10 +3330,10 @@
       },
       "loom_gray": {
         "psr": 0.9266666666666666,
-        "outage_psr": 0.86,
-        "outage_failures_alpha": 5,
-        "outage_flips": 26,
-        "max_step_delta": 0.11689972969475698
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 6,
+        "outage_flips": 28,
+        "max_step_delta": 0.1122313936040422
       },
       "static_m3_gray": {
         "psr": 0.9266666666666666,
@@ -3346,17 +3347,17 @@
       "sim_seed": 642,
       "loom_seed": 837,
       "loom": {
-        "psr": 0.8933333333333333,
-        "outage_psr": 0.8,
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.82,
         "outage_failures_alpha": 5,
         "outage_flips": 10,
-        "max_step_delta": 0.11651859840126941
+        "max_step_delta": 0.11839308289222217
       },
       "raw": {
-        "psr": 0.8933333333333333,
-        "outage_psr": 0.82,
-        "outage_failures_alpha": 6,
-        "outage_flips": 12,
+        "psr": 0.9,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 4,
+        "outage_flips": 8,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -3381,11 +3382,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.9133333333333333,
+        "psr": 0.9066666666666666,
         "outage_psr": 0.84,
-        "outage_failures_alpha": 3,
-        "outage_flips": 14,
-        "max_step_delta": 0.12344668832588891
+        "outage_failures_alpha": 4,
+        "outage_flips": 19,
+        "max_step_delta": 0.11839308289222217
       },
       "static_m3_gray": {
         "psr": 0.92,
@@ -3399,17 +3400,17 @@
       "sim_seed": 652,
       "loom_seed": 838,
       "loom": {
-        "psr": 0.8866666666666667,
-        "outage_psr": 0.74,
-        "outage_failures_alpha": 10,
-        "outage_flips": 13,
-        "max_step_delta": 0.11455395580686367
-      },
-      "raw": {
-        "psr": 0.88,
+        "psr": 0.8933333333333333,
         "outage_psr": 0.76,
         "outage_failures_alpha": 9,
-        "outage_flips": 7,
+        "outage_flips": 16,
+        "max_step_delta": 0.11655588518025217
+      },
+      "raw": {
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 7,
+        "outage_flips": 11,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -3434,11 +3435,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.9133333333333333,
-        "outage_psr": 0.82,
-        "outage_failures_alpha": 6,
-        "outage_flips": 15,
-        "max_step_delta": 0.12209714003343458
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 7,
+        "outage_flips": 22,
+        "max_step_delta": 0.11687992613473008
       },
       "static_m3_gray": {
         "psr": 0.84,
@@ -3452,17 +3453,17 @@
       "sim_seed": 662,
       "loom_seed": 839,
       "loom": {
-        "psr": 0.92,
-        "outage_psr": 0.82,
-        "outage_failures_alpha": 7,
-        "outage_flips": 14,
-        "max_step_delta": 0.11624999999999999
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 6,
+        "outage_flips": 12,
+        "max_step_delta": 0.11647819818267821
       },
       "raw": {
-        "psr": 0.94,
-        "outage_psr": 0.9,
-        "outage_failures_alpha": 3,
-        "outage_flips": 5,
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 5,
+        "outage_flips": 8,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -3487,11 +3488,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.9266666666666666,
-        "outage_psr": 0.84,
-        "outage_failures_alpha": 6,
-        "outage_flips": 20,
-        "max_step_delta": 0.11624999999999999
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 5,
+        "outage_flips": 15,
+        "max_step_delta": 0.11758056946213322
       },
       "static_m3_gray": {
         "psr": 0.8733333333333333,
@@ -3505,17 +3506,17 @@
       "sim_seed": 672,
       "loom_seed": 840,
       "loom": {
-        "psr": 0.9066666666666666,
-        "outage_psr": 0.84,
-        "outage_failures_alpha": 4,
-        "outage_flips": 8,
-        "max_step_delta": 0.11863366582466675
+        "psr": 0.9,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 5,
+        "outage_flips": 10,
+        "max_step_delta": 0.12364765625
       },
       "raw": {
-        "psr": 0.92,
-        "outage_psr": 0.88,
-        "outage_failures_alpha": 1,
-        "outage_flips": 2,
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 2,
+        "outage_flips": 4,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -3543,8 +3544,8 @@
         "psr": 0.9066666666666666,
         "outage_psr": 0.84,
         "outage_failures_alpha": 4,
-        "outage_flips": 27,
-        "max_step_delta": 0.12139262041289323
+        "outage_flips": 26,
+        "max_step_delta": 0.12364765625
       },
       "static_m3_gray": {
         "psr": 0.9066666666666666,
@@ -3562,13 +3563,13 @@
         "outage_psr": 0.9,
         "outage_failures_alpha": 3,
         "outage_flips": 6,
-        "max_step_delta": 0.11689788045810712
+        "max_step_delta": 0.11624999999999999
       },
       "raw": {
         "psr": 0.96,
-        "outage_psr": 0.94,
-        "outage_failures_alpha": 0,
-        "outage_flips": 0,
+        "outage_psr": 0.9,
+        "outage_failures_alpha": 2,
+        "outage_flips": 4,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -3596,8 +3597,8 @@
         "psr": 0.9466666666666667,
         "outage_psr": 0.92,
         "outage_failures_alpha": 2,
-        "outage_flips": 14,
-        "max_step_delta": 0.11624999999999999
+        "outage_flips": 10,
+        "max_step_delta": 0.11829548653431507
       },
       "static_m3_gray": {
         "psr": 0.9133333333333333,
@@ -3611,17 +3612,17 @@
       "sim_seed": 692,
       "loom_seed": 842,
       "loom": {
-        "psr": 0.9133333333333333,
-        "outage_psr": 0.78,
-        "outage_failures_alpha": 10,
-        "outage_flips": 14,
-        "max_step_delta": 0.11592234398316681
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.76,
+        "outage_failures_alpha": 11,
+        "outage_flips": 16,
+        "max_step_delta": 0.10999232170855966
       },
       "raw": {
-        "psr": 0.9333333333333333,
-        "outage_psr": 0.84,
-        "outage_failures_alpha": 7,
-        "outage_flips": 9,
+        "psr": 0.92,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 9,
+        "outage_flips": 11,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -3646,11 +3647,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.9333333333333333,
-        "outage_psr": 0.84,
-        "outage_failures_alpha": 7,
-        "outage_flips": 29,
-        "max_step_delta": 0.11637348313625909
+        "psr": 0.94,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 6,
+        "outage_flips": 30,
+        "max_step_delta": 0.12364765625
       },
       "static_m3_gray": {
         "psr": 0.9,
@@ -3664,17 +3665,17 @@
       "sim_seed": 702,
       "loom_seed": 843,
       "loom": {
-        "psr": 0.8466666666666667,
+        "psr": 0.84,
         "outage_psr": 0.68,
         "outage_failures_alpha": 12,
         "outage_flips": 19,
-        "max_step_delta": 0.11206315983204933
+        "max_step_delta": 0.12233721328284011
       },
       "raw": {
-        "psr": 0.8666666666666667,
-        "outage_psr": 0.74,
-        "outage_failures_alpha": 9,
-        "outage_flips": 17,
+        "psr": 0.8533333333333334,
+        "outage_psr": 0.72,
+        "outage_failures_alpha": 10,
+        "outage_flips": 16,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -3717,17 +3718,17 @@
       "sim_seed": 712,
       "loom_seed": 844,
       "loom": {
-        "psr": 0.8666666666666667,
-        "outage_psr": 0.74,
-        "outage_failures_alpha": 11,
-        "outage_flips": 15,
+        "psr": 0.8533333333333334,
+        "outage_psr": 0.7,
+        "outage_failures_alpha": 13,
+        "outage_flips": 18,
         "max_step_delta": 0.11624999999999999
       },
       "raw": {
         "psr": 0.8866666666666667,
         "outage_psr": 0.8,
         "outage_failures_alpha": 8,
-        "outage_flips": 9,
+        "outage_flips": 13,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -3755,8 +3756,8 @@
         "psr": 0.8933333333333333,
         "outage_psr": 0.82,
         "outage_failures_alpha": 7,
-        "outage_flips": 37,
-        "max_step_delta": 0.11341681736169179
+        "outage_flips": 35,
+        "max_step_delta": 0.1121703284886705
       },
       "static_m3_gray": {
         "psr": 0.9133333333333333,
@@ -3770,17 +3771,17 @@
       "sim_seed": 722,
       "loom_seed": 845,
       "loom": {
-        "psr": 0.9266666666666666,
-        "outage_psr": 0.9,
-        "outage_failures_alpha": 5,
-        "outage_flips": 9,
-        "max_step_delta": 0.11624999999999999
+        "psr": 0.94,
+        "outage_psr": 0.92,
+        "outage_failures_alpha": 3,
+        "outage_flips": 6,
+        "max_step_delta": 0.1194739603713535
       },
       "raw": {
-        "psr": 0.9,
-        "outage_psr": 0.8,
-        "outage_failures_alpha": 9,
-        "outage_flips": 13,
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.9,
+        "outage_failures_alpha": 4,
+        "outage_flips": 8,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -3806,10 +3807,10 @@
       },
       "loom_gray": {
         "psr": 0.94,
-        "outage_psr": 0.94,
-        "outage_failures_alpha": 3,
-        "outage_flips": 11,
-        "max_step_delta": 0.11624999999999999
+        "outage_psr": 0.96,
+        "outage_failures_alpha": 2,
+        "outage_flips": 10,
+        "max_step_delta": 0.12386545250998682
       },
       "static_m3_gray": {
         "psr": 0.8466666666666667,
@@ -3824,16 +3825,16 @@
       "loom_seed": 846,
       "loom": {
         "psr": 0.88,
-        "outage_psr": 0.8,
-        "outage_failures_alpha": 6,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 5,
         "outage_flips": 10,
-        "max_step_delta": 0.12364765625
+        "max_step_delta": 0.12452697129575183
       },
       "raw": {
-        "psr": 0.88,
-        "outage_psr": 0.78,
-        "outage_failures_alpha": 6,
-        "outage_flips": 11,
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 4,
+        "outage_flips": 8,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -3859,10 +3860,10 @@
       },
       "loom_gray": {
         "psr": 0.9066666666666666,
-        "outage_psr": 0.84,
+        "outage_psr": 0.88,
         "outage_failures_alpha": 3,
-        "outage_flips": 9,
-        "max_step_delta": 0.11811573049138863
+        "outage_flips": 20,
+        "max_step_delta": 0.11680918493276787
       },
       "static_m3_gray": {
         "psr": 0.8466666666666667,
@@ -3876,17 +3877,17 @@
       "sim_seed": 742,
       "loom_seed": 847,
       "loom": {
-        "psr": 0.9066666666666666,
-        "outage_psr": 0.78,
-        "outage_failures_alpha": 7,
-        "outage_flips": 14,
-        "max_step_delta": 0.11689788045810712
+        "psr": 0.92,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 5,
+        "outage_flips": 10,
+        "max_step_delta": 0.12364765625
       },
       "raw": {
         "psr": 0.9133333333333333,
-        "outage_psr": 0.8,
+        "outage_psr": 0.84,
         "outage_failures_alpha": 6,
-        "outage_flips": 9,
+        "outage_flips": 5,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -3911,11 +3912,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.9266666666666666,
-        "outage_psr": 0.86,
-        "outage_failures_alpha": 5,
-        "outage_flips": 26,
-        "max_step_delta": 0.11386153509747088
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 3,
+        "outage_flips": 18,
+        "max_step_delta": 0.12349532091823298
       },
       "static_m3_gray": {
         "psr": 0.8733333333333333,
@@ -3929,17 +3930,17 @@
       "sim_seed": 752,
       "loom_seed": 848,
       "loom": {
-        "psr": 0.88,
-        "outage_psr": 0.84,
-        "outage_failures_alpha": 8,
-        "outage_flips": 13,
-        "max_step_delta": 0.12365510915904543
+        "psr": 0.8733333333333333,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 9,
+        "outage_flips": 14,
+        "max_step_delta": 0.11624999999999999
       },
       "raw": {
         "psr": 0.9133333333333333,
-        "outage_psr": 0.9,
-        "outage_failures_alpha": 5,
-        "outage_flips": 9,
+        "outage_psr": 0.92,
+        "outage_failures_alpha": 4,
+        "outage_flips": 5,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -3965,10 +3966,10 @@
       },
       "loom_gray": {
         "psr": 0.9066666666666666,
-        "outage_psr": 0.9,
-        "outage_failures_alpha": 5,
-        "outage_flips": 21,
-        "max_step_delta": 0.12365510915904543
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 7,
+        "outage_flips": 26,
+        "max_step_delta": 0.11729706579127308
       },
       "static_m3_gray": {
         "psr": 0.86,
@@ -3982,11 +3983,11 @@
       "sim_seed": 762,
       "loom_seed": 849,
       "loom": {
-        "psr": 0.82,
-        "outage_psr": 0.68,
-        "outage_failures_alpha": 10,
-        "outage_flips": 18,
-        "max_step_delta": 0.10672933734715995
+        "psr": 0.8066666666666666,
+        "outage_psr": 0.62,
+        "outage_failures_alpha": 13,
+        "outage_flips": 19,
+        "max_step_delta": 0.11811573049138863
       },
       "raw": {
         "psr": 0.8266666666666667,
@@ -4017,11 +4018,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.8466666666666667,
+        "psr": 0.84,
         "outage_psr": 0.74,
         "outage_failures_alpha": 8,
-        "outage_flips": 32,
-        "max_step_delta": 0.11624999999999999
+        "outage_flips": 29,
+        "max_step_delta": 0.12052574176663339
       },
       "static_m3_gray": {
         "psr": 0.8733333333333333,
@@ -4035,17 +4036,17 @@
       "sim_seed": 772,
       "loom_seed": 850,
       "loom": {
-        "psr": 0.9133333333333333,
+        "psr": 0.9066666666666666,
         "outage_psr": 0.82,
-        "outage_failures_alpha": 7,
+        "outage_failures_alpha": 8,
         "outage_flips": 13,
         "max_step_delta": 0.11624999999999999
       },
       "raw": {
-        "psr": 0.92,
-        "outage_psr": 0.82,
-        "outage_failures_alpha": 6,
-        "outage_flips": 10,
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 4,
+        "outage_flips": 7,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -4070,11 +4071,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.92,
-        "outage_psr": 0.84,
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.86,
         "outage_failures_alpha": 6,
-        "outage_flips": 17,
-        "max_step_delta": 0.12207050712856993
+        "outage_flips": 15,
+        "max_step_delta": 0.12364765625
       },
       "static_m3_gray": {
         "psr": 0.9266666666666666,
@@ -4092,13 +4093,13 @@
         "outage_psr": 0.86,
         "outage_failures_alpha": 6,
         "outage_flips": 12,
-        "max_step_delta": 0.11624999999999999
+        "max_step_delta": 0.11864267863598577
       },
       "raw": {
-        "psr": 0.94,
-        "outage_psr": 0.9,
-        "outage_failures_alpha": 3,
-        "outage_flips": 6,
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 4,
+        "outage_flips": 8,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -4127,7 +4128,7 @@
         "outage_psr": 0.94,
         "outage_failures_alpha": 3,
         "outage_flips": 24,
-        "max_step_delta": 0.11624999999999999
+        "max_step_delta": 0.11836163227979718
       },
       "static_m3_gray": {
         "psr": 0.92,
@@ -4141,17 +4142,17 @@
       "sim_seed": 792,
       "loom_seed": 852,
       "loom": {
-        "psr": 0.88,
-        "outage_psr": 0.74,
-        "outage_failures_alpha": 8,
-        "outage_flips": 15,
-        "max_step_delta": 0.1013079748138701
+        "psr": 0.8666666666666667,
+        "outage_psr": 0.68,
+        "outage_failures_alpha": 11,
+        "outage_flips": 19,
+        "max_step_delta": 0.11624999999999999
       },
       "raw": {
-        "psr": 0.8933333333333333,
+        "psr": 0.9,
         "outage_psr": 0.78,
         "outage_failures_alpha": 6,
-        "outage_flips": 12,
+        "outage_flips": 7,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -4176,11 +4177,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.9133333333333333,
+        "psr": 0.9,
         "outage_psr": 0.88,
-        "outage_failures_alpha": 3,
-        "outage_flips": 35,
-        "max_step_delta": 0.10514095907043364
+        "outage_failures_alpha": 5,
+        "outage_flips": 39,
+        "max_step_delta": 0.12092429413327696
       },
       "static_m3_gray": {
         "psr": 0.8933333333333333,
@@ -4194,17 +4195,17 @@
       "sim_seed": 802,
       "loom_seed": 853,
       "loom": {
-        "psr": 0.8933333333333333,
-        "outage_psr": 0.82,
-        "outage_failures_alpha": 7,
-        "outage_flips": 13,
-        "max_step_delta": 0.11624999999999999
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 5,
+        "outage_flips": 10,
+        "max_step_delta": 0.12366377623197564
       },
       "raw": {
-        "psr": 0.8866666666666667,
-        "outage_psr": 0.8,
-        "outage_failures_alpha": 8,
-        "outage_flips": 16,
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 4,
+        "outage_flips": 8,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -4229,11 +4230,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.9,
-        "outage_psr": 0.84,
-        "outage_failures_alpha": 6,
-        "outage_flips": 17,
-        "max_step_delta": 0.10325331917262315
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 4,
+        "outage_flips": 14,
+        "max_step_delta": 0.12366377623197564
       },
       "static_m3_gray": {
         "psr": 0.9,
@@ -4247,17 +4248,17 @@
       "sim_seed": 812,
       "loom_seed": 854,
       "loom": {
-        "psr": 0.9266666666666666,
-        "outage_psr": 0.8,
-        "outage_failures_alpha": 9,
-        "outage_flips": 16,
-        "max_step_delta": 0.10592051592279395
+        "psr": 0.92,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 10,
+        "outage_flips": 17,
+        "max_step_delta": 0.11624999999999999
       },
       "raw": {
-        "psr": 0.9533333333333334,
-        "outage_psr": 0.92,
-        "outage_failures_alpha": 4,
-        "outage_flips": 7,
+        "psr": 0.96,
+        "outage_psr": 0.94,
+        "outage_failures_alpha": 3,
+        "outage_flips": 5,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -4285,8 +4286,8 @@
         "psr": 0.94,
         "outage_psr": 0.84,
         "outage_failures_alpha": 7,
-        "outage_flips": 16,
-        "max_step_delta": 0.11624999999999999
+        "outage_flips": 18,
+        "max_step_delta": 0.1167478804581071
       },
       "static_m3_gray": {
         "psr": 0.8933333333333333,
@@ -4300,16 +4301,16 @@
       "sim_seed": 822,
       "loom_seed": 855,
       "loom": {
-        "psr": 0.8933333333333333,
-        "outage_psr": 0.72,
-        "outage_failures_alpha": 11,
-        "outage_flips": 16,
-        "max_step_delta": 0.11404064289902005
+        "psr": 0.92,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 7,
+        "outage_flips": 14,
+        "max_step_delta": 0.0970757831026075
       },
       "raw": {
-        "psr": 0.9266666666666666,
-        "outage_psr": 0.84,
-        "outage_failures_alpha": 5,
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 7,
         "outage_flips": 7,
         "max_step_delta": 1.0
       },
@@ -4335,11 +4336,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.92,
-        "outage_psr": 0.8,
-        "outage_failures_alpha": 7,
-        "outage_flips": 18,
-        "max_step_delta": 0.11913317481481217
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 8,
+        "outage_flips": 26,
+        "max_step_delta": 0.11725611756486963
       },
       "static_m3_gray": {
         "psr": 0.92,
@@ -4357,13 +4358,13 @@
         "outage_psr": 0.9,
         "outage_failures_alpha": 5,
         "outage_flips": 10,
-        "max_step_delta": 0.11659788045810712
+        "max_step_delta": 0.11624999999999999
       },
       "raw": {
-        "psr": 0.92,
-        "outage_psr": 0.94,
-        "outage_failures_alpha": 3,
-        "outage_flips": 6,
+        "psr": 0.9266666666666666,
+        "outage_psr": 0.92,
+        "outage_failures_alpha": 2,
+        "outage_flips": 4,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -4392,7 +4393,7 @@
         "outage_psr": 0.94,
         "outage_failures_alpha": 3,
         "outage_flips": 18,
-        "max_step_delta": 0.11933526179533188
+        "max_step_delta": 0.11811573049138863
       },
       "static_m3_gray": {
         "psr": 0.8933333333333333,
@@ -4410,13 +4411,13 @@
         "outage_psr": 0.8,
         "outage_failures_alpha": 8,
         "outage_flips": 13,
-        "max_step_delta": 0.11364290521169484
+        "max_step_delta": 0.11781869037237322
       },
       "raw": {
-        "psr": 0.8866666666666667,
-        "outage_psr": 0.86,
-        "outage_failures_alpha": 5,
-        "outage_flips": 9,
+        "psr": 0.86,
+        "outage_psr": 0.8,
+        "outage_failures_alpha": 9,
+        "outage_flips": 7,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -4441,11 +4442,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.8933333333333333,
+        "psr": 0.8866666666666667,
         "outage_psr": 0.88,
         "outage_failures_alpha": 4,
-        "outage_flips": 23,
-        "max_step_delta": 0.11856270466582605
+        "outage_flips": 21,
+        "max_step_delta": 0.11712188520953232
       },
       "static_m3_gray": {
         "psr": 0.8533333333333334,
@@ -4460,16 +4461,16 @@
       "loom_seed": 858,
       "loom": {
         "psr": 0.96,
+        "outage_psr": 0.94,
+        "outage_failures_alpha": 2,
+        "outage_flips": 4,
+        "max_step_delta": 0.1188224519757255
+      },
+      "raw": {
+        "psr": 0.9533333333333334,
         "outage_psr": 0.92,
         "outage_failures_alpha": 3,
         "outage_flips": 6,
-        "max_step_delta": 0.11624999999999999
-      },
-      "raw": {
-        "psr": 0.9733333333333334,
-        "outage_psr": 0.96,
-        "outage_failures_alpha": 1,
-        "outage_flips": 2,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -4497,8 +4498,8 @@
         "psr": 0.9666666666666667,
         "outage_psr": 0.94,
         "outage_failures_alpha": 2,
-        "outage_flips": 10,
-        "max_step_delta": 0.11699511931291655
+        "outage_flips": 8,
+        "max_step_delta": 0.11811573049138863
       },
       "static_m3_gray": {
         "psr": 0.8466666666666667,
@@ -4512,17 +4513,17 @@
       "sim_seed": 862,
       "loom_seed": 859,
       "loom": {
-        "psr": 0.8866666666666667,
-        "outage_psr": 0.76,
-        "outage_failures_alpha": 9,
-        "outage_flips": 15,
-        "max_step_delta": 0.11624999999999999
+        "psr": 0.8733333333333333,
+        "outage_psr": 0.72,
+        "outage_failures_alpha": 11,
+        "outage_flips": 19,
+        "max_step_delta": 0.11647819818267821
       },
       "raw": {
-        "psr": 0.9333333333333333,
-        "outage_psr": 0.9,
-        "outage_failures_alpha": 3,
-        "outage_flips": 5,
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 5,
+        "outage_flips": 8,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -4547,11 +4548,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.9133333333333333,
-        "outage_psr": 0.84,
-        "outage_failures_alpha": 5,
-        "outage_flips": 33,
-        "max_step_delta": 0.12364765625
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 6,
+        "outage_flips": 29,
+        "max_step_delta": 0.12315419468238441
       },
       "static_m3_gray": {
         "psr": 0.8933333333333333,
@@ -4565,17 +4566,17 @@
       "sim_seed": 872,
       "loom_seed": 860,
       "loom": {
-        "psr": 0.8533333333333334,
-        "outage_psr": 0.7,
-        "outage_failures_alpha": 14,
-        "outage_flips": 16,
-        "max_step_delta": 0.11579477194596144
+        "psr": 0.8733333333333333,
+        "outage_psr": 0.76,
+        "outage_failures_alpha": 11,
+        "outage_flips": 15,
+        "max_step_delta": 0.11863366582466675
       },
       "raw": {
-        "psr": 0.8933333333333333,
-        "outage_psr": 0.8,
-        "outage_failures_alpha": 8,
-        "outage_flips": 9,
+        "psr": 0.9,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 7,
+        "outage_flips": 3,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -4600,11 +4601,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.9,
-        "outage_psr": 0.82,
-        "outage_failures_alpha": 9,
-        "outage_flips": 22,
-        "max_step_delta": 0.12364765625
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 6,
+        "outage_flips": 19,
+        "max_step_delta": 0.1185672179801763
       },
       "static_m3_gray": {
         "psr": 0.8866666666666667,
@@ -4621,14 +4622,14 @@
         "psr": 0.84,
         "outage_psr": 0.76,
         "outage_failures_alpha": 9,
-        "outage_flips": 15,
-        "max_step_delta": 0.11624999999999999
+        "outage_flips": 18,
+        "max_step_delta": 0.12365175818385371
       },
       "raw": {
-        "psr": 0.8533333333333334,
-        "outage_psr": 0.82,
-        "outage_failures_alpha": 5,
-        "outage_flips": 10,
+        "psr": 0.88,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 4,
+        "outage_flips": 5,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -4653,11 +4654,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.88,
-        "outage_psr": 0.88,
+        "psr": 0.8733333333333333,
+        "outage_psr": 0.84,
         "outage_failures_alpha": 5,
-        "outage_flips": 24,
-        "max_step_delta": 0.11624999999999999
+        "outage_flips": 26,
+        "max_step_delta": 0.12365175818385371
       },
       "static_m3_gray": {
         "psr": 0.86,
@@ -4671,17 +4672,17 @@
       "sim_seed": 892,
       "loom_seed": 862,
       "loom": {
-        "psr": 0.8866666666666667,
+        "psr": 0.8933333333333333,
         "outage_psr": 0.86,
         "outage_failures_alpha": 5,
         "outage_flips": 10,
-        "max_step_delta": 0.11647819818267821
+        "max_step_delta": 0.11624999999999999
       },
       "raw": {
-        "psr": 0.8933333333333333,
-        "outage_psr": 0.88,
-        "outage_failures_alpha": 4,
-        "outage_flips": 8,
+        "psr": 0.9,
+        "outage_psr": 0.9,
+        "outage_failures_alpha": 3,
+        "outage_flips": 5,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -4706,10 +4707,10 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.9133333333333333,
+        "psr": 0.92,
         "outage_psr": 0.92,
         "outage_failures_alpha": 2,
-        "outage_flips": 11,
+        "outage_flips": 12,
         "max_step_delta": 0.12364765625
       },
       "static_m3_gray": {
@@ -4724,17 +4725,17 @@
       "sim_seed": 902,
       "loom_seed": 863,
       "loom": {
-        "psr": 0.8866666666666667,
+        "psr": 0.88,
         "outage_psr": 0.8,
         "outage_failures_alpha": 6,
         "outage_flips": 11,
         "max_step_delta": 0.11624999999999999
       },
       "raw": {
-        "psr": 0.8866666666666667,
-        "outage_psr": 0.8,
-        "outage_failures_alpha": 6,
-        "outage_flips": 8,
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.84,
+        "outage_failures_alpha": 4,
+        "outage_flips": 6,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -4762,7 +4763,7 @@
         "psr": 0.8933333333333333,
         "outage_psr": 0.82,
         "outage_failures_alpha": 5,
-        "outage_flips": 17,
+        "outage_flips": 13,
         "max_step_delta": 0.11624999999999999
       },
       "static_m3_gray": {
@@ -4777,11 +4778,11 @@
       "sim_seed": 912,
       "loom_seed": 864,
       "loom": {
-        "psr": 0.9466666666666667,
-        "outage_psr": 0.9,
-        "outage_failures_alpha": 5,
-        "outage_flips": 10,
-        "max_step_delta": 0.11805178453796852
+        "psr": 0.9533333333333334,
+        "outage_psr": 0.92,
+        "outage_failures_alpha": 4,
+        "outage_flips": 8,
+        "max_step_delta": 0.11659788045810712
       },
       "raw": {
         "psr": 0.96,
@@ -4813,10 +4814,10 @@
       },
       "loom_gray": {
         "psr": 0.9533333333333334,
-        "outage_psr": 0.92,
-        "outage_failures_alpha": 4,
-        "outage_flips": 12,
-        "max_step_delta": 0.1185672179801763
+        "outage_psr": 0.94,
+        "outage_failures_alpha": 3,
+        "outage_flips": 8,
+        "max_step_delta": 0.11624999999999999
       },
       "static_m3_gray": {
         "psr": 0.92,
@@ -4830,17 +4831,17 @@
       "sim_seed": 922,
       "loom_seed": 865,
       "loom": {
-        "psr": 0.9,
-        "outage_psr": 0.8,
-        "outage_failures_alpha": 5,
-        "outage_flips": 10,
-        "max_step_delta": 0.12074905487199272
-      },
-      "raw": {
         "psr": 0.9133333333333333,
-        "outage_psr": 0.86,
+        "outage_psr": 0.84,
         "outage_failures_alpha": 3,
         "outage_flips": 6,
+        "max_step_delta": 0.12364765625000002
+      },
+      "raw": {
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 4,
+        "outage_flips": 8,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -4865,11 +4866,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.92,
-        "outage_psr": 0.84,
-        "outage_failures_alpha": 3,
-        "outage_flips": 25,
-        "max_step_delta": 0.12074905487199272
+        "psr": 0.9333333333333333,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 1,
+        "outage_flips": 14,
+        "max_step_delta": 0.12364765625000002
       },
       "static_m3_gray": {
         "psr": 0.8866666666666667,
@@ -4883,17 +4884,17 @@
       "sim_seed": 932,
       "loom_seed": 866,
       "loom": {
-        "psr": 0.8933333333333333,
-        "outage_psr": 0.74,
-        "outage_failures_alpha": 11,
-        "outage_flips": 17,
-        "max_step_delta": 0.10216586284119922
-      },
-      "raw": {
         "psr": 0.9133333333333333,
         "outage_psr": 0.8,
         "outage_failures_alpha": 8,
-        "outage_flips": 13,
+        "outage_flips": 15,
+        "max_step_delta": 0.11696166080650536
+      },
+      "raw": {
+        "psr": 0.9133333333333333,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 9,
+        "outage_flips": 11,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -4921,7 +4922,7 @@
         "psr": 0.92,
         "outage_psr": 0.82,
         "outage_failures_alpha": 7,
-        "outage_flips": 19,
+        "outage_flips": 21,
         "max_step_delta": 0.11624999999999999
       },
       "static_m3_gray": {
@@ -4936,17 +4937,17 @@
       "sim_seed": 942,
       "loom_seed": 867,
       "loom": {
-        "psr": 0.8666666666666667,
-        "outage_psr": 0.74,
-        "outage_failures_alpha": 12,
-        "outage_flips": 15,
-        "max_step_delta": 0.11624999999999996
+        "psr": 0.8733333333333333,
+        "outage_psr": 0.76,
+        "outage_failures_alpha": 11,
+        "outage_flips": 14,
+        "max_step_delta": 0.11851116132867207
       },
       "raw": {
-        "psr": 0.9,
-        "outage_psr": 0.84,
-        "outage_failures_alpha": 6,
-        "outage_flips": 7,
+        "psr": 0.92,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 4,
+        "outage_flips": 8,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -4971,11 +4972,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.8933333333333333,
-        "outage_psr": 0.82,
-        "outage_failures_alpha": 8,
-        "outage_flips": 21,
-        "max_step_delta": 0.11624999999999996
+        "psr": 0.92,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 5,
+        "outage_flips": 24,
+        "max_step_delta": 0.12364765625
       },
       "static_m3_gray": {
         "psr": 0.86,
@@ -4989,17 +4990,17 @@
       "sim_seed": 952,
       "loom_seed": 868,
       "loom": {
-        "psr": 0.82,
-        "outage_psr": 0.64,
-        "outage_failures_alpha": 16,
-        "outage_flips": 15,
-        "max_step_delta": 0.11625000000000008
+        "psr": 0.8466666666666667,
+        "outage_psr": 0.68,
+        "outage_failures_alpha": 12,
+        "outage_flips": 17,
+        "max_step_delta": 0.11624999999999999
       },
       "raw": {
-        "psr": 0.86,
-        "outage_psr": 0.74,
-        "outage_failures_alpha": 10,
-        "outage_flips": 3,
+        "psr": 0.8733333333333333,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 9,
+        "outage_flips": 9,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -5024,11 +5025,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.8533333333333334,
-        "outage_psr": 0.78,
-        "outage_failures_alpha": 10,
+        "psr": 0.8666666666666667,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 8,
         "outage_flips": 17,
-        "max_step_delta": 0.11758056946213324
+        "max_step_delta": 0.11624999999999999
       },
       "static_m3_gray": {
         "psr": 0.88,
@@ -5043,13 +5044,13 @@
       "loom_seed": 869,
       "loom": {
         "psr": 0.88,
-        "outage_psr": 0.88,
-        "outage_failures_alpha": 4,
-        "outage_flips": 7,
-        "max_step_delta": 0.11624999999999999
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 5,
+        "outage_flips": 9,
+        "max_step_delta": 0.12127852032425582
       },
       "raw": {
-        "psr": 0.8866666666666667,
+        "psr": 0.8933333333333333,
         "outage_psr": 0.92,
         "outage_failures_alpha": 2,
         "outage_flips": 4,
@@ -5077,11 +5078,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.8933333333333333,
-        "outage_psr": 0.9,
-        "outage_failures_alpha": 3,
-        "outage_flips": 31,
-        "max_step_delta": 0.11666521938642878
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 4,
+        "outage_flips": 30,
+        "max_step_delta": 0.11624999999999999
       },
       "static_m3_gray": {
         "psr": 0.8466666666666667,
@@ -5095,16 +5096,16 @@
       "sim_seed": 972,
       "loom_seed": 870,
       "loom": {
-        "psr": 0.8733333333333333,
-        "outage_psr": 0.7,
-        "outage_failures_alpha": 10,
-        "outage_flips": 20,
-        "max_step_delta": 0.10081433300056153
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.76,
+        "outage_failures_alpha": 8,
+        "outage_flips": 16,
+        "max_step_delta": 0.11624999999999999
       },
       "raw": {
-        "psr": 0.9,
-        "outage_psr": 0.8,
-        "outage_failures_alpha": 6,
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 7,
         "outage_flips": 9,
         "max_step_delta": 1.0
       },
@@ -5132,9 +5133,9 @@
       "loom_gray": {
         "psr": 0.9133333333333333,
         "outage_psr": 0.84,
-        "outage_failures_alpha": 4,
-        "outage_flips": 44,
-        "max_step_delta": 0.11571052845787311
+        "outage_failures_alpha": 5,
+        "outage_flips": 38,
+        "max_step_delta": 0.11126430206776006
       },
       "static_m3_gray": {
         "psr": 0.8666666666666667,
@@ -5148,17 +5149,17 @@
       "sim_seed": 982,
       "loom_seed": 871,
       "loom": {
-        "psr": 0.9066666666666666,
+        "psr": 0.92,
         "outage_psr": 0.84,
-        "outage_failures_alpha": 5,
-        "outage_flips": 9,
-        "max_step_delta": 0.11624999999999999
+        "outage_failures_alpha": 4,
+        "outage_flips": 7,
+        "max_step_delta": 0.11912543376443752
       },
       "raw": {
-        "psr": 0.92,
+        "psr": 0.9266666666666666,
         "outage_psr": 0.86,
         "outage_failures_alpha": 3,
-        "outage_flips": 5,
+        "outage_flips": 6,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -5183,11 +5184,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.9266666666666666,
+        "psr": 0.9333333333333333,
         "outage_psr": 0.88,
         "outage_failures_alpha": 3,
         "outage_flips": 9,
-        "max_step_delta": 0.11872133344807212
+        "max_step_delta": 0.11811573049138863
       },
       "static_m3_gray": {
         "psr": 0.86,
@@ -5201,17 +5202,17 @@
       "sim_seed": 992,
       "loom_seed": 872,
       "loom": {
-        "psr": 0.9066666666666666,
-        "outage_psr": 0.78,
-        "outage_failures_alpha": 11,
-        "outage_flips": 16,
-        "max_step_delta": 0.10882244750648762
+        "psr": 0.8866666666666667,
+        "outage_psr": 0.72,
+        "outage_failures_alpha": 14,
+        "outage_flips": 20,
+        "max_step_delta": 0.11624999999999999
       },
       "raw": {
-        "psr": 0.9333333333333333,
-        "outage_psr": 0.86,
-        "outage_failures_alpha": 6,
-        "outage_flips": 9,
+        "psr": 0.9066666666666666,
+        "outage_psr": 0.82,
+        "outage_failures_alpha": 8,
+        "outage_flips": 7,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -5236,7 +5237,7 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.9333333333333333,
+        "psr": 0.9266666666666666,
         "outage_psr": 0.88,
         "outage_failures_alpha": 6,
         "outage_flips": 20,
@@ -5255,13 +5256,13 @@
       "loom_seed": 873,
       "loom": {
         "psr": 0.8666666666666667,
-        "outage_psr": 0.8,
-        "outage_failures_alpha": 7,
-        "outage_flips": 13,
-        "max_step_delta": 0.10428944363374498
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 8,
+        "outage_flips": 15,
+        "max_step_delta": 0.11624999999999999
       },
       "raw": {
-        "psr": 0.9,
+        "psr": 0.9066666666666666,
         "outage_psr": 0.88,
         "outage_failures_alpha": 3,
         "outage_flips": 6,
@@ -5289,11 +5290,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.9,
-        "outage_psr": 0.88,
-        "outage_failures_alpha": 3,
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.86,
+        "outage_failures_alpha": 4,
         "outage_flips": 17,
-        "max_step_delta": 0.11719788045810711
+        "max_step_delta": 0.11647819818267821
       },
       "static_m3_gray": {
         "psr": 0.8533333333333334,
@@ -5310,14 +5311,14 @@
         "psr": 0.8533333333333334,
         "outage_psr": 0.72,
         "outage_failures_alpha": 10,
-        "outage_flips": 13,
-        "max_step_delta": 0.10778362509773698
+        "outage_flips": 16,
+        "max_step_delta": 0.10352963439505025
       },
       "raw": {
-        "psr": 0.86,
-        "outage_psr": 0.72,
-        "outage_failures_alpha": 9,
-        "outage_flips": 11,
+        "psr": 0.8533333333333334,
+        "outage_psr": 0.7,
+        "outage_failures_alpha": 10,
+        "outage_flips": 5,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -5342,11 +5343,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.86,
-        "outage_psr": 0.74,
-        "outage_failures_alpha": 9,
-        "outage_flips": 23,
-        "max_step_delta": 0.11699511931291655
+        "psr": 0.8733333333333333,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 7,
+        "outage_flips": 32,
+        "max_step_delta": 0.12405946526618436
       },
       "static_m3_gray": {
         "psr": 0.86,
@@ -5360,17 +5361,17 @@
       "sim_seed": 1022,
       "loom_seed": 875,
       "loom": {
-        "psr": 0.9133333333333333,
+        "psr": 0.92,
         "outage_psr": 0.8,
-        "outage_failures_alpha": 9,
-        "outage_flips": 14,
-        "max_step_delta": 0.11459355251577874
+        "outage_failures_alpha": 8,
+        "outage_flips": 11,
+        "max_step_delta": 0.11758056946213322
       },
       "raw": {
         "psr": 0.9333333333333333,
         "outage_psr": 0.86,
-        "outage_failures_alpha": 6,
-        "outage_flips": 12,
+        "outage_failures_alpha": 5,
+        "outage_flips": 10,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -5395,10 +5396,10 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.9333333333333333,
-        "outage_psr": 0.86,
-        "outage_failures_alpha": 6,
-        "outage_flips": 28,
+        "psr": 0.94,
+        "outage_psr": 0.88,
+        "outage_failures_alpha": 5,
+        "outage_flips": 25,
         "max_step_delta": 0.11624999999999999
       },
       "static_m3_gray": {
@@ -5413,17 +5414,17 @@
       "sim_seed": 1032,
       "loom_seed": 876,
       "loom": {
-        "psr": 0.8533333333333334,
-        "outage_psr": 0.66,
-        "outage_failures_alpha": 13,
-        "outage_flips": 19,
-        "max_step_delta": 0.11996902709537038
+        "psr": 0.8733333333333333,
+        "outage_psr": 0.76,
+        "outage_failures_alpha": 10,
+        "outage_flips": 16,
+        "max_step_delta": 0.11886430615972579
       },
       "raw": {
-        "psr": 0.88,
-        "outage_psr": 0.72,
-        "outage_failures_alpha": 10,
-        "outage_flips": 11,
+        "psr": 0.8933333333333333,
+        "outage_psr": 0.78,
+        "outage_failures_alpha": 8,
+        "outage_flips": 13,
         "max_step_delta": 1.0
       },
       "static_m1": {
@@ -5448,11 +5449,11 @@
         "max_step_delta": 1.0
       },
       "loom_gray": {
-        "psr": 0.9,
-        "outage_psr": 0.78,
-        "outage_failures_alpha": 8,
-        "outage_flips": 39,
-        "max_step_delta": 0.11996902709537038
+        "psr": 0.88,
+        "outage_psr": 0.76,
+        "outage_failures_alpha": 10,
+        "outage_flips": 22,
+        "max_step_delta": 0.12108939601701463
       },
       "static_m3_gray": {
         "psr": 0.8733333333333333,

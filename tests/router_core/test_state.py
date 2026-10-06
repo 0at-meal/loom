@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 
 from router_core.state import (
+    DEFAULT_HALF_LIFE_SEC,
     AcquirerState,
     AcquirerStateConfig,
     AcquirerStateSnapshot,
@@ -22,7 +23,8 @@ class TestAcquirerStateConfig:
         config = AcquirerStateConfig()
         assert config.alpha_prior == 1.0
         assert config.beta_prior == 1.0
-        assert config.decay_factor == 0.98
+        assert config.decay_factor is None
+        assert config.half_life_sec == DEFAULT_HALF_LIFE_SEC
         assert config.initial_health == 1.0
 
     @pytest.mark.parametrize("invalid_alpha", [0.0, -1.0, -0.001])

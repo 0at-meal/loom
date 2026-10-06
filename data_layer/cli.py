@@ -421,7 +421,7 @@ def cmd_inspect_state(
                 "beta": beta,
                 "alpha_prior": float(b_data.get("alpha_prior", 1.0)),
                 "beta_prior": float(b_data.get("beta_prior", 1.0)),
-                "decay_factor": float(b_data.get("decay_factor", 0.98)),
+                "decay": b_data.get("decay") or f"decay_factor={b_data.get('decay_factor', 0.98)}",
                 "success_count": int(b_data.get("success_count", 0)),
                 "failure_count": int(b_data.get("failure_count", 0)),
                 "total_count": int(b_data.get("total_count", 0)),
@@ -447,7 +447,7 @@ def cmd_inspect_state(
                 print(f"  Beta Parameters:     alpha={d['alpha']:.3f}, beta={d['beta']:.3f}")
                 print(
                     f"  Priors & Decay:      alpha0={d['alpha_prior']}, "
-                    f"beta0={d['beta_prior']}, gamma={d['decay_factor']}"
+                    f"beta0={d['beta_prior']}, {d['decay']}"
                 )
                 print(
                     f"  Thompson Belief:     E[theta]={d['thompson_mean']:.4f}, "

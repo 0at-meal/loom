@@ -52,6 +52,12 @@ SEED_SPACING = 10
 ALPHA_BASE_RATE = 0.95
 BETA_BASE_RATE = 0.94
 GRAY_FAILURE_RATE = 0.60
+# Transactions arrive on a virtual clock at this rate, so belief decay is measured in
+# simulated seconds and results do not depend on how fast the machine runs.
+BENCH_TPS = 15.0
+# 0.9 s at 15 TPS equals the 13.5-observation half-life of the gamma=0.95 this benchmark
+# used before decay moved to the wall clock (AUDIT F-23).
+BENCH_HALF_LIFE_SEC = 0.9
 
 
 def _check_db_path(db_path: str) -> None:
@@ -98,18 +104,19 @@ async def execute_scenario(
     sim_app.state.registry.get("acquirer_alpha").set_success_rate(ALPHA_BASE_RATE)
     sim_app.state.registry.get("acquirer_beta").set_success_rate(BETA_BASE_RATE)
 
+    now = [0.0]
     transport = httpx.ASGITransport(app=sim_app)
     async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
         routes = [
             AcquirerRouteConfig(
                 acquirer_id="acquirer_alpha",
                 base_url="http://testserver",
-                state_config=AcquirerStateConfig(decay_factor=0.95),
+                state_config=AcquirerStateConfig(half_life_sec=BENCH_HALF_LIFE_SEC),
             ),
             AcquirerRouteConfig(
                 acquirer_id="acquirer_beta",
                 base_url="http://testserver",
-                state_config=AcquirerStateConfig(decay_factor=0.95),
+                state_config=AcquirerStateConfig(half_life_sec=BENCH_HALF_LIFE_SEC),
             ),
         ]
 
@@ -148,6 +155,7 @@ async def execute_scenario(
             router = BanditRouter(
                 config=router_config,
                 http_client=client,
+                clock=lambda: now[0],
             )
         else:
             raise ValueError(f"unknown router_type {router_type!r}")
@@ -159,6 +167,7 @@ async def execute_scenario(
         async def run_stage(stage: str, count: int) -> None:
             for i in range(1, count + 1):
                 req = AuthorizeRequest(transaction_id=f"tx_{router_type}_{stage}_{i}", amount=50.0)
+                now[0] += 1.0 / BENCH_TPS
                 res = await router.route(req)
                 if router_type != "baseline":
                     metrics_store.log_routing_result(res)
@@ -249,7 +258,10 @@ def format_report(
     report.append("=" * 90)
     report.append("                   LOOM vs STATIC BASELINE: PSR LIFT AUDIT")
     report.append("=" * 90)
-    report.append("Scenario  : 150 transactions (50 Warmup -> 50 Outage -> 50 Recovery)")
+    report.append(
+        "Scenario  : 150 transactions (50 Warmup -> 50 Outage -> 50 Recovery) at "
+        f"{BENCH_TPS:g} TPS on a virtual clock; Loom half-life {BENCH_HALF_LIFE_SEC:g} s"
+    )
     report.append("Acquirers : Alpha (Primary: 95% base PSR), Beta (Secondary: 94% base PSR)")
     report.append(
         f"Policy    : Static Priority [Alpha, Beta], Threshold M={threshold_m}, "
@@ -434,7 +446,11 @@ async def run_multi_seed(
             "alpha_rate": ALPHA_BASE_RATE,
             "beta_rate": BETA_BASE_RATE,
             "gray_rate": GRAY_FAILURE_RATE,
-            "loom": "decay 0.95, PID kp=0.12 ki=0.005 kd=0.25, floor 0.03, deficit actuation",
+            "tps": BENCH_TPS,
+            "loom": (
+                f"half-life {BENCH_HALF_LIFE_SEC:g} s, PID kp=0.12 ki=0.005 kd=0.25, "
+                "floor 0.03, deficit actuation"
+            ),
         },
         "configs": configs,
         "comparisons": comparisons,
@@ -453,7 +469,10 @@ def format_multi_seed_report(summary: dict[str, Any]) -> str:
         f"Seeds     : simulator {seed} + {summary['seed_spacing']}k, "
         f"Loom {summary['loom_seed']} + k, k = 0..{n - 1}"
     )
-    report.append("Scenario  : 150 transactions (50 Warmup -> 50 Outage -> 50 Recovery)")
+    report.append(
+        "Scenario  : 150 transactions (50 Warmup -> 50 Outage -> 50 Recovery) at "
+        f"{BENCH_TPS:g} TPS on a virtual clock; Loom half-life {BENCH_HALF_LIFE_SEC:g} s"
+    )
     report.append(
         f"Policy    : Static Priority [Alpha, Beta], Threshold M in {{1, 3, 5}}, "
         f"Cooldown N={summary['cooldown_n']}"

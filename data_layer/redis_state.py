@@ -16,9 +16,18 @@ from router_core.state import (
     AcquirerState,
     AcquirerStateConfig,
     AcquirerStateSnapshot,
+    decay_beliefs,
+    step_beliefs,
 )
 
 logger = logging.getLogger("loom.data_layer.redis_state")
+
+
+def describe_decay(config: AcquirerStateConfig) -> str:
+    """Human-readable decay setting stored alongside the belief, e.g. ``half_life_sec=2.3``."""
+    if config.uses_wall_clock:
+        return f"half_life_sec={config.half_life_sec}"
+    return f"decay_factor={config.decay_factor}"
 
 
 def _to_str(val: str | bytes | None) -> str:
@@ -159,12 +168,19 @@ class RedisStateStore:
             alpha_prior=config.alpha_prior,
             beta_prior=config.beta_prior,
         )
-        self.write_snapshot(initial_snapshot, decay_factor=config.decay_factor)
+        self.write_snapshot(initial_snapshot, config=config)
         logger.info("Initialized fresh acquirer '%s' state in Redis", acquirer_id)
         return initial_snapshot
 
     def read_snapshot(self, acquirer_id: str) -> AcquirerStateSnapshot | None:
         """Read and parse point-in-time snapshot directly from Redis."""
+        found = self.read_snapshot_and_decay_time(acquirer_id)
+        return found[0] if found is not None else None
+
+    def read_snapshot_and_decay_time(
+        self, acquirer_id: str
+    ) -> tuple[AcquirerStateSnapshot, float] | None:
+        """Read a snapshot and the time its wall-clock decay was last applied up to."""
         b_key = self.beta_key(acquirer_id)
         h_key = self.health_key(acquirer_id)
 
@@ -188,8 +204,9 @@ class RedisStateStore:
         failure_count = int(b_data.get("failure_count", 0))
         total_count = int(b_data.get("total_count", success_count + failure_count))
         last_updated_at = float(b_data.get("last_updated_at", time.time()))
+        decayed_at = float(b_data.get("decayed_at", last_updated_at))
 
-        return AcquirerStateSnapshot(
+        snapshot = AcquirerStateSnapshot(
             acquirer_id=acquirer_id,
             alpha=alpha,
             beta=beta,
@@ -201,11 +218,12 @@ class RedisStateStore:
             alpha_prior=alpha_prior,
             beta_prior=beta_prior,
         )
+        return snapshot, decayed_at
 
     def write_snapshot(
         self,
         snapshot: AcquirerStateSnapshot,
-        decay_factor: float = 0.98,
+        config: AcquirerStateConfig | None = None,
     ) -> None:
         """Persist a snapshot to Redis across both keys in an atomic pipeline."""
         b_key = self.beta_key(snapshot.acquirer_id)
@@ -227,7 +245,8 @@ class RedisStateStore:
                 "beta": str(snapshot.beta),
                 "alpha_prior": str(snapshot.alpha_prior),
                 "beta_prior": str(snapshot.beta_prior),
-                "decay_factor": str(decay_factor),
+                "decay": describe_decay(config or AcquirerStateConfig()),
+                "decayed_at": str(snapshot.last_updated_at),
                 "success_count": str(snapshot.success_count),
                 "failure_count": str(snapshot.failure_count),
                 "total_count": str(snapshot.total_count),
@@ -245,15 +264,13 @@ class RedisStateStore:
         timestamp: float | None = None,
         max_retries: int = 5,
     ) -> AcquirerStateSnapshot:
-        """Record outcome atomically in Redis using optimistic locking and Phase 1 math."""
+        """Record outcome atomically in Redis using optimistic locking and the shared math."""
         b_key = self.beta_key(acquirer_id)
         h_key = self.health_key(acquirer_id)
         acquirers_k = self.acquirers_key()
 
-        gamma = config.decay_factor
         a0 = config.alpha_prior
         b0 = config.beta_prior
-        x = 1.0 if success else 0.0
         now_ts = timestamp if timestamp is not None else time.time()
 
         for attempt in range(max_retries):
@@ -272,19 +289,25 @@ class RedisStateStore:
                     curr_health = float(h_data.get("health_score", config.initial_health))
                     curr_success = int(b_data.get("success_count", 0))
                     curr_failure = int(b_data.get("failure_count", 0))
+                    decayed_at = float(
+                        b_data.get("decayed_at", b_data.get("last_updated_at", now_ts))
+                    )
                 else:
                     curr_alpha = a0
                     curr_beta = b0
                     curr_health = config.initial_health
                     curr_success = 0
                     curr_failure = 0
+                    decayed_at = now_ts
 
-                # Phase 1: alpha_t = a0 + gamma*(alpha_{t-1} - a0) + x
-                new_alpha = max(a0, a0 + gamma * (curr_alpha - a0) + x)
-                new_beta = max(b0, b0 + gamma * (curr_beta - b0) + (1.0 - x))
-
-                # 2. EWMA health score update: H_t = gamma*H_{t-1} + (1 - gamma)*x
-                new_health = max(0.0, min(1.0, gamma * curr_health + (1.0 - gamma) * x))
+                new_alpha, new_beta, new_health = step_beliefs(
+                    config,
+                    curr_alpha,
+                    curr_beta,
+                    curr_health,
+                    success,
+                    max(0.0, now_ts - decayed_at),
+                )
 
                 # 3. Counters
                 new_success = curr_success + (1 if success else 0)
@@ -306,7 +329,8 @@ class RedisStateStore:
                         "beta": str(new_beta),
                         "alpha_prior": str(a0),
                         "beta_prior": str(b0),
-                        "decay_factor": str(gamma),
+                        "decay": describe_decay(config),
+                        "decayed_at": str(max(decayed_at, now_ts)),
                         "success_count": str(new_success),
                         "failure_count": str(new_failure),
                         "total_count": str(new_total),
@@ -410,19 +434,39 @@ class RedisAcquirerState(AcquirerState):
         self._sync_from_snapshot(snapshot)
         return snapshot
 
-    def sample(self, rng: np.random.Generator | None = None) -> float:
+    def sample(self, rng: np.random.Generator | None = None, now: float | None = None) -> float:
         """Draw a Thompson sample from the current Beta distribution belief."""
         # Read freshest state from Redis to ensure cross-process visibility
-        fresh_snap = self.get_state()
+        fresh_snap = self.get_state(now=now)
         generator = rng if rng is not None else np.random.default_rng()
         return float(generator.beta(fresh_snap.alpha, fresh_snap.beta))
 
-    def get_state(self) -> AcquirerStateSnapshot:
-        """Return an immutable snapshot of current acquirer state from Redis."""
-        snapshot = self._store.read_snapshot(self._acquirer_id)
-        if snapshot is not None:
+    def get_state(self, now: float | None = None) -> AcquirerStateSnapshot:
+        """Return a snapshot from Redis, decayed to ``now`` when given.
+
+        The decayed view is computed locally; Redis keeps the belief as of its last write.
+        """
+        found = self._store.read_snapshot_and_decay_time(self._acquirer_id)
+        if found is not None:
+            snapshot, decayed_at = found
             self._snapshot = snapshot
             self._sync_from_snapshot(snapshot)
+            if now is not None and self._config.uses_wall_clock and now > decayed_at:
+                alpha, beta = decay_beliefs(
+                    self._config, snapshot.alpha, snapshot.beta, now - decayed_at
+                )
+                return AcquirerStateSnapshot(
+                    acquirer_id=snapshot.acquirer_id,
+                    alpha=alpha,
+                    beta=beta,
+                    health_score=self._config.wall_clock_health(alpha, beta),
+                    success_count=snapshot.success_count,
+                    failure_count=snapshot.failure_count,
+                    total_count=snapshot.total_count,
+                    last_updated_at=snapshot.last_updated_at,
+                    alpha_prior=snapshot.alpha_prior,
+                    beta_prior=snapshot.beta_prior,
+                )
         return self._snapshot
 
 
@@ -492,15 +536,17 @@ class RedisBanditStateRegistry(BanditStateRegistry):
                 raise KeyError(f"Acquirer '{acquirer_id}' not found in registry")
         return state.record_outcome(success=success, timestamp=timestamp)
 
-    def sample_all(self, rng: np.random.Generator | None = None) -> dict[str, float]:
+    def sample_all(
+        self, rng: np.random.Generator | None = None, now: float | None = None
+    ) -> dict[str, float]:
         """Draw independent Thompson samples across all registered acquirers."""
         generator = rng if rng is not None else np.random.default_rng()
         return {
-            acquirer_id: state.sample(rng=generator)
+            acquirer_id: state.sample(rng=generator, now=now)
             for acquirer_id, state in self._redis_acquirers.items()
         }
 
-    def get_state(self, acquirer_id: str) -> AcquirerStateSnapshot:
+    def get_state(self, acquirer_id: str, now: float | None = None) -> AcquirerStateSnapshot:
         """Return state snapshot for a single acquirer directly from Redis."""
         state = self._redis_acquirers.get(acquirer_id)
         if state is None:
@@ -508,12 +554,13 @@ class RedisBanditStateRegistry(BanditStateRegistry):
                 state = self.register_acquirer(acquirer_id)
             else:
                 raise KeyError(f"Acquirer '{acquirer_id}' not found in registry")
-        return state.get_state()
+        return state.get_state(now=now)
 
-    def get_all_states(self) -> dict[str, AcquirerStateSnapshot]:
+    def get_all_states(self, now: float | None = None) -> dict[str, AcquirerStateSnapshot]:
         """Return state snapshots across all registered acquirers."""
         return {
-            acquirer_id: state.get_state() for acquirer_id, state in self._redis_acquirers.items()
+            acquirer_id: state.get_state(now=now)
+            for acquirer_id, state in self._redis_acquirers.items()
         }
 
     def list_acquirer_ids(self) -> list[str]:
