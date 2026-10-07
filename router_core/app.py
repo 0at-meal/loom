@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import time
@@ -20,6 +19,11 @@ from acquirer_sim.models import (
     OutageToggleRequest,
     SuccessRateUpdateRequest,
 )
+from data_layer.config import DataLayerConfig
+from data_layer.live import RedisSidecar
+from data_layer.sqlite_logger import MetricsLogger
+from router_core.idempotency import Admission, IdempotencyStore
+from router_core.idempotency import fingerprint as idem_fingerprint
 from router_core.models import AcquirerRouteConfig, RouterConfig, RoutingResult
 from router_core.pid import PIDConfig
 from router_core.router import BanditRouter
@@ -32,8 +36,19 @@ logger = logging.getLogger("loom.router_core.app")
 def create_router_app(
     config: RouterConfig | None = None,
     router: BanditRouter | None = None,
+    data_config: DataLayerConfig | None = None,
+    idempotency_store: IdempotencyStore | None = None,
 ) -> FastAPI:
-    """Create and configure a FastAPI application instance hosting the BanditRouter."""
+    """Create and configure a FastAPI application instance hosting the BanditRouter.
+
+    ``data_config`` (default: read from the environment and ``.env``) controls the data
+    layer (AUDIT F-04). With ``ledger_enabled`` every decision is written to the SQLite
+    ledger, and the app refuses to start if the ledger cannot be opened. With
+    ``redis_enabled`` events and belief snapshots go to Redis; Redis being down never
+    blocks startup or payments.
+    """
+    data_cfg = data_config if data_config is not None else DataLayerConfig()
+    idempotency = idempotency_store if idempotency_store is not None else IdempotencyStore()
     if router is not None:
         active_router = router
     elif config is not None:
@@ -113,40 +128,48 @@ def create_router_app(
         }
         telemetry.publish(event_payload)
 
-    forwarder_stop = asyncio.Event()
+    # Data layer (AUDIT F-04). A logger supplied with the router is left alone.
+    ledger: MetricsLogger | None = None
+    if data_cfg.ledger_enabled and active_router.metrics_logger is None:
+        ledger = MetricsLogger(config=data_cfg)
+        active_router.attach_data_hooks(metrics_logger=ledger)
+    sidecar: RedisSidecar | None = None
+    if data_cfg.redis_enabled:
+        sidecar = RedisSidecar(registry=active_router.registry, config=data_cfg)
+        if active_router.event_publisher is None:
+            active_router.attach_data_hooks(event_publisher=sidecar)
 
-    async def _redis_forwarder_loop() -> None:
-        """Forward Redis Pub/Sub messages to WebSockets if data layer is active.
-
-        Reads with a short timeout and checks ``forwarder_stop`` between reads, so shutdown
-        does not rely only on task cancellation reaching the Redis client.
-        """
-        try:
-            from data_layer.redis_pubsub import AsyncEventSubscriber
-
-            async with AsyncEventSubscriber(channels=["events:routing", "events:health"]) as sub:
-                while not forwarder_stop.is_set():
-                    event = await sub.get_event(timeout=0.5)
-                    if event is not None and len(telemetry):
-                        telemetry.publish(event.model_dump())
-        except (ConnectionError, OSError, TimeoutError) as exc:
-            logger.debug("Redis forwarder loop idle or stopped: %s", exc)
+    def ledger_status() -> dict[str, Any]:
+        logger_obj = active_router.metrics_logger
+        if logger_obj is None:
+            return {"enabled": False}
+        dropped = getattr(logger_obj, "dropped_count", 0)
+        failed = getattr(logger_obj, "failed_count", 0)
+        return {
+            "enabled": True,
+            "status": "ok" if dropped == 0 and failed == 0 else "degraded",
+            "db_path": getattr(logger_obj, "db_path", None),
+            "written": getattr(logger_obj, "total_written", None),
+            "dropped": dropped,
+            "failed": failed,
+        }
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
-        """Manage router lifecycle, HTTP connection pool, and WebSocket forwarders."""
+        """Start the HTTP pools and data layer; on shutdown flush the ledger and Redis."""
+        if ledger is not None:
+            # Fail fast: an unopenable ledger is a misconfiguration (--no-ledger to skip).
+            await ledger.start()
+        if sidecar is not None:
+            await sidecar.start()  # never raises; Redis down means degraded
         await active_router.start()
-        forwarder_stop.clear()
-        redis_task = asyncio.create_task(_redis_forwarder_loop())
         yield
-        forwarder_stop.set()
-        redis_task.cancel()
-        try:
-            await redis_task
-        except asyncio.CancelledError:
-            pass
         await telemetry.close()
         await active_router.close()
+        if sidecar is not None:
+            await sidecar.close()
+        if ledger is not None:
+            await ledger.close()
 
     app = FastAPI(
         title="Loom Bandit Router Service",
@@ -168,6 +191,9 @@ def create_router_app(
 
     app.state.router = active_router
     app.state.telemetry = telemetry
+    app.state.ledger = ledger
+    app.state.redis = sidecar
+    app.state.idempotency = idempotency
 
     # -------------------------------------------------------------------------
     # Exception Handlers
@@ -200,8 +226,36 @@ def create_router_app(
         status_code=status.HTTP_200_OK,
     )
     async def route_transaction(request: AuthorizeRequest) -> RoutingResult:
-        """Execute Thompson Sampling route selection, dispatch to acquirer, and update state."""
-        result = await active_router.route(request)
+        """Route a payment once per transaction_id (AUDIT F-07).
+
+        A completed duplicate returns the stored result with ``replayed=true``; a duplicate
+        of a request still in flight gets 409; the same ID with a different body gets 422.
+        Only the original is dispatched, logged and counted in the beliefs.
+        """
+        decision = idempotency.admit(request.transaction_id, idem_fingerprint(request.model_dump()))
+        if decision.admission == Admission.REPLAY:
+            assert decision.result is not None
+            return decision.result.model_copy(update={"replayed": True})
+        if decision.admission == Admission.IN_FLIGHT:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"transaction_id {request.transaction_id} is already being processed",
+                headers={"Retry-After": "1"},
+            )
+        if decision.admission == Admission.MISMATCH:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    f"transaction_id {request.transaction_id} was already used "
+                    "with a different request body"
+                ),
+            )
+        try:
+            result = await active_router.route(request)
+        except BaseException:
+            idempotency.abandon(request.transaction_id)
+            raise
+        idempotency.complete(request.transaction_id, result)
         try:
             broadcast_routing_result(result)
         except Exception as exc:  # noqa: BLE001 - telemetry must never fail a payment
@@ -219,6 +273,9 @@ def create_router_app(
             "registered_acquirers": active_router.list_acquirer_ids(),
             "active_websockets": len(telemetry),
             "telemetry_dropped": telemetry.dropped,
+            "ledger": ledger_status(),
+            "idempotency": idempotency.status(),
+            "redis": sidecar.status() if sidecar is not None else {"enabled": False},
             "router_pool_timeouts": active_router.pool_timeouts,
         }
 
@@ -340,6 +397,8 @@ def create_router_app(
             "message": f"Outage {'injected' if payload.active else 'cleared'} on {acquirer_id}",
         }
         telemetry.publish(alert_payload)
+        if sidecar is not None:
+            sidecar.publish_payload(sidecar.health_channel, alert_payload)
         return data
 
     @app.post(

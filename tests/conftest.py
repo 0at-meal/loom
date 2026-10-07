@@ -1,6 +1,11 @@
 """Global pytest fixtures and test harness configuration."""
 
+import os
 from collections.abc import AsyncGenerator
+
+# The served app logs to a SQLite ledger by default (AUDIT F-04). Tests that build the app
+# must not write loom_metrics.db into the working tree, so they opt in explicitly.
+os.environ.setdefault("LEDGER_ENABLED", "false")
 
 try:
     import fakeredis.aioredis

@@ -27,115 +27,54 @@ logger = logging.getLogger("loom.data_layer.sqlite_logger")
 
 SCHEMA_FILE_PATH = pathlib.Path(__file__).parent / "schema.sql"
 
-# Embedded fallback schema ensuring zero-dependency bootstrapping
-EMBEDDED_SCHEMA_SQL = """
-PRAGMA journal_mode = WAL;
-PRAGMA synchronous = NORMAL;
-PRAGMA foreign_keys = ON;
-PRAGMA busy_timeout = 5000;
-
-CREATE TABLE IF NOT EXISTS transactions (
-    id                          INTEGER PRIMARY KEY AUTOINCREMENT,
-    transaction_id              TEXT NOT NULL UNIQUE,
-    timestamp                   REAL NOT NULL,
-    chosen_acquirer             TEXT NOT NULL,
-    allocation_weight           REAL NOT NULL,
-    status                      TEXT NOT NULL CHECK(status IN ('AUTHORIZED', 'DECLINED', 'ERROR')),
-    authorized                  INTEGER NOT NULL CHECK(authorized IN (0, 1)),
-    success                     INTEGER NOT NULL CHECK(success IN (0, 1)),
-    decline_code                TEXT,
-    routing_latency_ms          REAL NOT NULL,
-    acquirer_latency_ms         REAL NOT NULL,
-    total_latency_ms            REAL NOT NULL,
-    smoothed_allocation_json    TEXT NOT NULL,
-    target_allocation_json      TEXT,
-    thompson_samples_json       TEXT NOT NULL,
-    pid_diagnostics_json        TEXT,
-    error_message               TEXT,
-    created_at                  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-);
-
-CREATE INDEX IF NOT EXISTS idx_transactions_timestamp
-    ON transactions(timestamp);
-
-CREATE INDEX IF NOT EXISTS idx_transactions_acquirer
-    ON transactions(chosen_acquirer);
-
-CREATE INDEX IF NOT EXISTS idx_transactions_status
-    ON transactions(status);
-
-CREATE INDEX IF NOT EXISTS idx_transactions_created_at
-    ON transactions(created_at);
-
-CREATE TABLE IF NOT EXISTS acquirer_outcomes (
-    id                          INTEGER PRIMARY KEY AUTOINCREMENT,
-    transaction_id              TEXT NOT NULL,
-    acquirer_id                 TEXT NOT NULL,
-    timestamp                   REAL NOT NULL,
-    success                     INTEGER NOT NULL CHECK(success IN (0, 1)),
-    alpha                       REAL NOT NULL,
-    beta                        REAL NOT NULL,
-    health_score                REAL NOT NULL,
-    expected_success_rate       REAL NOT NULL,
-    success_count               INTEGER NOT NULL,
-    failure_count               INTEGER NOT NULL,
-    total_count                 INTEGER NOT NULL,
-    created_at                  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    FOREIGN KEY(transaction_id) REFERENCES transactions(transaction_id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_acquirer_outcomes_acquirer_ts
-    ON acquirer_outcomes(acquirer_id, timestamp);
-
-CREATE INDEX IF NOT EXISTS idx_acquirer_outcomes_tx_id
-    ON acquirer_outcomes(transaction_id);
-
-CREATE TRIGGER IF NOT EXISTS prevent_transactions_update
-BEFORE UPDATE ON transactions
-BEGIN
-    SELECT RAISE(
-        ABORT,
-        'Transactions table is append-only: UPDATE operations are strictly prohibited'
-    );
-END;
-
-CREATE TRIGGER IF NOT EXISTS prevent_transactions_delete
-BEFORE DELETE ON transactions
-BEGIN
-    SELECT RAISE(
-        ABORT,
-        'Transactions table is append-only: DELETE operations are strictly prohibited'
-    );
-END;
-
-CREATE TRIGGER IF NOT EXISTS prevent_acquirer_outcomes_update
-BEFORE UPDATE ON acquirer_outcomes
-BEGIN
-    SELECT RAISE(
-        ABORT,
-        'Acquirer outcomes table is append-only: UPDATE operations are strictly prohibited'
-    );
-END;
-
-CREATE TRIGGER IF NOT EXISTS prevent_acquirer_outcomes_delete
-BEFORE DELETE ON acquirer_outcomes
-BEGIN
-    SELECT RAISE(
-        ABORT,
-        'Acquirer outcomes table is append-only: DELETE operations are strictly prohibited'
-    );
-END;
-"""
+# Columns added after the first schema. CREATE TABLE IF NOT EXISTS does not add columns to
+# an existing ledger, so open_ledger() adds any that are missing (additive, NULL in old rows).
+MIGRATION_COLUMNS: tuple[tuple[str, str, str], ...] = (
+    (
+        "transactions",
+        "outcome",
+        "TEXT CHECK(outcome IN ('AUTHORIZED', 'ISSUER_DECLINE', 'TECHNICAL_FAILURE'))",
+    ),
+    ("acquirer_outcomes", "approval_alpha", "REAL"),
+    ("acquirer_outcomes", "approval_beta", "REAL"),
+    ("acquirer_outcomes", "expected_psr", "REAL"),
+)
 
 
 def load_schema_sql() -> str:
-    """Load SQL DDL from schema.sql if available on disk; otherwise use embedded schema."""
-    if SCHEMA_FILE_PATH.exists():
-        try:
-            return SCHEMA_FILE_PATH.read_text(encoding="utf-8")
-        except OSError:
-            pass
-    return EMBEDDED_SCHEMA_SQL
+    """Return the ledger DDL from schema.sql, the single schema source (packaged data)."""
+    return SCHEMA_FILE_PATH.read_text(encoding="utf-8")
+
+
+def _missing_columns(existing: dict[str, set[str]]) -> list[str]:
+    """ALTER TABLE statements for migration columns absent from ``existing``."""
+    return [
+        f"ALTER TABLE {table} ADD COLUMN {column} {ddl};"
+        for table, column, ddl in MIGRATION_COLUMNS
+        if column not in existing.get(table, set())
+    ]
+
+
+def migrate_schema_sync(conn: sqlite3.Connection) -> None:
+    """Add any missing migration columns to an existing ledger."""
+    existing = {
+        table: {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+        for table in {t for t, _c, _d in MIGRATION_COLUMNS}
+    }
+    for statement in _missing_columns(existing):
+        conn.execute(statement)
+    conn.commit()
+
+
+async def migrate_schema_async(conn: aiosqlite.Connection) -> None:
+    """Async variant of :func:`migrate_schema_sync`."""
+    existing: dict[str, set[str]] = {}
+    for table in {t for t, _c, _d in MIGRATION_COLUMNS}:
+        cursor = await conn.execute(f"PRAGMA table_info({table})")
+        existing[table] = {row[1] for row in await cursor.fetchall()}
+    for statement in _missing_columns(existing):
+        await conn.execute(statement)
+    await conn.commit()
 
 
 def extract_row_tuples(
@@ -187,6 +126,7 @@ def extract_row_tuples(
         json.dumps(result.thompson_samples),
         pid_diag_json,
         result.error_message,
+        result.outcome.value if result.outcome is not None else None,
     )
 
     snap = result.state_snapshot
@@ -202,6 +142,9 @@ def extract_row_tuples(
         snap.success_count,
         snap.failure_count,
         snap.total_count,
+        snap.approval_alpha,
+        snap.approval_beta,
+        snap.expected_psr,
     )
 
     return tx_tuple, outcome_tuple
@@ -224,8 +167,9 @@ INSERT INTO transactions (
     target_allocation_json,
     thompson_samples_json,
     pid_diagnostics_json,
-    error_message
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+    error_message,
+    outcome
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 """
 
 SQL_INSERT_OUTCOME = """
@@ -240,8 +184,11 @@ INSERT INTO acquirer_outcomes (
     expected_success_rate,
     success_count,
     failure_count,
-    total_count
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+    total_count,
+    approval_alpha,
+    approval_beta,
+    expected_psr
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 """
 
 
@@ -316,6 +263,7 @@ class MetricsLogger:
         schema_sql = load_schema_sql()
         await self._conn.executescript(schema_sql)
         await self._conn.commit()
+        await migrate_schema_async(self._conn)
 
         self._started = True
         self._stopping = False
@@ -637,6 +585,7 @@ class SQLiteMetricsStore:
         # Setup schema and constitutional triggers
         self._conn.executescript(load_schema_sql())
         self._conn.commit()
+        migrate_schema_sync(self._conn)
 
     @property
     def db_path(self) -> str:

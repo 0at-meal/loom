@@ -36,6 +36,9 @@ dev = [
 where = ["."]
 include = ["router_core*", "acquirer_sim*", "data_layer*", "baseline_router*"]
 
+[tool.setuptools.package-data]
+data_layer = ["schema.sql"]
+
 # -----------------------------------------------------------------------------
 # Code Guardrails: Ruff Linter & Formatter
 # -----------------------------------------------------------------------------

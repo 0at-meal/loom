@@ -25,7 +25,7 @@ import redis
 
 from data_layer.config import DataLayerConfig
 from data_layer.redis_state import RedisStateStore
-from data_layer.sqlite_logger import load_schema_sql
+from data_layer.sqlite_logger import load_schema_sql, migrate_schema_sync
 
 
 def get_redis_client(
@@ -114,6 +114,7 @@ def cmd_init_db(
         schema_sql = load_schema_sql()
         conn.executescript(schema_sql)
         conn.commit()
+        migrate_schema_sync(conn)
 
         # Verify tables exist
         cursor = conn.cursor()

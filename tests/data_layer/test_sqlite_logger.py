@@ -31,7 +31,7 @@ from data_layer.sqlite_logger import (
 from router_core.models import AcquirerRouteConfig, RouterConfig, RoutingResult
 from router_core.pid import PIDConfig, PIDDiagnostics
 from router_core.router import BanditRouter
-from router_core.state import AcquirerStateConfig, AcquirerStateSnapshot
+from router_core.state import AcquirerStateConfig, AcquirerStateSnapshot, Outcome
 
 
 def _create_mock_routing_result(
@@ -84,6 +84,7 @@ def _create_mock_routing_result(
         status=status,
         authorized=success,
         success=success,
+        outcome=Outcome.AUTHORIZED if success else Outcome.ISSUER_DECLINE,
         response_payload=payload,
         error_message=None if success else "Transaction declined",
         routing_latency_ms=0.15,
@@ -210,7 +211,7 @@ class TestSchemaFieldCaptureCompleteness:
     """Validates that every field required for Phase 6 PSR-lift comparison is stored."""
 
     def test_extracted_row_tuples_capture_all_required_columns(self) -> None:
-        """Verify extract_row_tuples extracts all 16 transaction columns and 11 outcome columns."""
+        """Verify extract_row_tuples extracts all 17 transaction columns and 14 outcome columns."""
         res = _create_mock_routing_result(
             tx_id="tx_extract_01",
             success=False,
@@ -218,8 +219,9 @@ class TestSchemaFieldCaptureCompleteness:
         )
         tx_row, outcome_row = extract_row_tuples(res)
 
-        # 16 columns for transactions
-        assert len(tx_row) == 16
+        # 17 columns for transactions (outcome added for F-04)
+        assert len(tx_row) == 17
+        assert tx_row[16] == "ISSUER_DECLINE"
         assert tx_row[0] == "tx_extract_01"  # transaction_id
         assert tx_row[1] == res.timestamp  # timestamp
         assert tx_row[2] == "acquirer_alpha"  # chosen_acquirer
@@ -233,7 +235,7 @@ class TestSchemaFieldCaptureCompleteness:
         assert tx_row[10] == 16.65  # total_latency_ms
 
         # 11 columns for acquirer_outcomes
-        assert len(outcome_row) == 11
+        assert len(outcome_row) == 14
         assert outcome_row[0] == "tx_extract_01"  # transaction_id
         assert outcome_row[1] == "acquirer_alpha"  # acquirer_id
         assert outcome_row[2] == res.timestamp  # timestamp

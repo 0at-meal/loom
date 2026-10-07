@@ -115,6 +115,17 @@ class BanditRouter:
         """Return the optional metrics logger hook."""
         return self._metrics_logger
 
+    def attach_data_hooks(
+        self,
+        metrics_logger: MetricsLogger | SQLiteMetricsStore | Any | None = None,
+        event_publisher: EventPublisher | AsyncEventPublisher | Any | None = None,
+    ) -> None:
+        """Set the ledger and event hooks after construction (used by the served app)."""
+        if metrics_logger is not None:
+            self._metrics_logger = metrics_logger
+        if event_publisher is not None:
+            self._event_publisher = event_publisher
+
     @property
     def current_allocation(self) -> dict[str, float]:
         """Return current actual smoothed allocation vector across acquirers."""

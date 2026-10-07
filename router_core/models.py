@@ -133,6 +133,13 @@ class RoutingResult(BaseModel):
         description="Whether the payment was authorized.",
         examples=[True],
     )
+    replayed: bool = Field(
+        default=False,
+        description=(
+            "True when this is the stored result of an earlier request with the same "
+            "transaction_id; nothing was dispatched (AUDIT F-07)."
+        ),
+    )
     outcome: Outcome | None = Field(
         default=None,
         description=(
