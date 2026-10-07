@@ -1,43 +1,12 @@
-"""Unit tests for BanditStateRegistry and calculate_gamma_from_half_life."""
+"""Unit tests for BanditStateRegistry."""
 
 from __future__ import annotations
-
-import math
 
 import numpy as np
 import pytest
 
-from router_core.bandit import BanditStateRegistry, calculate_gamma_from_half_life
+from router_core.bandit import BanditStateRegistry
 from router_core.state import AcquirerStateConfig
-
-
-class TestCalculateGamma:
-    """Tests half-life to decay factor mathematical conversion."""
-
-    def test_calculate_gamma_basic(self) -> None:
-        """Verify decay factor formula gamma = 0.5^(1 / (half_life * tps))."""
-        # Half life = 10s, TPS = 10 -> N_half = 100 transactions
-        gamma = calculate_gamma_from_half_life(half_life_seconds=10.0, expected_tps=10.0)
-        assert gamma == pytest.approx(math.pow(0.5, 1.0 / 100.0))
-        assert math.isclose(math.pow(gamma, 100), 0.5, rel_tol=1e-6)
-
-    def test_default_env_params(self) -> None:
-        """Verify derivation for DECAY_HALF_LIFE_SEC=60.0 with 5 TPS."""
-        gamma = calculate_gamma_from_half_life(half_life_seconds=60.0, expected_tps=5.0)
-        n_half = 300.0
-        assert gamma == pytest.approx(math.pow(0.5, 1.0 / n_half))
-
-    @pytest.mark.parametrize("bad_hl", [0.0, -5.0])
-    def test_non_positive_half_life_raises(self, bad_hl: float) -> None:
-        """Verify non-positive half_life raises ValueError."""
-        with pytest.raises(ValueError, match=r"half_life_seconds must be > 0\.0"):
-            calculate_gamma_from_half_life(half_life_seconds=bad_hl, expected_tps=10.0)
-
-    @pytest.mark.parametrize("bad_tps", [0.0, -1.0])
-    def test_non_positive_tps_raises(self, bad_tps: float) -> None:
-        """Verify non-positive tps raises ValueError."""
-        with pytest.raises(ValueError, match=r"expected_tps must be > 0\.0"):
-            calculate_gamma_from_half_life(half_life_seconds=10.0, expected_tps=bad_tps)
 
 
 class TestBanditStateRegistry:

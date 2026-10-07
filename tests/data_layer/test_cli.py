@@ -219,7 +219,7 @@ class TestCLIInspectState:
             alpha_prior=1.0,
             beta_prior=1.0,
         )
-        store.write_snapshot(snap, decay_factor=0.98)
+        store.write_snapshot(snap, config=AcquirerStateConfig(decay_factor=0.98))
 
         code = cmd_inspect_state(redis_client=fake_redis, as_json=True)
         assert code == 0

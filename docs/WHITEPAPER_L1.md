@@ -153,7 +153,7 @@ In plain English: the **mean** is our best guess (roughly successes divided by t
 
 The starting belief $\text{Beta}(1, 1)$, a flat line, is called the **prior**; the updated belief is the **posterior**. Adding 1 to $\alpha$ per success and 1 to $\beta$ per failure is the exact update for a yes/no process, which is why Beta curves are the standard tool here.
 
-> **But why?** *Why start the tallies at 1 instead of 0?* $\text{Beta}(1,1)$ is flat, honestly saying "anything is possible"; zeros would break the math. Loom requires positive priors (`router_core/state.py:22-25`) and defaults both to 1.
+> **But why?** *Why start the tallies at 1 instead of 0?* $\text{Beta}(1,1)$ is flat, honestly saying "anything is possible"; zeros would break the math. Loom requires positive priors (`router_core/state.py:34-37`) and defaults both to 1.
 
 ### 4.4 Thompson Sampling: let the uncertainty do the exploring
 
@@ -161,7 +161,7 @@ The starting belief $\text{Beta}(1, 1)$, a flat line, is called the **prior**; t
 
 Exploration happens by itself. A narrow, confident curve almost always draws near its mean. A wide, uncertain curve sometimes draws high by chance, and then that arm gets a turn and we learn more. As evidence grows, curves narrow and lucky draws from bad arms become rare.
 
-**A worked example.** Let acquirer A be $\text{Beta}(20, 2)$ (mean about 0.91) and B be $\text{Beta}(3, 2)$ (mean 0.60, very uncertain). Five draws with a fixed random **seed** (a starting value that makes the random numbers repeatable), using the Beta sampler from NumPy (Python's numerical library) that Loom calls (`router_core/state.py:129`):
+**A worked example.** Let acquirer A be $\text{Beta}(20, 2)$ (mean about 0.91) and B be $\text{Beta}(3, 2)$ (mean 0.60, very uncertain). Five draws with a fixed random **seed** (a starting value that makes the random numbers repeatable), using the Beta sampler from NumPy (Python's numerical library) that Loom calls (`router_core/state.py:215`):
 
 | Draw | A ~ Beta(20,2) | B ~ Beta(3,2) | Winner |
 |---|---|---|---|
@@ -173,11 +173,11 @@ Exploration happens by itself. A narrow, confident curve almost always draws nea
 
 B came close on draw 2. Over 100,000 pairs, B won about 5.6% of the time, roughly one payment in eighteen. The amount of exploration is set by the uncertainty itself, not by a hand-picked percentage.
 
-> ⚠️ **Doc/code mismatch (M-1):** `docs/CONSTITUTION.md` pins `scipy.stats.beta` as the Thompson Sampling library vs the code, which draws samples with NumPy's `Generator.beta` (`router_core/state.py:129`).
+> ⚠️ **Doc/code mismatch (M-1):** `docs/CONSTITUTION.md` pins `scipy.stats.beta` as the Thompson Sampling library vs the code, which draws samples with NumPy's `Generator.beta` (`router_core/state.py:215`).
 
 > **But why?** *Why not something simpler, like "explore 10% of the time"?* That rule, epsilon-greedy, is rejected in the decision log because a fixed rate "can't adapt exploration to actual confidence". UCB, which adds an optimism bonus to uncertain arms, was set aside because its output "composes less cleanly" with the smoothing layer.
 
-**Code pointer:** `router_core/state.py` (`AcquirerState.sample`), `router_core/bandit.py` (`BanditStateRegistry.sample_all`), `router_core/router.py:176-203`.
+**Code pointer:** `router_core/state.py` (`AcquirerState.sample`), `router_core/bandit.py` (`BanditStateRegistry.sample_all`), `router_core/router.py:184-211`.
 
 ---
 
@@ -185,22 +185,30 @@ B came close on draw 2. Over 100,000 pairs, B won about 5.6% of the time, roughl
 
 ### 5.1 The problem with perfect memory
 
-Classic Thompson Sampling assumes each arm's success rate never changes. Acquirers can run at 95% for an hour, drop to 0% in an outage, then recover; such a drifting world is called **non-stationary**. With perfect memory, an acquirer with 10,000 past successes would need thousands of failures before its mean dropped noticeably. The fix is to let old evidence fade, like tallies written in ink that fades a little each time a new entry is added to that bridge's page.
+Classic Thompson Sampling assumes each arm's success rate never changes. Acquirers can run at 95% for an hour, drop to 0% in an outage, then recover; such a drifting world is called **non-stationary**. With perfect memory, an acquirer with 10,000 past successes would need thousands of failures before its mean dropped noticeably. The fix is to let old evidence fade, like tallies written in ink that fades as the clock ticks.
 
 ### 5.2 Loom's update rule
 
-Loom's update is in `router_core/state.py:110-111`. Let $x$ be the outcome: 1 for success, 0 for failure. Let $\gamma$ (gamma) be the **decay factor**, a number just below 1 (default 0.98). Let $\alpha_0$ and $\beta_0$ be the priors (default 1). Then each time an acquirer is used:
+Loom fades evidence on the clock. Let $h$ be the **half-life** in seconds: the time after which an observation counts half as much (default 2.3 s, set by `DECAY_HALF_LIFE_SEC` or `--half-life-sec` on the router server). Let $x$ be a payment's outcome: 1 for success, 0 for failure. Let $\alpha_0$ and $\beta_0$ be the priors (default 1). When $\Delta t$ seconds have passed since an acquirer's tallies were last faded, Loom shrinks the evidence above the prior by
 
 $$
-\alpha_t = \max\!\big(\alpha_0,\; \alpha_0 + \gamma(\alpha_{t-1} - \alpha_0) + x\big)
-$$
-$$
-\beta_t = \max\!\big(\beta_0,\; \beta_0 + \gamma(\beta_{t-1} - \beta_0) + (1 - x)\big)
+f = 0.5^{\Delta t / h}
 $$
 
-In plain English: take the evidence *above* the prior, shrink it by $\gamma$, and add the new outcome. The prior never fades, so $\alpha$ and $\beta$ never drop below their starting values; the `max` only guards against rounding. The decision log calls this the "mean-reverting offset" form.
+and, if an outcome has just arrived, adds it:
 
-**Worked example (real output).** Starting from $\text{Beta}(1,1)$ with $\gamma = 0.98$, the outcomes success, success, success, failure, success produced:
+$$
+\alpha_t = \max\!\big(\alpha_0,\; \alpha_0 + f(\alpha_{t-1} - \alpha_0) + x\big)
+$$
+$$
+\beta_t = \max\!\big(\beta_0,\; \beta_0 + f(\beta_{t-1} - \beta_0) + (1 - x)\big)
+$$
+
+In plain English: take the evidence *above* the prior, shrink it by how much time has passed, and add the new outcome. The prior never fades, so $\alpha$ and $\beta$ never drop below their starting values; the `max` only guards against rounding. The decision log calls this the "mean-reverting offset" form.
+
+Fading happens when an outcome is recorded and again just before every Thompson draw, using the router's clock (`router_core/state.py`, `decay_beliefs` and `step_beliefs`; `router_core/router.py`, `clock`). So an acquirer that receives no traffic still drifts back toward its prior.
+
+**Per-observation mode.** Before this change Loom used a different rule, still available by setting `decay_factor` (`--decay-factor` on the server): replace $f$ with a fixed $\gamma$ just below 1, applied each time *that acquirer* records an outcome, however much time has passed. It is easy to check by hand. Starting from $\text{Beta}(1,1)$ with $\gamma = 0.98$, the outcomes success, success, success, failure, success produced (real output):
 
 | After | $\alpha$ | $\beta$ | Mean |
 |---|---|---|---|
@@ -210,36 +218,41 @@ In plain English: take the evidence *above* the prior, shrink it by $\gamma$, an
 | F | 3.8816 | 2.0000 | 0.660 |
 | S | 4.8240 | 1.9800 | 0.709 |
 
-Check the second row by hand: $1 + 0.98 \times (2 - 1) + 1 = 2.98$. On the failure row, $\alpha$ shrinks slightly ($1 + 0.98 \times 2.9404 = 3.8816$) while $\beta$ gains a full point.
+Check the second row: $1 + 0.98 \times (2 - 1) + 1 = 2.98$. On the failure row, $\alpha$ shrinks slightly ($1 + 0.98 \times 2.9404 = 3.8816$) while $\beta$ gains a full point.
 
-### 5.3 What $\gamma$ actually controls
+### 5.3 What the half-life controls
 
-- **Memory length.** An outcome's weight halves after $\ln 0.5 / \ln \gamma$ further updates: about 34 at $\gamma = 0.98$, about 13.5 at $\gamma = 0.95$.
-- **Maximum confidence.** After endless successes, $\alpha$ settles at $\alpha_0 + 1/(1-\gamma)$: 51 at $\gamma = 0.98$, 21 at $\gamma = 0.95$. The belief can never become infinitely certain.
+- **Memory in seconds is fixed.** An outcome's weight halves every $h$ seconds, whatever the traffic.
+- **Memory in observations follows traffic.** An acquirer receiving $r$ payments per second holds about $r h / \ln 2$ observations' worth of evidence. At 15 payments per second with $h = 2.3$ s that is 49.8 for an acquirer carrying all the traffic, 48.3 for one at 97%, and 1.5 for one held at the 3% floor.
+- **Maximum confidence.** After endless successes, $\alpha$ settles near $\alpha_0 + r h / \ln 2$: about 51 for the busiest acquirer above. The belief can never become infinitely certain.
 
-**Outage example (real output).** With $\gamma = 0.95$, after 200 straight successes an acquirer sits at $\text{Beta}(21, 1)$, mean 0.955. As failures arrive, the mean falls to 0.909 after 1, 0.825 after 3, 0.749 after 5, and 0.590 after 10. With $\gamma = 0.98$ it starts from about $\text{Beta}(50, 1)$ and after 10 failures is still at 0.802. A smaller $\gamma$ reacts faster but also trusts a short streak of bad luck more.
+The default 2.3 s was chosen to match the old $\gamma = 0.98$ for an acquirer carrying all of 15 payments per second ($\gamma = 0.98$ halves an outcome's weight after 34 observations; 34 ÷ 15 ≈ 2.3 s). The difference is at the edges. Under $\gamma = 0.98$ an acquirer at the 3% floor turned over its 50-observation memory in about 111 seconds, and an idle one never did.
 
-A helper converts a half-life $h$ in seconds and a traffic rate into $\gamma = 0.5^{1/(h \cdot \text{tps})}$ (`router_core/bandit.py:12-20`); 60 seconds at 15 transactions per second gives $\gamma \approx 0.99923$. The servers do not call it; they take $\gamma$ as a command-line value (`router_core/server.py:47-51`, `100`).
+**Outage example (real output).** At 15 payments per second with $h = 2.3$ s, after 200 straight successes an acquirer sits at $\text{Beta}(50.4, 1.0)$, mean 0.981. As failures arrive, the mean falls to 0.961 after 1, 0.923 after 3, 0.887 after 5 and 0.803 after 10. Per-observation $\gamma = 0.98$ gave almost the same, 0.802 after 10. With $\gamma = 0.95$ (13.5 observations), the mean starts at 0.955 and falls to 0.909, 0.825, 0.749 and 0.590. The benchmark in Section 8 uses $h = 0.9$ s, which matches $\gamma = 0.95$ at 15 payments per second. A shorter half-life reacts faster but also trusts a short streak of bad luck more.
 
-> ⚠️ **Doc/code mismatch (M-2, fixed):** The README's "How It Works" diagram and the dashboard footer described decay as $\gamma = 0.98$ and "weighted toward the last minute" vs decay that is applied per outcome with no time component (`router_core/state.py:104-111`), and a headline benchmark that uses $\gamma = 0.95$ (`scripts/compare_psr.py:107,112`). PR #1 corrected the README and PR #2 the dashboard footer. At 15 payments per second, 50 observations is about 3.4 seconds of traffic for an acquirer carrying 97% of it, but about 111 seconds for an acquirer held at the 3% floor, and an idle acquirer's belief does not fade at all (AUDIT F-23).
+**Idle acquirer (real output).** After 20 failures with no traffic since, an acquirer is at $\text{Beta}(1, 21)$, mean 0.045. 2.3 s later it is at $\text{Beta}(1, 11)$, mean 0.083; 10 s later $\text{Beta}(1, 1.98)$, mean 0.335; 30 s later it is back to $\text{Beta}(1, 1)$, mean 0.499.
+
+> ⚠️ **Doc/code mismatch (M-2, fixed):** The README's "How It Works" diagram and the dashboard footer described decay as $\gamma = 0.98$ and "weighted toward the last minute", while the code decayed per outcome with no time component and the headline benchmark used $\gamma = 0.95$. PR #1 corrected the README and PR #2 the dashboard footer; PR #3 replaced per-observation decay with the wall-clock rule above (AUDIT F-23).
 
 ### 5.4 A second, simpler signal: the health score
 
-Alongside $\alpha$ and $\beta$, each acquirer keeps a **health score** $H$, an *exponentially weighted moving average* (EWMA). That is a running average in which recent outcomes count more:
+Alongside $\alpha$ and $\beta$, each acquirer keeps a **health score** $H$, a recent success fraction for people to read. With wall-clock decay it is the faded successes over the faded total, with the starting health $H_0$ (default 1.0) counted as one extra observation:
 
 $$
-H_t = \gamma H_{t-1} + (1 - \gamma)\,x
+H = \frac{(\alpha - \alpha_0) + H_0}{(\alpha - \alpha_0) + (\beta - \beta_0) + 1}
 $$
 
-$H$ starts at 1.0 and moves a small step toward each outcome; one failure takes it from 1.0 to 0.98. The decision log keeps it separate from the Beta belief: the belief carries *uncertainty* for exploration, while $H$ is a smooth number for people to read. In the code, $H$ is computed, logged and displayed, but **it does not feed into routing decisions**.
+So a fresh acquirer reads 1.0, and three failures in a row take it to 0.25. In per-observation mode $H$ is instead an *exponentially weighted moving average*, $H_t = \gamma H_{t-1} + (1 - \gamma)\,x$, where one failure takes it from 1.0 to 0.98. The decision log keeps it separate from the Beta belief: the belief carries *uncertainty* for exploration, while $H$ is a number for people to read. In the code, $H$ is computed, logged and displayed, but **it does not feed into routing decisions**.
 
-### 5.5 The catch: only the arm you use gets updated
+### 5.5 Idle acquirers fade too
 
-Decay is *event-driven*: an acquirer's tallies change only when a payment is sent to it (`router_core/router.py:327-331`). An acquirer with no traffic is frozen. Its last, possibly terrible, belief never fades, so it is never picked, so it never updates. Phase 3 testing found exactly this: after an outage ended, the recovered acquirer received 0 of the next 50 payments (reproduced here; see Section 8). The project calls this **route starvation**. Here the fading-ink analogy needs a correction: ink fades only when a new entry is written on that page, not as the clock ticks.
+Under per-observation decay, an acquirer's tallies changed only when a payment was sent to it. An acquirer with no traffic was frozen: its last, possibly terrible, belief never faded, so it was never picked, so it never updated. Phase 3 testing found exactly this: after an outage ended, the recovered acquirer received 0 of the next 50 payments. The project calls this **route starvation**, and fixed it with the traffic floor in Section 6.4.
 
-> **But why?** *Why not fade every belief on a timer, so dormant ones drift back to "unknown"?* The decision log rejected a "background ticker" in favour of "fully deterministic, reproducible test vectors" without clock mocking, and fixes starvation with the traffic floor in Section 6.4 instead.
+With wall-clock decay, a dead acquirer's belief returns to its prior within about ten half-lives, after which Thompson draws pick it again on their own. In the benchmark's seed-42 run, alpha's smoothed share climbed back to 0.35 by payment 150 after the outage ended, where under per-observation decay it stayed at the 0.03 floor (Section 8.2).
 
-**Code pointer:** `router_core/state.py` (`record_outcome`), `router_core/bandit.py` (`calculate_gamma_from_half_life`).
+> **But why?** *Why did the project first choose per-observation decay?* The decision log rejected a "background ticker" in favour of "fully deterministic, reproducible test vectors" without clock mocking. Loom keeps that property another way. Decay is applied lazily, only when a belief is read or updated, and the router takes its time from an injectable clock. Tests and the benchmark pass a virtual clock (the benchmark's advances 1/15 s per payment), so results do not depend on how fast the machine runs.
+
+**Code pointer:** `router_core/state.py` (`AcquirerStateConfig`, `decay_beliefs`, `step_beliefs`), `router_core/router.py` (`clock`), `data_layer/redis_state.py` (same rule for Redis-backed state).
 
 ---
 
@@ -271,16 +284,16 @@ You run a controller whenever you adjust a shower's temperature. A **PID control
 
 Loom steers the **allocation vector** $w$: each acquirer's share of traffic, such as 72% to A and 28% to B. Shares are non-negative and sum to 1.
 
-On every payment, Loom does the following (`router_core/router.py:200-217`, `router_core/pid.py:186-321`):
+On every payment, Loom does the following (`router_core/router.py:208-225`, `router_core/pid.py:186-321`):
 
-1. **Target.** Draw Thompson samples and find the winner. The target $w^{*}$ puts 1.0 on the winner and 0.0 on everyone else, a **one-hot** vector (`router.py:202-203`). The bandit's square wave is still there; it has simply moved upstream, into the target.
+1. **Target.** Draw Thompson samples and find the winner. The target $w^{*}$ puts 1.0 on the winner and 0.0 on everyone else, a **one-hot** vector (`router.py:210-211`). The bandit's square wave is still there; it has simply moved upstream, into the target.
 2. **Error, centered.** For each acquirer $i$, $e_i = (w^{*}_i - w_i) - \frac{1}{k}\sum_j (w^{*}_j - w_j)$, where $k$ is the number of acquirers. The subtraction keeps errors summing to zero, so one acquirer's gain is exactly another's loss. When both vectors already sum to 1, that mean is zero, so this step is a safeguard.
 3. **Integral with clamp.** $I_i \leftarrow \text{clamp}(\gamma_I I_i + e_i \Delta t,\, -I_{\max},\, +I_{\max})$, then re-centered to sum to zero. Here $\gamma_I$ is an optional "leak" factor (default 1.0, meaning no leak), and $\Delta t$ is the time step.
 4. **Derivative on measurement.** Instead of the rate of change of the error, Loom uses the rate of change of the allocation itself: $d_i = -(w_i - w_i^{\text{prev}})/\Delta t$, where $w_i^{\text{prev}}$ is the allocation one step earlier. An optional **low-pass filter** (a smoother that damps rapid wiggles) is available but off by default.
 5. **Combine and move.** The correction is $u_i = K_p e_i + K_i I_i + K_d d_i$, and the proposed allocation is $\hat{w}_i = w_i + u_i$.
 6. **Project.** Clean up $\hat{w}$ so the shares are valid and respect a minimum floor (Section 6.4).
 
-The tuned defaults are $K_p = 0.12$, $K_i = 0.005$, $K_d = 0.25$, $I_{\max} = 1.0$, $w_{\min} = 0.03$ (`router_core/pid.py:16-64`). Note that $\Delta t$ is fixed at 1.0 *per payment* (`router.py:211`): the controller runs on transaction count, not clock time, so it steps faster when traffic is heavier.
+The tuned defaults are $K_p = 0.12$, $K_i = 0.005$, $K_d = 0.25$, $I_{\max} = 1.0$, $w_{\min} = 0.03$ (`router_core/pid.py:16-64`). Note that $\Delta t$ is fixed at 1.0 *per payment* (`router.py:219`): the controller runs on transaction count, not clock time, so it steps faster when traffic is heavier.
 
 **What the controller measures.** The setpoint is a one-hot vector on this payment's Thompson winner, and the "measurement" is the allocation $w$ the controller itself produced on the previous step. The traffic actually dispatched and the acquirers' answers never enter the controller; they reach it only through the Beta beliefs that pick the next winner. Fed a stream of winners, the output settles at each acquirer's win frequency. In effect the PID is a smoother (a low-pass filter) on the bandit's choices, not a control loop around measured traffic or outcomes (AUDIT F-08). The benefit it is meant to bring, sparing a backup from a sudden flood, would need capacity limits that the simulator does not model; its measured cost is 1.71 points of PSR against the raw bandit over 100 paired seeds (Section 8.3).
 
@@ -298,7 +311,7 @@ Read step 2. The error is $1 - 0.5625 = 0.4375$, so P $= 0.12 \times 0.4375 = 0.
 
 > **But why?** *Why take the derivative of the allocation rather than of the error?* Loom's target jumps between 0 and 1 whenever the Thompson winner changes. The error jumps with it, and its rate of change spikes, which control engineers call **derivative kick**. Differentiating the allocation instead, which only moves smoothly, gives what the decision log calls "true velocity damping" without the kick.
 
-> ⚠️ **Doc/code mismatch (M-3):** The Phase 3 Tech Lead review in `docs/decisions-log.md` requires that PID error "be derived from the smoothed EWMA health signal ($H_i$) or posterior means" vs the code, which sets the target to a one-hot vector on the Thompson-sample winner and computes error against current allocation (`router_core/router.py:202-212`, `router_core/pid.py:248-250`).
+> ⚠️ **Doc/code mismatch (M-3):** The Phase 3 Tech Lead review in `docs/decisions-log.md` requires that PID error "be derived from the smoothed EWMA health signal ($H_i$) or posterior means" vs the code, which sets the target to a one-hot vector on the Thompson-sample winner and computes error against current allocation (`router_core/router.py:210-220`, `router_core/pid.py:248-250`).
 
 > **But why?** *Why is the integral clamped at all?* The Phase 4 QA report describes a 200-payment outage where an unclamped integrator drifted to about −8.99 and then delayed recovery by 5 to 6 payments. The 3% floor, described next, also creates a permanent small error that would otherwise accumulate without limit. (These figures are as reported in the repository's docs, not independently reproduced here.)
 
@@ -321,14 +334,14 @@ The floor is Loom's fix for starvation: even a seemingly dead acquirer keeps 3% 
 
 ### 6.5 From shares to single payments: the scheduler
 
-"72% to A" is not a decision; each payment goes to exactly one acquirer. Loom has two **actuation modes** (`router.py:219-234`):
+"72% to A" is not a decision; each payment goes to exactly one acquirer. Loom has two **actuation modes** (`router.py:227-242`):
 
 - **Stochastic** (default): roll a weighted die; A wins each roll with probability $w_A$.
 - **Deficit** (Bresenham pacing, after a line-drawing algorithm): keep a running "owed" total $c_i$, add $w_i$ each payment, and pick the acquirer furthest behind ($c_i - n_i$, with $n_i$ payments already sent). Ties go to the ID that sorts last.
 
 **Example (real output).** With shares $(0.7, 0.3)$, ten payments go A, B, A, A, B, A, A, A, B, A: exactly 7 and 3. Eight runs of ten weighted die rolls instead gave A 5, 7, 9, 9, 6, 8, 9 and 6. Deficit pacing removes that noise, which matters in short experiments.
 
-> ⚠️ **Doc/code mismatch (M-4, fixed in README by PR #1):** `README.md` stated that "Actuation executes via deterministic deficit round-robin (Bresenham pacing)" vs the default `actuation_mode="stochastic"` (`router_core/pid.py:66-67`). The server entrypoints build `PIDConfig` without setting a mode (`router_core/server.py:119-124`, `router_core/app.py:59`), so the live service draws stochastically. The benchmark scripts set `"deficit"` explicitly (`scripts/compare_psr.py:141`).
+> ⚠️ **Doc/code mismatch (M-4, fixed in README by PR #1):** `README.md` stated that "Actuation executes via deterministic deficit round-robin (Bresenham pacing)" vs the default `actuation_mode="stochastic"` (`router_core/pid.py:66-67`). The server entrypoints build `PIDConfig` without setting a mode (`router_core/server.py:137-142`, `router_core/app.py:59`), so the live service draws stochastically. The benchmark scripts set `"deficit"` explicitly (`scripts/compare_psr.py:148`).
 
 ### 6.6 The whole loop
 
@@ -374,21 +387,21 @@ flowchart TB
 ```
 *Notice the dotted lines: the data layer hangs off optional hooks, and in the default live service those hooks are not connected.*
 
-**The simulator (`acquirer_sim/`).** One FastAPI service (FastAPI is a Python framework for services that speak **HTTP**, the request-and-response protocol of the web) hosts three simulated acquirers, alpha, beta and gamma, at 95% success on port 8001. Each authorization waits about 20 ms of **latency** (delay), give or take 5 ms of random **jitter**, then approves if a random draw $u$ is below the success rate; otherwise it declines with `DO_NOT_HONOR`, standing in for an ordinary customer or issuer decline. **Fault injection** (deliberately causing failures) uses admin **endpoints**, web addresses the service answers, that set the success rate or toggle an outage with one of three behaviors: `RETURN_DECLINE` (default, a normal "declined, `ACQUIRER_OUTAGE`" reply), `HTTP_503` (a "service unavailable" error), or `LATENCY_SPIKE` (500 ms extra delay, then the outage decline). Outages are instant switches; gradual transitions are rejected (`acquirer_sim/simulator.py:103-106`), and gray failures are made by lowering the success rate. The 500 ms spike stays under the router's 2-second timeout (`router_core/models.py:37-38`), so `LATENCY_SPIKE` ends in the same decline as `RETURN_DECLINE` (AUDIT F-26). Both routers score a `DO_NOT_HONOR` decline as a failure of the acquirer that carried it (`router_core/router.py:295`, `baseline_router/router.py:282`), so their health signals mix all three families of Section 2.3 (AUDIT F-02).
+**The simulator (`acquirer_sim/`).** One FastAPI service (FastAPI is a Python framework for services that speak **HTTP**, the request-and-response protocol of the web) hosts three simulated acquirers, alpha, beta and gamma, at 95% success on port 8001. Each authorization waits about 20 ms of **latency** (delay), give or take 5 ms of random **jitter**, then approves if a random draw $u$ is below the success rate; otherwise it declines with `DO_NOT_HONOR`, standing in for an ordinary customer or issuer decline. **Fault injection** (deliberately causing failures) uses admin **endpoints**, web addresses the service answers, that set the success rate or toggle an outage with one of three behaviors: `RETURN_DECLINE` (default, a normal "declined, `ACQUIRER_OUTAGE`" reply), `HTTP_503` (a "service unavailable" error), or `LATENCY_SPIKE` (500 ms extra delay, then the outage decline). Outages are instant switches; gradual transitions are rejected (`acquirer_sim/simulator.py:103-106`), and gray failures are made by lowering the success rate. The 500 ms spike stays under the router's 2-second timeout (`router_core/models.py:37-38`), so `LATENCY_SPIKE` ends in the same decline as `RETURN_DECLINE` (AUDIT F-26). Both routers score a `DO_NOT_HONOR` decline as a failure of the acquirer that carried it (`router_core/router.py:303`, `baseline_router/router.py:282`), so their health signals mix all three families of Section 2.3 (AUDIT F-02).
 
-> ⚠️ **Doc/code mismatch (M-5, README fixed by PR #1):** `docs/decisions-log.md` (Phase 2), and `README.md` before PR #1, describe "independent processes on separate ports" providing "real OS-level failure isolation" vs the default topology, in which one process hosts all simulated acquirers (`acquirer_sim/app.py:45-51`) and the router's default routes all point at port 8001 (`router_core/app.py:42-55`, `router_core/server.py:41-45`).
+> ⚠️ **Doc/code mismatch (M-5, README fixed by PR #1):** `docs/decisions-log.md` (Phase 2), and `README.md` before PR #1, describe "independent processes on separate ports" providing "real OS-level failure isolation" vs the default topology, in which one process hosts all simulated acquirers (`acquirer_sim/app.py:45-51`) and the router's default routes all point at port 8001 (`router_core/app.py:42-55`, `router_core/server.py:42-46`).
 
-**The router service (`router_core/`).** `BanditRouter` keeps beliefs and PID state in memory. Its FastAPI app exposes `/route`, `/health`, `/state`, proxy endpoints for the dashboard's outage buttons, and a **WebSocket**, a connection that stays open so the server can push messages to the browser. PID is on by default (`--no-pid` disables it). Failures in the optional Redis publisher and SQLite logger are caught and logged (`router.py:373-387`), but two paths are unprotected. The `/route` endpoint awaits a WebSocket send to every connected dashboard before it answers (`router_core/app.py:67-78`, `214-218`), so one stalled browser can stall routing (AUDIT F-05). And an exception in the belief update after the acquirer has answered (`router.py:327-331`) reaches the caller as an HTTP 500, even when the payment was authorized (AUDIT F-07).
+**The router service (`router_core/`).** `BanditRouter` keeps beliefs and PID state in memory. Its FastAPI app exposes `/route`, `/health`, `/state`, proxy endpoints for the dashboard's outage buttons, and a **WebSocket**, a connection that stays open so the server can push messages to the browser. PID is on by default (`--no-pid` disables it). Failures in the optional Redis publisher and SQLite logger are caught and logged (`router.py:381-395`), but two paths are unprotected. The `/route` endpoint awaits a WebSocket send to every connected dashboard before it answers (`router_core/app.py:67-78`, `214-218`), so one stalled browser can stall routing (AUDIT F-05). And an exception in the belief update after the acquirer has answered (`router.py:335-339`) reaches the caller as an HTTP 500, even when the payment was authorized (AUDIT F-07).
 
 > **But why?** *Why does the dashboard connect to the router directly instead of only to Redis?* The decision log chose a FastAPI-native WebSocket gateway to avoid running an extra proxy process. In the default service, each routing result is pushed straight to connected browsers; a Redis forwarder task also starts, but it only relays events that some other component publishes to Redis (`router_core/app.py:131-147`).
 
 **The baseline router (`baseline_router/`).** A separate module implementing Section 2.5: a priority list, a trip after $M$ consecutive failures (default 3), a cooldown of $N = 30$ payments, then one canary probe. If every route is tripped it falls back to the first priority. It also offers "snapback" (no probe) and a sliding-window trigger, and writes the same result format as Loom.
 
-**The data layer (`data_layer/`).** *Redis*, an in-memory data store, can hold beliefs (`RedisBanditStateRegistry`, same update rule, optimistic locking that retries if keys changed underneath it, `data_layer/redis_state.py:262-332`) and broadcast events via **pub/sub** (publish/subscribe), a fire-and-forget channel. *SQLite* holds an append-only **ledger**: the `transactions` and `acquirer_outcomes` tables; database **triggers** abort any `UPDATE` or `DELETE` (`data_layer/schema.sql:80-102`). An asynchronous logger batches up to 20 rows or 50 ms. The demo reset drops and recreates the tables, which triggers do not block (`data_layer/cli.py:524-525`). The triggers stop accidental edits, not deliberate ones: `INSERT OR REPLACE` rewrites a row without firing them, `DROP TRIGGER` removes them, and the database file itself can be replaced (AUDIT F-11). At the audited commit the asynchronous logger could also lose its in-hand batch on shutdown, and one duplicate transaction ID rolled back a whole batch (AUDIT F-12). PSR is authorized rows divided by total rows.
+**The data layer (`data_layer/`).** *Redis*, an in-memory data store, can hold beliefs (`RedisBanditStateRegistry`, same update rule, optimistic locking that retries if keys changed underneath it, `data_layer/redis_state.py:279-356`) and broadcast events via **pub/sub** (publish/subscribe), a fire-and-forget channel. *SQLite* holds an append-only **ledger**: the `transactions` and `acquirer_outcomes` tables; database **triggers** abort any `UPDATE` or `DELETE` (`data_layer/schema.sql:80-102`). An asynchronous logger batches up to 20 rows or 50 ms. The demo reset drops and recreates the tables, which triggers do not block (`data_layer/cli.py:524-525`). The triggers stop accidental edits, not deliberate ones: `INSERT OR REPLACE` rewrites a row without firing them, `DROP TRIGGER` removes them, and the database file itself can be replaced (AUDIT F-11). At the audited commit the asynchronous logger could also lose its in-hand batch on shutdown, and one duplicate transaction ID rolled back a whole batch (AUDIT F-12). PSR is authorized rows divided by total rows.
 
-> ⚠️ **Doc/code mismatch (M-6, README fixed by PR #1):** `docs/decisions-log.md` (Phase 5), and `README.md` before PR #1, describe "embedded Redis Lua scripts" for atomic belief updates vs optimistic `WATCH`/`MULTI` transactions with a retry loop in Python (`data_layer/redis_state.py:262-332`); no Lua script exists in the repository.
+> ⚠️ **Doc/code mismatch (M-6, README fixed by PR #1):** `docs/decisions-log.md` (Phase 5), and `README.md` before PR #1, describe "embedded Redis Lua scripts" for atomic belief updates vs optimistic `WATCH`/`MULTI` transactions with a retry loop in Python (`data_layer/redis_state.py:279-356`); no Lua script exists in the repository.
 
-> ⚠️ **Doc/code mismatch (M-7, README fixed by PR #1):** `docs/prd.md`, and `README.md` before PR #1, say Redis holds live health state and that in standalone mode "SQLite logs all transactions locally" vs the service entrypoints, which construct `BanditRouter` with no registry, publisher or logger (`router_core/app.py:56-61`, `router_core/server.py:126`, `router_core/app.py:39`). The live service therefore keeps beliefs in process memory (`router_core/router.py:42`) and writes no SQLite rows. The hooks are exercised by tests and scripts.
+> ⚠️ **Doc/code mismatch (M-7, README fixed by PR #1):** `docs/prd.md`, and `README.md` before PR #1, say Redis holds live health state and that in standalone mode "SQLite logs all transactions locally" vs the service entrypoints, which construct `BanditRouter` with no registry, publisher or logger (`router_core/app.py:56-61`, `router_core/server.py:144`, `router_core/app.py:39`). The live service therefore keeps beliefs in process memory (`router_core/router.py:49`) and writes no SQLite rows. The hooks are exercised by tests and scripts.
 
 **The dashboard (`dashboard/`).** A React app (React is a JavaScript library for web interfaces) listening on `ws://127.0.0.1:8000/ws/telemetry` draws the live allocation chart (last 120 points) over a dashed curve from a stored 150-payment baseline run, plus a rolling 50-payment PSR and per-acquirer outage buttons. On connect, the server sends a `BOOTSTRAP` message with current belief snapshots.
 
@@ -398,7 +411,7 @@ flowchart TB
 
 **The value-scaled policy (`router_core/value_policy.py`, Phase 8).** An optional layer, off by default, that reduces exploration for large payments by pulling each sample toward its mean before the winner is chosen: $\tilde{\theta}_i = (1-\lambda)\theta_i + \lambda\hat{\mu}_i$, where $\theta_i$ is the raw draw, $\hat{\mu}_i = \alpha_i/(\alpha_i+\beta_i)$ the posterior mean, and $\lambda = 1 - e^{-V/\tau}$ for payment value $V$. With $\tau = 100$ currency units, $\lambda$ is 0.095 at 10, 0.632 at 100, 0.918 at 250 and almost 1 at 1,000, so large payments nearly always go to the best mean. Value never enters the Beta update.
 
-> ⚠️ **Doc/code mismatch (M-10):** `docs/decisions-log.md` (Phase 8 Tech Lead review) says outage inertia lasts "until EWMA health decay drags $\hat{\mu}$ down" vs $\hat{\mu}$ being the Beta posterior mean (`router_core/router.py:187`, `router_core/state.py:50`); the health score is not used by the policy.
+> ⚠️ **Doc/code mismatch (M-10):** `docs/decisions-log.md` (Phase 8 Tech Lead review) says outage inertia lasts "until EWMA health decay drags $\hat{\mu}$ down" vs $\hat{\mu}$ being the Beta posterior mean (`router_core/router.py:195`, `router_core/state.py:128`); the health score is not used by the policy.
 
 ### 7.2 One payment, step by step
 
@@ -423,7 +436,7 @@ sequenceDiagram
 ```
 *Notice that the belief update happens after the acquirer replies, so the next payment's sample already reflects this outcome.*
 
-An HTTP 503, timeout or network error counts as a failure ($x = 0$). An HTTP 422 (malformed request) raises an error without updating beliefs, as the caller's bug. So does an HTTP 200 whose body is not valid JSON, or any HTTP error other than a timeout or network error (`router.py:284-321`); in those cases the acquirer is never penalized (AUDIT F-07). The result records raw samples, target, smoothed allocation, PID diagnostics and latencies.
+An HTTP 503, timeout or network error counts as a failure ($x = 0$). An HTTP 422 (malformed request) raises an error without updating beliefs, as the caller's bug. So does an HTTP 200 whose body is not valid JSON, or any HTTP error other than a timeout or network error (`router.py:292-329`); in those cases the acquirer is never penalized (AUDIT F-07). The result records raw samples, target, smoothed allocation, PID diagnostics and latencies.
 
 **Code pointer:** `router_core/app.py`, `acquirer_sim/simulator.py`, `baseline_router/router.py`, `data_layer/sqlite_logger.py`, `data_layer/redis_state.py`, `dashboard/src/hooks/useLoomTelemetry.js`.
 
@@ -438,7 +451,7 @@ The headline experiment is `scripts/compare_psr.py`; `scripts/run_qa_baseline_sc
 - **Acquirers:** alpha at 95% success, beta at 94%; alpha is the baseline's first priority.
 - **Script:** 150 payments of 50 units: warmup (1–50), total alpha outage via `RETURN_DECLINE` (51–100), recovery (101–150).
 - **Seeds:** simulator 42 (each acquirer gets its own generator) and router 777. A **seed** makes "random" numbers repeat exactly between runs.
-- **Loom settings:** $\gamma = 0.95$, tuned PID gains, floor 0.03, deficit scheduler.
+- **Loom settings:** half-life 0.9 s on a virtual clock advancing 1/15 s per payment (equivalent to the former $\gamma = 0.95$ at 15 payments per second), tuned PID gains, floor 0.03, deficit scheduler.
 - **Baselines:** priority failover with $M = 3$ (standard), $M = 1$ (sensitive), $M = 5$ (conservative), snapback, and a "gray failure" variant in which alpha drops to 60% instead of 0%.
 
 **Metrics and how each is computed:**
@@ -461,9 +474,9 @@ One run per configuration, at the README's seeds:
 | Baseline, $M=1$ | 76.00% (114/150) | 38.0% | 30 | 100% | 3 |
 | Baseline, $M=5$ | 90.67% (136/150) | 80.0% | 6 | 100% | 3 |
 | Baseline $M=3$, gray failure 60% | 88.67% (133/150) | 78.0% | 8 | 100% | 2 |
-| Loom raw bandit (no PID) | 88.67% (133/150) | 78.0% | 7 | 100% | 12 |
+| Loom raw bandit (no PID) | 89.33% (134/150) | 80.0% | 6 | 100% | 10 |
 | Loom with PID | 86.00% (129/150) | 72.0% | 11 | 11.77% | 13 |
-| Loom with PID, gray failure 60% | 90.00% (135/150) | 84.0% | 6 | 11.89% | 29 |
+| Loom with PID, gray failure 60% | 90.00% (135/150) | 84.0% | 6 | 11.83% | 28 |
 
 *Printed by `python scripts/whitepaper_examples.py`, which runs `scripts/compare_psr.py`'s scenario at simulator seed 42 and Loom seed 777. The hard-outage rows match `python scripts/compare_psr.py` (with and without `--threshold-m 1`) and the README's table.*
 
@@ -473,8 +486,8 @@ One run per configuration, at the README's seeds:
 - Against the over-sensitive $M=1$ breaker, Loom authorized 15 more. The $M=1$ breaker tripped beta on one ordinary decline during the outage, then fell back to the dead primary. This is the comparison behind the project's earlier "+1000 bps" headline. It rests on two choices in that baseline (tripping on issuer declines, and falling back to a route it knows is dead), and Loom loses to the standard $M=3$ breaker (AUDIT F-01).
 - On the gray failure, where alpha drops to 60% instead of 0%, Loom scored 90.00% against the breaker's 88.67%.
 - PID cut the intended mix's largest single jump from 100% to 11.77%.
-- A trace of the PID run shows the lag. During the first four outage payments alpha's share *rose*, from 0.72 at payment 50 to 0.82 at payment 54, because its belief had not caught up. It then eased down (0.72, 0.65, 0.58, 0.53, 0.47, 0.42, …) to the 0.03 floor, where it still sat at payment 150.
-- In recovery, the floor sent alpha 2 probes; the raw bandit sent none.
+- A trace of the PID run shows the lag. During the first four outage payments alpha's share *rose*, from 0.72 at payment 50 to 0.82 at payment 54, because its belief had not caught up. It then eased down (0.72, 0.65, 0.58, 0.53, 0.47, 0.42, …) to the 0.03 floor. After the outage ended, it climbed back to 0.35 by payment 150, because alpha's bad evidence faded with time (Section 5.5).
+- In recovery, Loom with PID sent alpha 4 payments and the raw bandit 5. Under per-observation decay these were 2 and 0.
 
 > **But why?** *Why does Loom score below the standard breaker here?* In this simulator, moving all traffic at once costs nothing, while Loom pays for belief lag, smoothing lag and exploration. The project's documents present this as the trade-off of avoiding herd migration, which the simulator cannot penalize.
 
@@ -485,9 +498,9 @@ One run per configuration, at the README's seeds:
 - Outcomes are **simple random draws**, not real card, issuer or time effects.
 - Each simulated acquirer draws random numbers only when called, so the two routers do not see identical per-payment luck.
 
-> ⚠️ **Doc/code mismatch (M-11, fixed in README by PR #1):** `README.md` said the Phase 4 floor's probes "restored routing automatically" after recovery vs the reproduced `compare_psr.py` run, in which alpha's smoothed share stays at the 0.03 floor through payment 150, with 2 alpha dispatches in the recovery window. This is consistent with the code's behavior when the alternative (beta, at 94%) also stays healthy (`router_core/pid.py:60-65`, `router_core/router.py:200-230`).
+> ⚠️ **Doc/code mismatch (M-11, fixed in README by PR #1):** `README.md` said the Phase 4 floor's probes "restored routing automatically" after recovery vs the reproduced `compare_psr.py` run, in which alpha's smoothed share stayed at the 0.03 floor through payment 150, with 2 alpha dispatches in the recovery window. Since PR #3 decays beliefs on the clock, the same run brings alpha back to a 0.35 share by payment 150 (`router_core/pid.py:60-65`, `router_core/router.py:208-238`).
 
-> ⚠️ **Doc/code mismatch (M-12):** `docs/decisions-log.md` (Phase 6) says the comparison captures "closed-loop network latency" and "runtime socket behavior" vs the benchmark, which uses an in-process `httpx.ASGITransport` with simulated latency set to 0 ms (`scripts/compare_psr.py:92-101`).
+> ⚠️ **Doc/code mismatch (M-12):** `docs/decisions-log.md` (Phase 6) says the comparison captures "closed-loop network latency" and "runtime socket behavior" vs the benchmark, which uses an in-process `httpx.ASGITransport` with simulated latency set to 0 ms (`scripts/compare_psr.py:98-108`).
 
 ### 8.3 Across 100 paired seeds
 
@@ -495,15 +508,17 @@ One run per configuration, at the README's seeds:
 
 | Comparison | Mean PSR difference | 95% CI | First wins / ties / losses |
 |---|---|---|---|
-| Loom vs static $M=1$ | +13.47 pp | [+12.10, +14.84] | 91 / 1 / 8 |
-| Loom vs static $M=3$ | −3.19 pp | [−3.69, −2.69] | 6 / 4 / 90 |
-| Loom vs static $M=5$ | −1.95 pp | [−2.44, −1.45] | 15 / 8 / 77 |
-| Loom vs static $M=3$, gray failure 60% | +2.71 pp | [+2.08, +3.35] | 77 / 7 / 16 |
-| Loom with PID vs raw bandit | −1.71 pp | [−1.99, −1.44] | 5 / 8 / 87 |
+| Loom vs static $M=1$ | +13.73 pp | [+12.36, +15.11] | 91 / 1 / 8 |
+| Loom vs static $M=3$ | −2.93 pp | [−3.46, −2.39] | 10 / 5 / 85 |
+| Loom vs static $M=5$ | −1.69 pp | [−2.21, −1.16] | 21 / 7 / 72 |
+| Loom vs static $M=3$, gray failure 60% | +2.77 pp | [+2.13, +3.40] | 73 / 10 / 17 |
+| Loom with PID vs raw bandit | −1.43 pp | [−1.76, −1.10] | 16 / 11 / 73 |
 
-Mean PSR over the 100 seeds: Loom 89.10%, raw bandit 90.81%, static $M=1$ 75.63%, $M=3$ 92.29%, $M=5$ 91.05%; with the gray failure, Loom 91.07% and static $M=3$ 88.36%. Mean route flips during the outage: Loom 13.05, raw bandit 7.66, static $M=3$ 3.01.
+Mean PSR over the 100 seeds: Loom 89.36%, raw bandit 90.79%, static $M=1$ 75.63%, $M=3$ 92.29%, $M=5$ 91.05%; with the gray failure, Loom 91.13% and static $M=3$ 88.36%. Mean route flips during the outage: Loom 12.80, raw bandit 7.59, static $M=3$ 3.01.
 
-The single-seed picture holds. Loom loses to the $M=3$ and $M=5$ breakers on hard outages, beats the $M=1$ breaker, and beats $M=3$ on the gray failure. The PID costs PSR against the raw bandit and nearly doubles route flips during the outage.
+The single-seed picture holds. Loom loses to the $M=3$ and $M=5$ breakers on hard outages, beats the $M=1$ breaker, and beats $M=3$ on the gray failure. The PID costs PSR against the raw bandit and raises route flips during the outage by about 70%.
+
+Moving from per-observation to wall-clock decay (PR #3) changed these by at most 0.26 pp. Loom's mean rose from 89.10% to 89.36%, the raw bandit's fell from 90.81% to 90.79%, and the static breakers do not decay and did not change.
 
 ### 8.4 Other reported figures
 
@@ -527,7 +542,7 @@ Each choice is paired with its alternative and, where `docs/decisions-log.md` gi
 
 **Offset decay over plain decay.** Plain decay, $\alpha \leftarrow \gamma\alpha + x$, lets $\alpha$ or $\beta$ fall below 1, giving Beta curves that spike at 0 or 1. The offset form keeps both at or above their priors.
 
-**Event-driven over clock-driven decay.** Reproducible tests without fake clocks, at the cost of frozen idle acquirers, which the floor compensates for.
+**Clock-driven decay, applied lazily.** The project first chose event-driven decay so tests needed no fake clocks, at the cost of frozen idle acquirers, which the floor compensated for. PR #3 moved to wall-clock decay, applied only when a belief is read or updated, with an injectable clock that keeps tests and the benchmark deterministic.
 
 **PID over a simpler filter.** The log does not record a comparison against, say, a moving average of the target; PID is the PRD's chosen mechanism.
 
@@ -571,7 +586,7 @@ Each choice is paired with its alternative and, where `docs/decisions-log.md` gi
 
 Maya's payment had to cross one of several bridges. Some refusals were about her card, and no bridge could help. Others were about a bridge having a bad minute, and there the choice of route matters. Loom treats that choice as two linked problems.
 
-**Learning.** Each acquirer has a Beta belief built from fading tallies. Thompson Sampling draws a plausible success rate from each and picks the highest, so uncertain acquirers are explored in proportion to how much they might surprise us. The decay factor $\gamma$ trades speed of reaction against sensitivity to bad luck.
+**Learning.** Each acquirer has a Beta belief built from fading tallies. Thompson Sampling draws a plausible success rate from each and picks the highest, so uncertain acquirers are explored in proportion to how much they might surprise us. The half-life trades speed of reaction against sensitivity to bad luck.
 
 **Steering.** The bandit's winner becomes a 100% target. A PID controller moves the intended traffic mix toward it a few points per payment: P for distance, I for persistence (capped against windup), D on the allocation as a brake. A projection keeps every acquirer at 3% or more so recoveries are noticed, and a scheduler turns the mix into individual choices.
 
@@ -613,7 +628,7 @@ The lecture outline: how a payment travels and which failures routing can fix; w
 
 **Customer (cardholder).** The person paying with the card.
 
-**Decay factor ($\gamma$).** A number just below 1 that shrinks old evidence each time an acquirer is used. Smaller values forget faster.
+**Decay factor ($\gamma$).** In per-observation mode, a number just below 1 that shrinks old evidence each time an acquirer is used. Smaller values forget faster. Loom's default is a half-life instead.
 
 **Decision log.** Loom's running record of design decisions, alternatives and reasons (`docs/decisions-log.md`).
 
@@ -655,7 +670,7 @@ The lecture outline: how a payment travels and which failures routing can fix; w
 
 **Gray failure (brownout).** A partial degradation in which a route still works sometimes, for example at 60% success instead of 95%.
 
-**Half-life.** The number of updates (or seconds) after which a past observation counts half as much.
+**Half-life.** The time (in Loom, seconds; in per-observation mode, updates) after which a past observation counts half as much.
 
 **Health score ($H$).** Loom's EWMA of each acquirer's outcomes. It is shown to operators but not used for routing.
 
@@ -681,7 +696,7 @@ The lecture outline: how a payment travels and which failures routing can fix; w
 
 **Low-pass filter.** A smoother that keeps slow trends and damps rapid wiggles in a signal.
 
-**Mean.** The average, or best single guess. For a Beta belief it is $lpha/(lpha+eta)$.
+**Mean.** The average, or best single guess. For a Beta belief it is $\alpha/(\alpha+\beta)$.
 
 **Merchant.** The business selling goods or services and accepting the payment.
 
@@ -691,7 +706,7 @@ The lecture outline: how a payment travels and which failures routing can fix; w
 
 **NumPy.** Python's standard library for numerical computing, including random sampling.
 
-**Offset decay.** Loom's decay form, which shrinks only the evidence above the prior, so $lpha$ and $eta$ never fall below their starting values.
+**Offset decay.** Loom's decay form, which shrinks only the evidence above the prior, so $\alpha$ and $\beta$ never fall below their starting values.
 
 **One-hot vector.** A list with 1 in exactly one position and 0 everywhere else.
 
@@ -731,7 +746,7 @@ The lecture outline: how a payment travels and which failures routing can fix; w
 
 **Route flip.** Two consecutive payments sent to different acquirers.
 
-**Route starvation.** An acquirer receiving no traffic, so its belief never updates and it is never chosen again.
+**Route starvation.** An acquirer receiving no traffic, so its belief never updates and it is never chosen again. Loom's traffic floor and wall-clock decay each prevent it.
 
 **Routing.** Choosing which acquirer connection carries each payment.
 
@@ -769,16 +784,16 @@ The lecture outline: how a payment travels and which failures routing can fix; w
 
 | ID | What the docs claim (file) | What the code does (file:line) | Status |
 |---|---|---|---|
-| M-1 | Thompson Sampling uses `scipy.stats.beta` (`docs/CONSTITUTION.md`) | Samples with NumPy `Generator.beta` (`router_core/state.py:129`) | Open |
-| M-2 | Decay $\gamma = 0.98$, "weighted toward the last minute" (`README.md`, `dashboard/src/App.jsx`) | Per-outcome decay with no time component (`router_core/state.py:104-111`); headline benchmark uses $\gamma = 0.95$ (`scripts/compare_psr.py:107,112`) | Fixed (README: PR #1; dashboard: PR #2) |
-| M-3 | PID error must come from EWMA health or posterior means (`docs/decisions-log.md`, Phase 3 review) | Error = one-hot Thompson target minus current allocation (`router_core/router.py:202-212`, `router_core/pid.py:248-250`) | Open (decision log) |
-| M-4 | Actuation runs via deterministic deficit round-robin (`README.md`) | Default `actuation_mode="stochastic"` (`router_core/pid.py:66-67`); servers do not override it (`router_core/server.py:119-124`, `router_core/app.py:59`) | Fixed in README (PR #1) |
-| M-5 | Simulated acquirers are independent processes on separate ports (`docs/decisions-log.md`, `README.md`) | One process hosts all acquirers by default (`acquirer_sim/app.py:45-51`); router defaults all point to port 8001 (`router_core/app.py:42-55`, `router_core/server.py:41-45`) | Open in decision log; README fixed (PR #1) |
-| M-6 | Atomic belief updates via embedded Redis Lua scripts (`README.md`, `docs/decisions-log.md`) | Optimistic `WATCH`/`MULTI` with retries in Python (`data_layer/redis_state.py:262-332`) | Open in decision log; README fixed (PR #1) |
-| M-7 | Redis holds live state; standalone mode logs all transactions to SQLite (`docs/prd.md`, `README.md`) | Entrypoints build `BanditRouter` without registry, publisher or logger (`router_core/app.py:39,56-61`, `router_core/server.py:126`); in-memory beliefs (`router_core/router.py:42`) | Open in PRD; README fixed (PR #1) |
+| M-1 | Thompson Sampling uses `scipy.stats.beta` (`docs/CONSTITUTION.md`) | Samples with NumPy `Generator.beta` (`router_core/state.py:215`) | Open |
+| M-2 | Decay $\gamma = 0.98$, "weighted toward the last minute" (`README.md`, `dashboard/src/App.jsx`) | Was per-outcome decay with no time component; headline benchmark used $\gamma = 0.95$ | Fixed (README: PR #1; dashboard: PR #2; wall-clock decay: PR #3) |
+| M-3 | PID error must come from EWMA health or posterior means (`docs/decisions-log.md`, Phase 3 review) | Error = one-hot Thompson target minus current allocation (`router_core/router.py:210-220`, `router_core/pid.py:248-250`) | Open (decision log) |
+| M-4 | Actuation runs via deterministic deficit round-robin (`README.md`) | Default `actuation_mode="stochastic"` (`router_core/pid.py:66-67`); servers do not override it (`router_core/server.py:137-142`, `router_core/app.py:59`) | Fixed in README (PR #1) |
+| M-5 | Simulated acquirers are independent processes on separate ports (`docs/decisions-log.md`, `README.md`) | One process hosts all acquirers by default (`acquirer_sim/app.py:45-51`); router defaults all point to port 8001 (`router_core/app.py:42-55`, `router_core/server.py:42-46`) | Open in decision log; README fixed (PR #1) |
+| M-6 | Atomic belief updates via embedded Redis Lua scripts (`README.md`, `docs/decisions-log.md`) | Optimistic `WATCH`/`MULTI` with retries in Python (`data_layer/redis_state.py:279-356`) | Open in decision log; README fixed (PR #1) |
+| M-7 | Redis holds live state; standalone mode logs all transactions to SQLite (`docs/prd.md`, `README.md`) | Entrypoints build `BanditRouter` without registry, publisher or logger (`router_core/app.py:39,56-61`, `router_core/server.py:144`); in-memory beliefs (`router_core/router.py:49`) | Open in PRD; README fixed (PR #1) |
 | M-8 | Ring buffer N=200, `requestAnimationFrame` rendering, SQLite history bootstrap (`README.md`) | Per-message state updates capped at 120 points (`dashboard/src/hooks/useLoomTelemetry.js:190`); no rAF; bootstrap has belief snapshots only (`router_core/app.py:265-286`) | Fixed in README (PR #1) |
 | M-9 | Headline "Lift-vs-Baseline" figure (`docs/decisions-log.md`, Phase 7 Rev. 4) | Was rolling PSR minus a hard-coded 76.0 in `dashboard/src/components/MetricReadouts.jsx` | Readout removed (PR #2) |
-| M-10 | Outage inertia lasts until "EWMA health decay drags $\hat{\mu}$ down" (`docs/decisions-log.md`, Phase 8 review) | $\hat{\mu}$ is the Beta posterior mean (`router_core/router.py:187`, `router_core/state.py:50`) | Open (decision log) |
-| M-11 | Floor probes "restored routing automatically" after recovery (`README.md`) | Reproduced run: alpha stays at the 0.03 floor through Tx 150, with 2 recovery dispatches (`router_core/pid.py:60-65`, `router_core/router.py:200-230`) | Fixed in README (PR #1) |
-| M-12 | Comparison captures network latency and socket behavior (`docs/decisions-log.md`, Phase 6) | In-process `httpx.ASGITransport` with 0 ms latency (`scripts/compare_psr.py:92-101`) | Open (decision log) |
+| M-10 | Outage inertia lasts until "EWMA health decay drags $\hat{\mu}$ down" (`docs/decisions-log.md`, Phase 8 review) | $\hat{\mu}$ is the Beta posterior mean (`router_core/router.py:195`, `router_core/state.py:128`) | Open (decision log) |
+| M-11 | Floor probes "restored routing automatically" after recovery (`README.md`) | Reproduced run under per-observation decay: alpha stayed at the 0.03 floor through Tx 150, with 2 recovery dispatches (`router_core/pid.py:60-65`, `router_core/router.py:208-238`) | Fixed in README (PR #1); since PR #3 alpha returns to 0.35 by Tx 150 |
+| M-12 | Comparison captures network latency and socket behavior (`docs/decisions-log.md`, Phase 6) | In-process `httpx.ASGITransport` with 0 ms latency (`scripts/compare_psr.py:98-108`) | Open (decision log) |
 | M-13 | 239 automated tests (`README.md`) | 252 tests collected and passed under `tests/` | Fixed in README (PR #1) |

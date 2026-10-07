@@ -2,20 +2,32 @@
 
 from __future__ import annotations
 
+import math
 import time
 from dataclasses import dataclass
 
 import numpy as np
 
+# Half-life of an observation's weight, in seconds. 2.3 s matches the old per-observation
+# gamma=0.98 (half-life 34 observations) for an arm carrying all of 15 TPS.
+DEFAULT_HALF_LIFE_SEC = 2.3
+
 
 @dataclass(frozen=True, slots=True)
 class AcquirerStateConfig:
-    """Immutable configuration for an acquirer's bandit and health model."""
+    """Immutable configuration for an acquirer's bandit and health model.
+
+    Beliefs decay on the wall clock by default: an observation's weight halves every
+    ``half_life_sec`` seconds, whether or not the arm receives traffic. Passing
+    ``decay_factor`` instead selects the original per-observation decay, where weights
+    shrink by that factor only when the arm itself records an outcome.
+    """
 
     alpha_prior: float = 1.0
     beta_prior: float = 1.0
-    decay_factor: float = 0.98
+    decay_factor: float | None = None
     initial_health: float = 1.0
+    half_life_sec: float | None = None
 
     def __post_init__(self) -> None:
         """Validate invariant constraints on configuration parameters."""
@@ -23,10 +35,76 @@ class AcquirerStateConfig:
             raise ValueError(f"alpha_prior must be > 0.0, got {self.alpha_prior}")
         if self.beta_prior <= 0.0:
             raise ValueError(f"beta_prior must be > 0.0, got {self.beta_prior}")
-        if not (0.0 < self.decay_factor < 1.0):
+        if self.decay_factor is not None and self.half_life_sec is not None:
+            raise ValueError("set either half_life_sec or decay_factor, not both")
+        if self.decay_factor is not None and not (0.0 < self.decay_factor < 1.0):
             raise ValueError(f"decay_factor must be in (0.0, 1.0), got {self.decay_factor}")
+        if self.half_life_sec is not None and not (
+            math.isfinite(self.half_life_sec) and self.half_life_sec > 0.0
+        ):
+            raise ValueError(f"half_life_sec must be finite and > 0.0, got {self.half_life_sec}")
         if not (0.0 <= self.initial_health <= 1.0):
             raise ValueError(f"initial_health must be in [0.0, 1.0], got {self.initial_health}")
+        if self.decay_factor is None and self.half_life_sec is None:
+            object.__setattr__(self, "half_life_sec", DEFAULT_HALF_LIFE_SEC)
+
+    @property
+    def uses_wall_clock(self) -> bool:
+        """True when beliefs decay with elapsed seconds rather than per observation."""
+        return self.half_life_sec is not None
+
+    def decay_multiplier(self, elapsed_sec: float) -> float:
+        """Weight left on existing observations after ``elapsed_sec`` (wall-clock mode)."""
+        assert self.half_life_sec is not None
+        return math.pow(0.5, max(0.0, elapsed_sec) / self.half_life_sec)
+
+    def wall_clock_health(self, alpha: float, beta: float) -> float:
+        """Decayed success fraction, with initial_health counted as one pseudo-observation."""
+        successes = max(0.0, alpha - self.alpha_prior)
+        failures = max(0.0, beta - self.beta_prior)
+        return (successes + self.initial_health) / (successes + failures + 1.0)
+
+
+def decay_beliefs(
+    config: AcquirerStateConfig, alpha: float, beta: float, elapsed_sec: float
+) -> tuple[float, float]:
+    """Decay Beta parameters toward the prior by ``elapsed_sec`` of wall-clock time."""
+    if not config.uses_wall_clock:
+        return alpha, beta
+    f = config.decay_multiplier(elapsed_sec)
+    a0, b0 = config.alpha_prior, config.beta_prior
+    return max(a0, a0 + f * (alpha - a0)), max(b0, b0 + f * (beta - b0))
+
+
+def step_beliefs(
+    config: AcquirerStateConfig,
+    alpha: float,
+    beta: float,
+    health: float,
+    success: bool,
+    elapsed_sec: float,
+) -> tuple[float, float, float]:
+    """Apply one outcome; return the new (alpha, beta, health).
+
+    Wall-clock mode decays by ``elapsed_sec`` since the last decay, then adds the outcome.
+    Per-observation mode ignores ``elapsed_sec`` and decays by ``decay_factor``.
+    """
+    x = 1.0 if success else 0.0
+    if config.uses_wall_clock:
+        alpha, beta = decay_beliefs(config, alpha, beta, elapsed_sec)
+        alpha += x
+        beta += 1.0 - x
+        return alpha, beta, config.wall_clock_health(alpha, beta)
+
+    gamma = config.decay_factor
+    assert gamma is not None
+    a0, b0 = config.alpha_prior, config.beta_prior
+    # Mean-reverting decayed Beta parameters, clamped above prior against drift
+    new_alpha = max(a0, a0 + gamma * (alpha - a0) + x)
+    new_beta = max(b0, b0 + gamma * (beta - b0) + (1.0 - x))
+    # EWMA health score update, strictly clamped in [0.0, 1.0]
+    new_health = max(0.0, min(1.0, gamma * health + (1.0 - gamma) * x))
+    return new_alpha, new_beta, new_health
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,7 +140,7 @@ class AcquirerStateSnapshot:
 
 
 class AcquirerState:
-    """Encapsulates the decaying Beta belief and EWMA health score for a single acquirer."""
+    """Encapsulates the decaying Beta belief and health score for a single acquirer."""
 
     def __init__(
         self,
@@ -84,6 +162,8 @@ class AcquirerState:
         self._last_updated_at: float = (
             initial_timestamp if initial_timestamp is not None else time.time()
         )
+        # Time the wall-clock decay has been applied up to.
+        self._decayed_at: float = self._last_updated_at
 
     @property
     def acquirer_id(self) -> str:
@@ -95,24 +175,28 @@ class AcquirerState:
         """Return the configuration parameters for this acquirer."""
         return self._config
 
+    def _decay_to(self, now: float) -> None:
+        """Apply wall-clock decay up to ``now``; a clock step backwards counts as zero."""
+        if not self._config.uses_wall_clock or now <= self._decayed_at:
+            return
+        self._alpha, self._beta = decay_beliefs(
+            self._config, self._alpha, self._beta, now - self._decayed_at
+        )
+        self._health_score = self._config.wall_clock_health(self._alpha, self._beta)
+        self._decayed_at = now
+
     def record_outcome(
         self,
         success: bool,
         timestamp: float | None = None,
     ) -> AcquirerStateSnapshot:
-        """Update Beta parameters and EWMA health score with a transaction outcome."""
-        gamma = self._config.decay_factor
-        a0 = self._config.alpha_prior
-        b0 = self._config.beta_prior
-        x = 1.0 if success else 0.0
-
-        # Mean-reverting decayed Beta parameters, clamped above prior against floating-point drift
-        self._alpha = max(a0, a0 + gamma * (self._alpha - a0) + x)
-        self._beta = max(b0, b0 + gamma * (self._beta - b0) + (1.0 - x))
-
-        # EWMA health score update, strictly clamped in [0.0, 1.0]
-        new_health = gamma * self._health_score + (1.0 - gamma) * x
-        self._health_score = max(0.0, min(1.0, new_health))
+        """Decay existing beliefs, then add one transaction outcome."""
+        now = timestamp if timestamp is not None else time.time()
+        elapsed = max(0.0, now - self._decayed_at)
+        self._alpha, self._beta, self._health_score = step_beliefs(
+            self._config, self._alpha, self._beta, self._health_score, success, elapsed
+        )
+        self._decayed_at = max(self._decayed_at, now)
 
         # Cumulative unweighted lifetime counters
         if success:
@@ -120,16 +204,20 @@ class AcquirerState:
         else:
             self._failure_count += 1
 
-        self._last_updated_at = timestamp if timestamp is not None else time.time()
+        self._last_updated_at = now
         return self.get_state()
 
-    def sample(self, rng: np.random.Generator | None = None) -> float:
-        """Draw a Thompson sample from the current Beta distribution belief."""
+    def sample(self, rng: np.random.Generator | None = None, now: float | None = None) -> float:
+        """Draw a Thompson sample from the belief, decayed to ``now`` when given."""
+        if now is not None:
+            self._decay_to(now)
         generator = rng if rng is not None else np.random.default_rng()
         return float(generator.beta(self._alpha, self._beta))
 
-    def get_state(self) -> AcquirerStateSnapshot:
-        """Return an immutable snapshot of current acquirer state."""
+    def get_state(self, now: float | None = None) -> AcquirerStateSnapshot:
+        """Return a snapshot, decayed to ``now`` when given, else as of the last event."""
+        if now is not None:
+            self._decay_to(now)
         return AcquirerStateSnapshot(
             acquirer_id=self._acquirer_id,
             alpha=self._alpha,

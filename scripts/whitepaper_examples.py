@@ -17,9 +17,8 @@ from typing import Any
 
 import numpy as np
 
-from router_core.bandit import calculate_gamma_from_half_life
 from router_core.pid import PIDConfig, PIDState, calculate_pid_step, project_to_bounded_simplex
-from router_core.state import AcquirerState, AcquirerStateConfig
+from router_core.state import DEFAULT_HALF_LIFE_SEC, AcquirerState, AcquirerStateConfig
 from scripts.compare_psr import execute_scenario
 
 BETA_DRAW_SEED = 7
@@ -44,7 +43,7 @@ def section_4_thompson() -> list[str]:
 
 def section_5_decay() -> list[str]:
     """Section 5: offset-decay updates, memory length and the outage example."""
-    out = ["[5.2] Offset decay from Beta(1,1), gamma=0.98, outcomes S S S F S"]
+    out = ["[5.2] Per-observation offset decay from Beta(1,1), gamma=0.98, outcomes S S S F S"]
     state = AcquirerState("example", AcquirerStateConfig(decay_factor=0.98))
     for outcome in (True, True, True, False, True):
         snap = state.record_outcome(outcome, timestamp=0.0)
@@ -80,11 +79,41 @@ def section_5_decay() -> list[str]:
         f"{memory / (15 * 0.97):.1f} s for an acquirer at 97% of traffic and "
         f"{memory / (15 * 0.03):.0f} s for one at the 3% floor"
     )
-    gamma_60s = calculate_gamma_from_half_life(60.0, 15.0)
-    out.append(f"  half-life 60 s at 15 TPS -> gamma={gamma_60s:.5f}")
+    out.append(f"[5.3] Wall-clock decay (default), half-life {DEFAULT_HALF_LIFE_SEC} s")
+    for share in (1.0, 0.97, 0.03):
+        rate = 15 * share
+        out.append(
+            f"  arm at {share:.0%} of 15 TPS: steady-state memory "
+            f"{rate * DEFAULT_HALF_LIFE_SEC / math.log(2):.1f} observations"
+        )
+    cfg = AcquirerStateConfig(half_life_sec=DEFAULT_HALF_LIFE_SEC)
+    state = AcquirerState("example", cfg, initial_timestamp=0.0)
+    t = 0.0
+    for _ in range(200):
+        t += 1 / 15
+        snap = state.record_outcome(True, timestamp=t)
+    line = (
+        f"  all 15 TPS: after 200 successes Beta({snap.alpha:.1f},{snap.beta:.1f}) "
+        f"mean={snap.expected_success_rate:.3f};"
+    )
+    for target in (1, 3, 5, 10):
+        while snap.failure_count < target:
+            t += 1 / 15
+            snap = state.record_outcome(False, timestamp=t)
+        line += f" after {target} failures {snap.expected_success_rate:.3f}"
+    out.append(line)
+    idle = AcquirerState("example", cfg, initial_timestamp=0.0)
+    for _ in range(20):
+        idle.record_outcome(False, timestamp=0.0)
+    for secs in (0.0, DEFAULT_HALF_LIFE_SEC, 10.0, 30.0):
+        snap = idle.get_state(now=secs)
+        out.append(
+            f"  idle arm after 20 failures, {secs:.1f} s later: "
+            f"Beta({snap.alpha:.2f},{snap.beta:.2f}) mean={snap.expected_success_rate:.3f}"
+        )
     state = AcquirerState("example", AcquirerStateConfig(decay_factor=0.98))
     snap = state.record_outcome(False, timestamp=0.0)
-    out.append(f"[5.4] Health score after one failure from 1.0: {snap.health_score:.2f}")
+    out.append(f"[5.4] Per-observation health after one failure from 1.0: {snap.health_score:.2f}")
     return out
 
 

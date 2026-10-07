@@ -5,6 +5,7 @@ from __future__ import annotations
 import inspect
 import logging
 import time
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Literal
 
 import httpx
@@ -35,9 +36,15 @@ class BanditRouter:
         registry: BanditStateRegistry | None = None,
         event_publisher: EventPublisher | AsyncEventPublisher | Any | None = None,
         metrics_logger: MetricsLogger | SQLiteMetricsStore | Any | None = None,
+        clock: Callable[[], float] | None = None,
     ) -> None:
-        """Initialize router registry, HTTP client configuration, and PRNG."""
+        """Initialize router registry, HTTP client configuration, PRNG and clock.
+
+        ``clock`` returns the current time in seconds; belief decay is measured with it.
+        Benchmarks pass a virtual clock so results do not depend on machine speed.
+        """
         self._config = config
+        self._clock: Callable[[], float] = clock if clock is not None else time.time
         self._routes: dict[str, AcquirerRouteConfig] = {r.acquirer_id: r for r in config.routes}
         self._registry = registry if registry is not None else BanditStateRegistry()
         self._event_publisher = event_publisher
@@ -47,6 +54,7 @@ class BanditRouter:
                 self._registry.register_acquirer(
                     acquirer_id=r.acquirer_id,
                     config=r.state_config,
+                    initial_timestamp=self._clock(),
                 )
 
         self._rng = rng if rng is not None else np.random.default_rng(config.seed)
@@ -143,7 +151,7 @@ class BanditRouter:
 
     def select_route(self, amount: float = 0.0) -> tuple[str, dict[str, float]]:
         """Sample Beta beliefs across all candidate routes and select argmax arm."""
-        raw_samples = self._registry.sample_all(rng=self._rng)
+        raw_samples = self._registry.sample_all(rng=self._rng, now=self._clock())
         if (
             self._value_scaled_config is not None
             and self._value_scaled_config.enabled
@@ -173,7 +181,7 @@ class BanditRouter:
 
         # 1. Perception, Value-Scaled Policy, PID Smoothing & Selection
         t_sample_start = time.perf_counter()
-        raw_samples = self._registry.sample_all(rng=self._rng)
+        raw_samples = self._registry.sample_all(rng=self._rng, now=self._clock())
         effective_samples = raw_samples
         adjusted_samples: dict[str, float] | None = None
         shrinkage: float | None = None
@@ -327,7 +335,7 @@ class BanditRouter:
         updated_snapshot = self._registry.record_outcome(
             acquirer_id=selected_id,
             success=success,
-            timestamp=time.time(),
+            timestamp=self._clock(),
         )
 
         t_end = time.perf_counter()

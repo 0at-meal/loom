@@ -109,7 +109,7 @@ export function App() {
       <footer className="w-full border-t border-[#2A2D34] px-4 py-4 text-[11px] text-[#8B8F98] font-sans max-w-[1400px] mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-3 leading-relaxed">
         <div className="flex flex-col gap-1">
           <span>Smooths the target traffic mix; each payment still goes to one gateway</span>
-          <span>Learns which gateway is healthiest from about its last 50 outcomes</span>
+          <span>Learns which gateway is healthiest from the last few seconds of outcomes</span>
         </div>
         <div className="flex flex-col gap-1 sm:text-right">
           <span>This demo server keeps decisions in memory only</span>
