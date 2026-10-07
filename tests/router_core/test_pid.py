@@ -362,3 +362,28 @@ class TestSimplexProjection:
             assert sum(proj.values()) == pytest.approx(1.0, abs=1e-9)
             for _aid, w in proj.items():
                 assert w >= floor - 1e-9
+
+
+class TestNonFiniteInputsAreRejected:
+    """AUDIT F-32: NaN and inf must raise, not be silently mapped to the floor."""
+
+    @pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")])
+    def test_projection_rejects_non_finite_weights(self, bad: float) -> None:
+        """The projection raises instead of returning a vector that does not sum to 1."""
+        with pytest.raises(ValueError, match="finite"):
+            project_to_bounded_simplex({"a": bad, "b": 0.5}, 0.03)
+
+    @pytest.mark.parametrize("field", ["target", "current", "dt"])
+    def test_pid_step_rejects_non_finite_inputs(self, field: str) -> None:
+        """The PID step validates its inputs before doing any arithmetic."""
+        target = {"a": 1.0, "b": 0.0}
+        current = {"a": 0.5, "b": 0.5}
+        dt = 1.0
+        if field == "target":
+            target["a"] = float("nan")
+        elif field == "current":
+            current["b"] = float("inf")
+        else:
+            dt = float("nan")
+        with pytest.raises(ValueError, match="finite"):
+            calculate_pid_step(target, current, PIDState.initialize(["a", "b"]), PIDConfig(), dt)

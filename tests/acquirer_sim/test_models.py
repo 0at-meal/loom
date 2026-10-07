@@ -24,7 +24,7 @@ class TestLatencyConfig:
         cfg = LatencyConfig()
         assert cfg.base_ms == 20.0
         assert cfg.jitter_ms == 5.0
-        assert cfg.outage_spike_ms == 500.0
+        assert cfg.outage_spike_ms == 2500.0
 
     def test_negative_values_raise(self) -> None:
         """Verify negative latency parameters are rejected."""

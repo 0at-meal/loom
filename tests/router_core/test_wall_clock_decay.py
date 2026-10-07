@@ -25,20 +25,24 @@ def test_default_config_decays_on_the_wall_clock() -> None:
 def test_half_life_and_decay_factor_are_exclusive() -> None:
     """Setting both decay modes is ambiguous and rejected."""
     with pytest.raises(ValueError, match="either half_life_sec or decay_factor"):
-        AcquirerStateConfig(half_life_sec=1.0, decay_factor=0.98)
+        AcquirerStateConfig(alpha_prior=1.0, half_life_sec=1.0, decay_factor=0.98)
 
 
 @pytest.mark.parametrize("bad", [0.0, -1.0, float("nan"), float("inf")])
 def test_invalid_half_life_rejected(bad: float) -> None:
     """The half-life must be a positive finite number of seconds."""
     with pytest.raises(ValueError, match="half_life_sec"):
-        AcquirerStateConfig(half_life_sec=bad)
+        AcquirerStateConfig(alpha_prior=1.0, half_life_sec=bad)
 
 
 def test_observation_weight_halves_after_one_half_life() -> None:
     """An observation's weight is 0.5 after one half-life, however much traffic arrived."""
-    busy = AcquirerState("busy", AcquirerStateConfig(half_life_sec=1.0), initial_timestamp=0.0)
-    quiet = AcquirerState("quiet", AcquirerStateConfig(half_life_sec=1.0), initial_timestamp=0.0)
+    busy = AcquirerState(
+        "busy", AcquirerStateConfig(alpha_prior=1.0, half_life_sec=1.0), initial_timestamp=0.0
+    )
+    quiet = AcquirerState(
+        "quiet", AcquirerStateConfig(alpha_prior=1.0, half_life_sec=1.0), initial_timestamp=0.0
+    )
     for _ in range(10):
         busy.record_outcome(False, timestamp=0.0)
         quiet.record_outcome(False, timestamp=0.0)
@@ -55,7 +59,9 @@ def test_observation_weight_halves_after_one_half_life() -> None:
 
 def test_idle_arm_returns_to_its_prior() -> None:
     """An arm that receives no traffic forgets its failures as time passes."""
-    state = AcquirerState("idle", AcquirerStateConfig(half_life_sec=1.0), initial_timestamp=0.0)
+    state = AcquirerState(
+        "idle", AcquirerStateConfig(alpha_prior=1.0, half_life_sec=1.0), initial_timestamp=0.0
+    )
     for _ in range(20):
         state.record_outcome(False, timestamp=0.0)
     assert state.get_state().expected_success_rate < 0.1
@@ -67,7 +73,7 @@ def test_idle_arm_returns_to_its_prior() -> None:
 
 def test_sampling_decays_an_idle_arm() -> None:
     """Thompson draws for an idle arm come from its decayed belief."""
-    registry = BanditStateRegistry(AcquirerStateConfig(half_life_sec=1.0))
+    registry = BanditStateRegistry(AcquirerStateConfig(alpha_prior=1.0, half_life_sec=1.0))
     registry.register_acquirer("dead", initial_timestamp=0.0)
     for _ in range(50):
         registry.record_outcome("dead", False, timestamp=0.0)
@@ -76,12 +82,16 @@ def test_sampling_decays_an_idle_arm() -> None:
     early = [registry.sample_all(rng=rng, now=0.0)["dead"] for _ in range(200)]
     late = [registry.sample_all(rng=rng, now=30.0)["dead"] for _ in range(200)]
     assert np.mean(early) < 0.05
-    assert np.mean(late) == pytest.approx(0.5, abs=0.06)
+    # Back at the prior: technical and approval draws are both uniform, and the Thompson
+    # score is their product, whose mean is 0.25.
+    assert np.mean(late) == pytest.approx(0.25, abs=0.05)
 
 
 def test_reading_state_without_a_time_does_not_decay() -> None:
     """get_state() and sample() with no time leave the belief as of the last event."""
-    state = AcquirerState("a", AcquirerStateConfig(half_life_sec=1.0), initial_timestamp=0.0)
+    state = AcquirerState(
+        "a", AcquirerStateConfig(alpha_prior=1.0, half_life_sec=1.0), initial_timestamp=0.0
+    )
     state.record_outcome(False, timestamp=0.0)
     assert state.get_state().beta == pytest.approx(2.0)
     state.sample(rng=np.random.default_rng(0))
@@ -90,7 +100,9 @@ def test_reading_state_without_a_time_does_not_decay() -> None:
 
 def test_time_going_backwards_does_not_grow_beliefs() -> None:
     """A clock step backwards is treated as zero elapsed time."""
-    state = AcquirerState("a", AcquirerStateConfig(half_life_sec=1.0), initial_timestamp=10.0)
+    state = AcquirerState(
+        "a", AcquirerStateConfig(alpha_prior=1.0, half_life_sec=1.0), initial_timestamp=10.0
+    )
     state.record_outcome(False, timestamp=10.0)
     snap = state.get_state(now=5.0)
     assert snap.beta == pytest.approx(2.0)
@@ -98,7 +110,9 @@ def test_time_going_backwards_does_not_grow_beliefs() -> None:
 
 def test_wall_clock_health_is_the_decayed_success_fraction() -> None:
     """Health counts initial_health as one pseudo-observation plus decayed outcomes."""
-    state = AcquirerState("a", AcquirerStateConfig(half_life_sec=1.0), initial_timestamp=0.0)
+    state = AcquirerState(
+        "a", AcquirerStateConfig(alpha_prior=1.0, half_life_sec=1.0), initial_timestamp=0.0
+    )
     assert state.get_state().health_score == 1.0
     for _ in range(3):
         state.record_outcome(False, timestamp=0.0)
@@ -107,7 +121,9 @@ def test_wall_clock_health_is_the_decayed_success_fraction() -> None:
 
 def test_per_observation_mode_is_unchanged() -> None:
     """An explicit decay_factor keeps the original per-observation update."""
-    state = AcquirerState("a", AcquirerStateConfig(decay_factor=0.5), initial_timestamp=0.0)
+    state = AcquirerState(
+        "a", AcquirerStateConfig(alpha_prior=1.0, decay_factor=0.5), initial_timestamp=0.0
+    )
     state.record_outcome(False, timestamp=0.0)
     state.record_outcome(False, timestamp=100.0)
     assert state.get_state(now=1000.0).beta == pytest.approx(1.0 + 0.5 + 1.0)
@@ -134,7 +150,7 @@ async def test_router_decays_idle_arms_with_its_clock() -> None:
             },
         )
 
-    cfg = AcquirerStateConfig(half_life_sec=1.0)
+    cfg = AcquirerStateConfig(alpha_prior=1.0, half_life_sec=1.0)
     routes = [
         AcquirerRouteConfig(acquirer_id="a", base_url="http://a", state_config=cfg),
         AcquirerRouteConfig(acquirer_id="b", base_url="http://b", state_config=cfg),
@@ -182,7 +198,7 @@ def test_redis_registry_decays_on_the_wall_clock() -> None:
 
     registry = RedisBanditStateRegistry(
         redis_client=fakeredis.FakeRedis(decode_responses=True),
-        default_config=AcquirerStateConfig(half_life_sec=1.0),
+        default_config=AcquirerStateConfig(alpha_prior=1.0, half_life_sec=1.0),
     )
     registry.register_acquirer("a", initial_timestamp=0.0)
     for _ in range(10):

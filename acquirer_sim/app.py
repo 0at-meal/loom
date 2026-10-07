@@ -103,6 +103,20 @@ def create_app(
             sim = registry.get_or_create(target_id)
         return sim
 
+    def resolve_admin_target(acquirer_id: str | None) -> AcquirerSimulator:
+        """Resolve an existing acquirer for an admin call; unknown IDs are a 404, not a create."""
+        target_id = acquirer_id
+        if not target_id:
+            all_ids = registry.list_acquirer_ids()
+            target_id = all_ids[0] if len(all_ids) == 1 else "acquirer_alpha"
+        sim = registry.get(target_id)
+        if sim is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Unknown acquirer '{target_id}'",
+            )
+        return sim
+
     # -------------------------------------------------------------------------
     # Health & Discovery Endpoints
     # -------------------------------------------------------------------------
@@ -176,7 +190,7 @@ def create_app(
     ) -> AdminStateResponse:
         """Update live base success rate for the target acquirer."""
         target_id = payload.acquirer_id or query_acquirer_id
-        sim = resolve_simulator(acquirer_id_param=target_id)
+        sim = resolve_admin_target(target_id)
         sim.set_success_rate(payload.success_rate)
         return sim.get_telemetry_snapshot()
 
@@ -190,7 +204,7 @@ def create_app(
         payload: SuccessRateUpdateRequest,
     ) -> AdminStateResponse:
         """Update live base success rate for a specific keyed acquirer."""
-        sim = resolve_simulator(acquirer_id_param=acquirer_id)
+        sim = resolve_admin_target(acquirer_id)
         sim.set_success_rate(payload.success_rate)
         return sim.get_telemetry_snapshot()
 
@@ -205,7 +219,7 @@ def create_app(
     ) -> AdminStateResponse:
         """Toggle outage state on or off for the target acquirer."""
         target_id = payload.acquirer_id or query_acquirer_id
-        sim = resolve_simulator(acquirer_id_param=target_id)
+        sim = resolve_admin_target(target_id)
         sim.set_outage(
             active=payload.active,
             behavior=payload.behavior,
@@ -223,7 +237,7 @@ def create_app(
         payload: OutageToggleRequest,
     ) -> AdminStateResponse:
         """Toggle outage state on or off for a specific keyed acquirer."""
-        sim = resolve_simulator(acquirer_id_param=acquirer_id)
+        sim = resolve_admin_target(acquirer_id)
         sim.set_outage(
             active=payload.active,
             behavior=payload.behavior,
@@ -241,7 +255,7 @@ def create_app(
         query_acquirer_id: str | None = Query(default=None, alias="acquirer_id"),
     ) -> AdminStateResponse:
         """Return point-in-time telemetry snapshot for the resolved acquirer."""
-        sim = resolve_simulator(x_acquirer_id=x_acquirer_id, query_acquirer_id=query_acquirer_id)
+        sim = resolve_admin_target(x_acquirer_id or query_acquirer_id)
         return sim.get_telemetry_snapshot()
 
     @app.get(
@@ -253,7 +267,7 @@ def create_app(
         acquirer_id: str,
     ) -> AdminStateResponse:
         """Return point-in-time telemetry snapshot for a specific keyed acquirer."""
-        sim = resolve_simulator(acquirer_id_param=acquirer_id)
+        sim = resolve_admin_target(acquirer_id)
         return sim.get_telemetry_snapshot()
 
     @app.get(
@@ -279,7 +293,7 @@ def create_app(
     ) -> ResetResponse:
         """Reset telemetry counters and restore default configuration."""
         if query_acquirer_id:
-            sim = resolve_simulator(acquirer_id_param=query_acquirer_id)
+            sim = resolve_admin_target(query_acquirer_id)
             return sim.reset()
 
         registry.reset_all()
@@ -298,7 +312,7 @@ def create_app(
         acquirer_id: str,
     ) -> ResetResponse:
         """Reset telemetry counters and restore default configuration for a keyed acquirer."""
-        sim = resolve_simulator(acquirer_id_param=acquirer_id)
+        sim = resolve_admin_target(acquirer_id)
         return sim.reset()
 
     return app

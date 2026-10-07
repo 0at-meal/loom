@@ -44,7 +44,7 @@ from data_layer.sqlite_logger import SQLiteMetricsStore
 from router_core.models import AcquirerRouteConfig, RouterConfig
 from router_core.pid import PIDConfig
 from router_core.router import BanditRouter
-from router_core.state import AcquirerStateConfig
+from router_core.state import DEFAULT_ALPHA_PRIOR, AcquirerStateConfig
 
 DEFAULT_BASE_DB = "compare_psr_baseline.db"
 DEFAULT_LOOM_DB = "compare_psr_loom.db"
@@ -81,10 +81,12 @@ async def execute_scenario(
     cooldown_n: int = 30,
     loom_seed: int = 777,
     gray_rate: float | None = None,
+    alpha_prior: float = DEFAULT_ALPHA_PRIOR,
 ) -> dict[str, Any]:
     """Execute complete benchmark run for 'baseline', 'loom' (PID) or 'raw' (no PID).
 
     ``gray_rate`` replaces the hard outage on Alpha with a degraded success rate.
+    ``alpha_prior`` sets Loom's technical prior Beta(alpha_prior, 1).
     ``db_path=":memory:"`` keeps the ledger in memory and writes no file.
     """
     if db_path != ":memory:":
@@ -111,12 +113,16 @@ async def execute_scenario(
             AcquirerRouteConfig(
                 acquirer_id="acquirer_alpha",
                 base_url="http://testserver",
-                state_config=AcquirerStateConfig(half_life_sec=BENCH_HALF_LIFE_SEC),
+                state_config=AcquirerStateConfig(
+                    half_life_sec=BENCH_HALF_LIFE_SEC, alpha_prior=alpha_prior
+                ),
             ),
             AcquirerRouteConfig(
                 acquirer_id="acquirer_beta",
                 base_url="http://testserver",
-                state_config=AcquirerStateConfig(half_life_sec=BENCH_HALF_LIFE_SEC),
+                state_config=AcquirerStateConfig(
+                    half_life_sec=BENCH_HALF_LIFE_SEC, alpha_prior=alpha_prior
+                ),
             ),
         ]
 
@@ -381,7 +387,11 @@ def summarize_paired(diffs: list[float]) -> dict[str, Any]:
 
 
 async def run_multi_seed(
-    n_seeds: int, seed: int, loom_seed: int, cooldown_n: int
+    n_seeds: int,
+    seed: int,
+    loom_seed: int,
+    cooldown_n: int,
+    alpha_prior: float = DEFAULT_ALPHA_PRIOR,
 ) -> dict[str, Any]:
     """Run every configuration on N paired seeds and summarize the paired PSR differences."""
     rows: list[dict[str, Any]] = []
@@ -397,6 +407,7 @@ async def run_multi_seed(
                 cooldown_n=cooldown_n,
                 loom_seed=loom_seed + k,
                 gray_rate=gray,
+                alpha_prior=alpha_prior,
             )
             row[name] = {
                 "psr": res["global_metrics"]["psr"],
@@ -404,6 +415,7 @@ async def run_multi_seed(
                 "outage_failures_alpha": res["outage_failures_alpha"],
                 "outage_flips": res["outage_flips"],
                 "max_step_delta": res["max_step_delta"],
+                "recovery_txs_alpha": res["recovery_txs_alpha"],
             }
         rows.append(row)
 
@@ -417,6 +429,7 @@ async def run_multi_seed(
             "mean_outage_failures_alpha": statistics.mean(
                 r[name]["outage_failures_alpha"] for r in rows
             ),
+            "mean_recovery_txs_alpha": statistics.mean(r[name]["recovery_txs_alpha"] for r in rows),
             "max_step_delta_range_pct": [
                 min(r[name]["max_step_delta"] for r in rows) * 100,
                 max(r[name]["max_step_delta"] for r in rows) * 100,
@@ -440,6 +453,7 @@ async def run_multi_seed(
         "seed_spacing": SEED_SPACING,
         "loom_seed": loom_seed,
         "cooldown_n": cooldown_n,
+        "alpha_prior": alpha_prior,
         "scenario": {
             "transactions": 150,
             "stages": "50 warmup, 50 outage on Alpha, 50 recovery",
@@ -448,8 +462,8 @@ async def run_multi_seed(
             "gray_rate": GRAY_FAILURE_RATE,
             "tps": BENCH_TPS,
             "loom": (
-                f"half-life {BENCH_HALF_LIFE_SEC:g} s, PID kp=0.12 ki=0.005 kd=0.25, "
-                "floor 0.03, deficit actuation"
+                f"half-life {BENCH_HALF_LIFE_SEC:g} s, technical prior Beta({alpha_prior:g},1), "
+                "PID kp=0.12 ki=0.005 kd=0.25, floor 0.03, deficit actuation"
             ),
         },
         "configs": configs,
@@ -478,10 +492,16 @@ def format_multi_seed_report(summary: dict[str, Any]) -> str:
         f"Cooldown N={summary['cooldown_n']}"
     )
     report.append("-" * 100)
-    report.append(f"{'CONFIGURATION':<34} | {'MEAN PSR':>9} | {'OUTAGE FLIPS':>12}")
+    report.append(f"Loom      : technical prior Beta({summary['alpha_prior']:g}, 1)")
+    report.append("-" * 100)
+    report.append(
+        f"{'CONFIGURATION':<34} | {'MEAN PSR':>9} | {'OUTAGE FLIPS':>12} | "
+        f"{'RECOVERY TX TO ALPHA':>20}"
+    )
     for name, cfg in summary["configs"].items():
         report.append(
-            f"{name:<34} | {cfg['mean_psr_pct']:>8.2f}% | {cfg['mean_outage_flips']:>12.2f}"
+            f"{name:<34} | {cfg['mean_psr_pct']:>8.2f}% | {cfg['mean_outage_flips']:>12.2f} | "
+            f"{cfg['mean_recovery_txs_alpha']:>20.2f}"
         )
     report.append("-" * 100)
     report.append(f"{'COMPARISON (first - second)':<50} | {'MEAN':>9} | {'95% CI':>18} | W/T/L")
@@ -514,6 +534,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=1,
         help="Number of paired seeds; 2 or more runs the multi-seed comparison",
     )
+    parser.add_argument(
+        "--alpha-prior",
+        type=float,
+        default=DEFAULT_ALPHA_PRIOR,
+        help=f"Loom's technical prior Beta(alpha_prior, 1) (default {DEFAULT_ALPHA_PRIOR:g})",
+    )
     parser.add_argument("--out-json", default=None, help="Write results to this JSON file")
     return parser
 
@@ -535,6 +561,7 @@ async def main(argv: list[str] | None = None) -> None:
                 seed=args.seed,
                 loom_seed=args.loom_seed,
                 cooldown_n=args.cooldown_n,
+                alpha_prior=args.alpha_prior,
             )
         finally:
             breaker_logger.setLevel(previous_level)
@@ -555,6 +582,7 @@ async def main(argv: list[str] | None = None) -> None:
             db_path=args.loom_db,
             seed=args.seed,
             loom_seed=args.loom_seed,
+            alpha_prior=args.alpha_prior,
         )
 
         print("\n" + format_report(base_res, loom_res, args.threshold_m, args.cooldown_n))

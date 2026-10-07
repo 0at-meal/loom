@@ -15,7 +15,7 @@ from acquirer_sim.models import AuthorizeRequest, AuthorizeResponse
 from router_core.bandit import BanditStateRegistry
 from router_core.models import AcquirerRouteConfig, RouterConfig, RoutingResult
 from router_core.pid import PIDConfig, PIDDiagnostics, PIDState, calculate_pid_step
-from router_core.state import AcquirerStateSnapshot
+from router_core.state import AcquirerStateSnapshot, Outcome
 from router_core.value_policy import ValueScaledExplorationConfig, apply_value_scaled_policy
 
 if TYPE_CHECKING:
@@ -23,6 +23,10 @@ if TYPE_CHECKING:
     from data_layer.sqlite_logger import MetricsLogger, SQLiteMetricsStore
 
 logger = logging.getLogger("loom.router")
+
+
+class UnexpectedAcquirerResponse(Exception):
+    """An acquirer answered with something the router cannot interpret."""
 
 
 class BanditRouter:
@@ -46,6 +50,7 @@ class BanditRouter:
         self._config = config
         self._clock: Callable[[], float] = clock if clock is not None else time.time
         self._routes: dict[str, AcquirerRouteConfig] = {r.acquirer_id: r for r in config.routes}
+        self._technical_codes = frozenset(config.technical_decline_codes)
         self._registry = registry if registry is not None else BanditStateRegistry()
         self._event_publisher = event_publisher
         self._metrics_logger = metrics_logger
@@ -58,8 +63,14 @@ class BanditRouter:
                 )
 
         self._rng = rng if rng is not None else np.random.default_rng(config.seed)
+        # A caller-supplied client is shared by every route and never closed here.
+        # Otherwise each acquirer gets its own pool (a bulkhead, AUDIT F-16).
         self._client = http_client
         self._owns_client = http_client is None
+        self._acquirer_clients: dict[str, httpx.AsyncClient] = {}
+        # Payments that failed because the router had no free connection (not booked
+        # against any acquirer).
+        self.pool_timeouts = 0
 
         # Phase 4 PID state initialization
         self._pid_config: PIDConfig | None = config.pid_config
@@ -120,25 +131,34 @@ class BanditRouter:
         return self._last_diagnostics
 
     async def start(self) -> None:
-        """Initialize pooled HTTP client if owned."""
-        if self._client is None:
+        """Create one pooled HTTP client per acquirer unless a client was supplied."""
+        if self._client is None and not self._acquirer_clients:
             limits = httpx.Limits(
                 max_connections=self._config.max_connections,
                 max_keepalive_connections=self._config.max_keepalive_connections,
             )
-            self._client = httpx.AsyncClient(limits=limits)
+            for acquirer_id in self._routes:
+                self._acquirer_clients[acquirer_id] = httpx.AsyncClient(limits=limits)
             logger.debug(
-                "Initialized pooled AsyncClient (max=%d, keepalive=%d)",
+                "Initialized %d per-acquirer AsyncClients (max=%d, keepalive=%d each)",
+                len(self._acquirer_clients),
                 self._config.max_connections,
                 self._config.max_keepalive_connections,
             )
 
     async def close(self) -> None:
-        """Close pooled HTTP client if owned."""
-        if self._owns_client and self._client is not None:
-            await self._client.aclose()
-            self._client = None
-            logger.debug("Closed pooled AsyncClient")
+        """Close the per-acquirer HTTP clients this router created."""
+        if self._owns_client:
+            for client in self._acquirer_clients.values():
+                await client.aclose()
+            self._acquirer_clients.clear()
+            logger.debug("Closed per-acquirer AsyncClients")
+
+    def client_for(self, acquirer_id: str) -> httpx.AsyncClient:
+        """Return the HTTP client used to reach ``acquirer_id``."""
+        if self._client is not None:
+            return self._client
+        return self._acquirer_clients[acquirer_id]
 
     async def __aenter__(self) -> BanditRouter:
         """Async context manager entry."""
@@ -158,7 +178,7 @@ class BanditRouter:
             and amount > 0.0
         ):
             states = self._registry.get_all_states()
-            means = {aid: s.expected_success_rate for aid, s in states.items()}
+            means = {aid: s.expected_psr for aid, s in states.items()}
             adjusted_samples, _ = apply_value_scaled_policy(
                 samples=raw_samples,
                 posterior_means=means,
@@ -192,7 +212,7 @@ class BanditRouter:
             and request.amount > 0.0
         ):
             states = self._registry.get_all_states()
-            means = {aid: s.expected_success_rate for aid, s in states.items()}
+            means = {aid: s.expected_psr for aid, s in states.items()}
             adjusted_samples, shrinkage = apply_value_scaled_policy(
                 samples=raw_samples,
                 posterior_means=means,
@@ -278,65 +298,113 @@ class BanditRouter:
         url = route_info.get_authorize_url()
 
         # 2. HTTP Dispatch to Acquirer
-        if self._client is None:
+        if self._client is None and not self._acquirer_clients:
             await self.start()
-        assert self._client is not None
+        client = self.client_for(selected_id)
 
         t_dispatch_start = time.perf_counter()
         status: Literal["AUTHORIZED", "DECLINED", "ERROR"]
         authorized: bool
         success: bool
+        outcome: Outcome | None
         response_payload: AuthorizeResponse | None = None
         error_msg: str | None = None
 
         try:
-            resp = await self._client.post(
+            resp = await client.post(
                 url,
                 json=request.model_dump(),
                 timeout=route_info.timeout_sec,
             )
 
             if resp.status_code == 200:
-                payload = AuthorizeResponse.model_validate(resp.json())
+                try:
+                    payload = AuthorizeResponse.model_validate(resp.json())
+                except ValueError as exc:  # JSONDecodeError and ValidationError
+                    raise UnexpectedAcquirerResponse(
+                        f"Acquirer HTTP 200 with an unreadable body: {exc}"
+                    ) from exc
                 response_payload = payload
                 authorized = payload.authorized
                 success = payload.authorized  # True if AUTHORIZED, False if DECLINED
                 status = "AUTHORIZED" if success else "DECLINED"
+                if success:
+                    outcome = Outcome.AUTHORIZED
+                elif payload.decline_code in self._technical_codes:
+                    outcome = Outcome.TECHNICAL_FAILURE
+                else:
+                    # Issuer declines (e.g. DO_NOT_HONOR) say nothing about the acquirer
+                    outcome = Outcome.ISSUER_DECLINE
             elif resp.status_code == 503:
                 status = "ERROR"
                 authorized = False
                 success = False
+                outcome = Outcome.TECHNICAL_FAILURE
                 error_msg = f"Acquirer HTTP 503 Outage: {resp.text}"
             elif resp.status_code == 422:
-                # Schema bug from client; do not penalize acquirer
+                # The router validated the request, so a 422 is an integration fault on this
+                # route: book it against the acquirer instead of failing the payment call.
                 logger.error(
                     "Acquirer rejected schema (HTTP 422): tx_id=%s payload=%s resp=%s",
                     request.transaction_id,
                     request.model_dump(),
                     resp.text,
                 )
-                raise ValueError(f"Acquirer rejected schema (HTTP 422): {resp.text}")
+                status = "ERROR"
+                authorized = False
+                success = False
+                outcome = Outcome.TECHNICAL_FAILURE
+                error_msg = f"Acquirer rejected schema (HTTP 422): {resp.text}"
             else:
                 status = "ERROR"
                 authorized = False
                 success = False
+                outcome = Outcome.TECHNICAL_FAILURE
                 error_msg = f"Acquirer HTTP {resp.status_code}: {resp.text}"
 
-        except (httpx.TimeoutException, httpx.NetworkError) as err:
+        except httpx.PoolTimeout as err:
+            # The router had no free connection: the request never reached the acquirer,
+            # so it is not evidence about the acquirer (AUDIT F-16).
+            self.pool_timeouts += 1
             status = "ERROR"
             authorized = False
             success = False
+            outcome = None
+            error_msg = f"Router connection pool exhausted for {selected_id}: PoolTimeout ({err})"
+        except (httpx.TransportError, UnexpectedAcquirerResponse) as err:
+            # Timeouts, connection and protocol errors, and unreadable 200 bodies
+            status = "ERROR"
+            authorized = False
+            success = False
+            outcome = Outcome.TECHNICAL_FAILURE
             error_msg = f"Transport error to {selected_id}: {type(err).__name__} ({err})"
 
         t_dispatch_end = time.perf_counter()
         acquirer_latency_ms = (t_dispatch_end - t_dispatch_start) * 1000.0
 
-        # 3. Closed-Loop State Feedback Update (Phase 1 mean-reverting offset decay)
-        updated_snapshot = self._registry.record_outcome(
-            acquirer_id=selected_id,
-            success=success,
-            timestamp=self._clock(),
-        )
+        # 3. State feedback. The acquirer has already answered, so a failure here must not
+        # turn an authorized payment into an error for the caller (AUDIT F-07).
+        try:
+            if outcome is None:
+                updated_snapshot = self._registry.get_state(selected_id)
+            else:
+                updated_snapshot = self._registry.record_outcome(
+                    acquirer_id=selected_id,
+                    success=success,
+                    timestamp=self._clock(),
+                    outcome=outcome,
+                )
+        except Exception as exc:  # noqa: BLE001 - best-effort after dispatch
+            logger.error(
+                "State update failed after dispatch: tx_id=%s acquirer=%s outcome=%s: %s",
+                request.transaction_id,
+                selected_id,
+                outcome,
+                exc,
+            )
+            note = f"state update failed: {type(exc).__name__} ({exc})"
+            error_msg = f"{error_msg}; {note}" if error_msg else note
+            updated_snapshot = self._fallback_snapshot(selected_id)
 
         t_end = time.perf_counter()
         total_latency_ms = (t_end - t_start) * 1000.0
@@ -364,6 +432,7 @@ class BanditRouter:
             status=status,
             authorized=authorized,
             success=success,
+            outcome=outcome,
             response_payload=response_payload,
             error_message=error_msg,
             routing_latency_ms=routing_latency_ms,
@@ -395,6 +464,25 @@ class BanditRouter:
                 logger.warning("Failed to log metrics for transaction: %s", exc)
 
         return routing_result
+
+    def _fallback_snapshot(self, acquirer_id: str) -> AcquirerStateSnapshot:
+        """Best available snapshot when the registry cannot be updated."""
+        try:
+            return self._registry.get_state(acquirer_id)
+        except Exception:  # noqa: BLE001 - the registry itself may be down
+            cfg = self._routes[acquirer_id].state_config
+            return AcquirerStateSnapshot(
+                acquirer_id=acquirer_id,
+                alpha=cfg.alpha_prior,
+                beta=cfg.beta_prior,
+                health_score=cfg.initial_health,
+                success_count=0,
+                failure_count=0,
+                total_count=0,
+                last_updated_at=self._clock(),
+                alpha_prior=cfg.alpha_prior,
+                beta_prior=cfg.beta_prior,
+            )
 
     def get_state(self, acquirer_id: str) -> AcquirerStateSnapshot:
         """Return point-in-time state snapshot for a single acquirer."""

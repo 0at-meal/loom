@@ -8,6 +8,8 @@ import numpy as np
 import pytest
 
 from router_core.state import (
+    DEFAULT_ALPHA_PRIOR,
+    DEFAULT_APPROVAL_HALF_LIFE_SEC,
     DEFAULT_HALF_LIFE_SEC,
     AcquirerState,
     AcquirerStateConfig,
@@ -21,10 +23,11 @@ class TestAcquirerStateConfig:
     def test_default_config_valid(self) -> None:
         """Verify default configuration has expected parameters."""
         config = AcquirerStateConfig()
-        assert config.alpha_prior == 1.0
+        assert config.alpha_prior == DEFAULT_ALPHA_PRIOR
         assert config.beta_prior == 1.0
         assert config.decay_factor is None
         assert config.half_life_sec == DEFAULT_HALF_LIFE_SEC
+        assert config.approval_half_life_sec == DEFAULT_APPROVAL_HALF_LIFE_SEC
         assert config.initial_health == 1.0
 
     @pytest.mark.parametrize("invalid_alpha", [0.0, -1.0, -0.001])
@@ -43,7 +46,7 @@ class TestAcquirerStateConfig:
     def test_invalid_decay_factor_raises(self, invalid_decay: float) -> None:
         """Verify decay_factor outside (0, 1) raises ValueError."""
         with pytest.raises(ValueError, match=r"decay_factor must be in \(0.0, 1.0\)"):
-            AcquirerStateConfig(decay_factor=invalid_decay)
+            AcquirerStateConfig(alpha_prior=1.0, decay_factor=invalid_decay)
 
     @pytest.mark.parametrize("invalid_health", [-0.01, 1.01, -1.0, 2.0])
     def test_invalid_initial_health_raises(self, invalid_health: float) -> None:
@@ -56,21 +59,22 @@ class TestAcquirerStateInit:
     """Tests acquirer state initialization and invariant checks."""
 
     def test_initial_state_defaults(self) -> None:
-        """Verify initial state matches uniform prior and optimistic health."""
+        """Verify initial state matches the default Beta(4,1) technical prior and health."""
         state = AcquirerState("stripe_us", initial_timestamp=1000.0)
         assert state.acquirer_id == "stripe_us"
-        assert state.config.alpha_prior == 1.0
+        assert state.config.alpha_prior == DEFAULT_ALPHA_PRIOR
 
         snapshot = state.get_state()
         assert snapshot.acquirer_id == "stripe_us"
-        assert snapshot.alpha == 1.0
+        assert snapshot.alpha == DEFAULT_ALPHA_PRIOR
         assert snapshot.beta == 1.0
+        assert (snapshot.approval_alpha, snapshot.approval_beta) == (1.0, 1.0)
         assert snapshot.health_score == 1.0
         assert snapshot.success_count == 0
         assert snapshot.failure_count == 0
         assert snapshot.total_count == 0
         assert snapshot.last_updated_at == 1000.0
-        assert snapshot.expected_success_rate == 0.5
+        assert snapshot.expected_success_rate == pytest.approx(0.8)
         assert snapshot.effective_sample_size == 0.0
 
     @pytest.mark.parametrize("bad_id", ["", "   ", "\t\n"])
@@ -85,7 +89,7 @@ class TestAcquirerStateUpdates:
 
     def test_single_success_update(self) -> None:
         """Verify state update after a single successful transaction."""
-        config = AcquirerStateConfig(decay_factor=0.90)
+        config = AcquirerStateConfig(alpha_prior=1.0, decay_factor=0.90)
         state = AcquirerState("acquirer_a", config=config, initial_timestamp=100.0)
 
         snapshot = state.record_outcome(success=True, timestamp=101.0)
@@ -100,7 +104,7 @@ class TestAcquirerStateUpdates:
 
     def test_single_failure_update(self) -> None:
         """Verify state update after a single failed transaction."""
-        config = AcquirerStateConfig(decay_factor=0.90)
+        config = AcquirerStateConfig(alpha_prior=1.0, decay_factor=0.90)
         state = AcquirerState("acquirer_a", config=config, initial_timestamp=100.0)
 
         snapshot = state.record_outcome(success=False, timestamp=101.0)
@@ -153,7 +157,7 @@ class TestEdgeCasesAndNumerics:
 
     def test_sustained_outage_never_drops_alpha_below_prior(self) -> None:
         """Verify 500 consecutive failures decay alpha toward 1.0 without dropping below."""
-        config = AcquirerStateConfig(decay_factor=0.95)
+        config = AcquirerStateConfig(alpha_prior=1.0, decay_factor=0.95)
         state = AcquirerState("stress_outage", config=config)
 
         # Initial boost with 20 successes
@@ -179,7 +183,7 @@ class TestEdgeCasesAndNumerics:
 
     def test_sustained_success_never_drops_beta_below_prior(self) -> None:
         """Verify 500 consecutive successes decay beta toward 1.0 without dropping below."""
-        config = AcquirerStateConfig(decay_factor=0.95)
+        config = AcquirerStateConfig(alpha_prior=1.0, decay_factor=0.95)
         state = AcquirerState("stress_success", config=config)
 
         for _ in range(500):

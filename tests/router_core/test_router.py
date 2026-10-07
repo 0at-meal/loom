@@ -121,8 +121,8 @@ class TestBanditRouterExecutionPipeline:
 
         await router.close()
 
-    async def test_declined_authorization_updates_beta(self) -> None:
-        """Verify HTTP 200 declined updates beta on the selected acquirer."""
+    async def test_issuer_decline_updates_approval_not_health(self) -> None:
+        """An HTTP 200 DO_NOT_HONOR is an issuer decline: approval falls, health does not."""
         config = make_test_router_config()
 
         def handler(request: httpx.Request) -> httpx.Response:
@@ -153,12 +153,13 @@ class TestBanditRouterExecutionPipeline:
         assert result.authorized is False
         assert result.success is False
 
-        # Verify state update: beta = 1.0 + 0.9*(1.0-1.0) + 1.0 = 2.0
+        # The acquirer processed the payment: technical alpha = 1 + 0.9*(1-1) + 1 = 2.0
         alpha_snap = router.get_state("acquirer_alpha")
-        assert alpha_snap.alpha == pytest.approx(1.0)
-        assert alpha_snap.beta == pytest.approx(2.0)
-        assert alpha_snap.failure_count == 1
-        assert alpha_snap.health_score == pytest.approx(0.90)  # 0.90 * 1.0 + 0.10 * 0.0
+        assert alpha_snap.alpha == pytest.approx(2.0)
+        assert alpha_snap.beta == pytest.approx(1.0)
+        assert alpha_snap.approval_beta == pytest.approx(2.0)
+        assert alpha_snap.failure_count == 1  # lifetime counters count authorizations
+        assert alpha_snap.health_score == pytest.approx(1.0)
 
         await router.close()
 
@@ -220,8 +221,8 @@ class TestBanditRouterExecutionPipeline:
 
         await router.close()
 
-    async def test_http_422_raises_without_penalizing_state(self) -> None:
-        """Verify HTTP 422 schema rejection raises ValueError without mutating bandit belief."""
+    async def test_http_422_is_a_technical_failure(self) -> None:
+        """An acquirer 422 is an integration fault: ERROR result, charged to the acquirer."""
         config = make_test_router_config()
 
         def handler(request: httpx.Request) -> httpx.Response:
@@ -236,14 +237,15 @@ class TestBanditRouterExecutionPipeline:
         }
 
         req = AuthorizeRequest(transaction_id="tx_test_5", amount=10.0)
-        with pytest.raises(ValueError, match="HTTP 422"):
-            await router.route(req)
+        result = await router.route(req)
+        assert result.status == "ERROR"
+        assert result.authorized is False
+        assert "HTTP 422" in (result.error_message or "")
 
-        # Verify acquirer state was NOT penalized
+        # The route's technical belief takes the failure (AUDIT F-07)
         alpha_snap = router.get_state("acquirer_alpha")
-        assert alpha_snap.alpha == pytest.approx(1.0)
-        assert alpha_snap.beta == pytest.approx(1.0)
-        assert alpha_snap.total_count == 0
+        assert alpha_snap.beta == pytest.approx(2.0)
+        assert alpha_snap.total_count == 1
 
         await router.close()
 
@@ -251,9 +253,9 @@ class TestBanditRouterExecutionPipeline:
         """Verify BanditRouter works cleanly within async with block."""
         config = make_test_router_config()
         async with BanditRouter(config=config) as router:
-            assert router._client is not None
+            assert router.client_for(config.routes[0].acquirer_id) is not None
             assert router.list_acquirer_ids() == ["acquirer_alpha", "acquirer_beta"]
-        assert router._client is None
+        assert router._acquirer_clients == {}
 
 
 class TestRouterFastAPIApp:

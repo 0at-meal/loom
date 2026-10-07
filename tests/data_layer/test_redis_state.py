@@ -28,7 +28,7 @@ class TestRedisReadWriteImmediateConsistency:
 
     def test_immediate_read_after_single_success(self, fake_redis: fakeredis.FakeRedis) -> None:
         """Verify reading state immediately after recording success matches updated value."""
-        config = AcquirerStateConfig(decay_factor=0.90)
+        config = AcquirerStateConfig(alpha_prior=1.0, decay_factor=0.90)
         registry = RedisBanditStateRegistry(redis_client=fake_redis, default_config=config)
         registry.register_acquirer("acquirer_alpha")
 
@@ -75,7 +75,7 @@ class TestRedisReadWriteImmediateConsistency:
 
     def test_immediate_read_after_failure_update(self, fake_redis: fakeredis.FakeRedis) -> None:
         """Verify reading state immediately after recording failure matches updated value."""
-        config = AcquirerStateConfig(decay_factor=0.90)
+        config = AcquirerStateConfig(alpha_prior=1.0, decay_factor=0.90)
         registry = RedisBanditStateRegistry(redis_client=fake_redis, default_config=config)
         registry.register_acquirer("acquirer_alpha")
 
@@ -108,7 +108,7 @@ class TestStateSurvivesProcessRestart:
         fake_redis: fakeredis.FakeRedis,
     ) -> None:
         """Verify a fresh registry instance hydra-loads accumulated state from Redis."""
-        config = AcquirerStateConfig(decay_factor=0.90)
+        config = AcquirerStateConfig(alpha_prior=1.0, decay_factor=0.90)
 
         # ---------------------------------------------------------------------
         # Process 1: Record 4 successes and 2 failures
@@ -245,6 +245,9 @@ class TestKeyNamingConventions:
             "beta_prior",
             "decay",
             "decayed_at",
+            "approval_alpha",
+            "approval_beta",
+            "approval_decayed_at",
             "success_count",
             "failure_count",
             "total_count",

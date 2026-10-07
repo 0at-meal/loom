@@ -12,6 +12,7 @@ Validates:
 from __future__ import annotations
 
 import ast
+import asyncio
 import pathlib
 import sqlite3
 import time
@@ -469,3 +470,53 @@ class TestPhase6AnalyticalQueries:
         assert window_metrics["psr"] == 1.0
 
         await logger.close()
+
+
+class TestMetricsLoggerNoSilentLoss:
+    """AUDIT F-12: shutdown, duplicates and overflow must not lose records silently."""
+
+    @staticmethod
+    async def _count(db_file: str) -> int:
+        async with aiosqlite.connect(db_file) as conn:
+            cursor = await conn.execute("SELECT COUNT(*) FROM transactions;")
+            row = await cursor.fetchone()
+            return int(row[0]) if row is not None else 0
+
+    @pytest.mark.asyncio
+    async def test_close_waits_for_the_batch_in_hand(self, tmp_path: pathlib.Path) -> None:
+        """Records the drain task already took off the queue are written on close."""
+        db_file = str(tmp_path / "in_hand.db")
+        logger = MetricsLogger(db_path=db_file, batch_size=50, flush_interval_sec=1.0)
+        await logger.start()
+        for i in range(30):
+            logger.log_routing_result(_create_mock_routing_result(tx_id=f"tx_hand_{i:03d}"))
+        await asyncio.sleep(0.05)  # the drain loop now holds all 30 in its batch
+        await logger.close()
+        assert await self._count(db_file) == 30
+
+    @pytest.mark.asyncio
+    async def test_duplicate_id_does_not_discard_its_batch(self, tmp_path: pathlib.Path) -> None:
+        """One duplicate transaction_id costs one record, not the whole batch."""
+        db_file = str(tmp_path / "dup.db")
+        logger = MetricsLogger(db_path=db_file, batch_size=50, flush_interval_sec=0.05)
+        await logger.start()
+        for i in range(20):
+            logger.log_routing_result(_create_mock_routing_result(tx_id=f"tx_dup_{i:03d}"))
+        logger.log_routing_result(_create_mock_routing_result(tx_id="tx_dup_007"))
+        await logger.close()
+        assert await self._count(db_file) == 20
+        assert logger.failed_count == 1
+
+    @pytest.mark.asyncio
+    async def test_overflow_and_early_records_are_counted(self, tmp_path: pathlib.Path) -> None:
+        """Dropped records are counted, both before start() and when the queue is full."""
+        db_file = str(tmp_path / "overflow.db")
+        logger = MetricsLogger(db_path=db_file, max_queue_size=5, flush_interval_sec=1.0)
+        logger.log_routing_result(_create_mock_routing_result(tx_id="tx_early"))
+        assert logger.dropped_count == 1
+        await logger.start()
+        for i in range(100):
+            logger.log_routing_result(_create_mock_routing_result(tx_id=f"tx_over_{i:03d}"))
+        assert logger.dropped_count == 1 + 95
+        await logger.close()
+        assert await self._count(db_file) == 5

@@ -180,18 +180,22 @@ class TestPhase7QAScenarios:
                     raw_msg = await asyncio.wait_for(ws.recv(), timeout=2.0)
                     events.append(json.loads(raw_msg))
 
-            # Find first outage frame
+            # Find first outage frame: the first transaction routed to Alpha from seq 27 on
             outage_frame = next(
                 e for e in events if e.get("decline_code") == "ACQUIRER_OUTAGE"
             )
-            assert outage_frame["sequence_number"] == 27
+            first_alpha_after = next(
+                e
+                for e in events
+                if e["sequence_number"] >= 27 and e["selected_acquirer"] == "acquirer_alpha"
+            )
+            assert outage_frame["sequence_number"] == first_alpha_after["sequence_number"]
             assert outage_frame["selected_acquirer"] == "acquirer_alpha"
 
-            # Chart X calculation: index in event window
-            event_idx = next(
-                i for i, e in enumerate(events) if e["sequence_number"] == 27
-            )
-            assert event_idx == 26  # 0-indexed 27th element
+            # Chart X calculation: index in event window matches the sequence number
+            seq = outage_frame["sequence_number"]
+            event_idx = next(i for i, e in enumerate(events) if e["sequence_number"] == seq)
+            assert event_idx == seq - 1
 
             # Restore alpha
             sim_alpha = sim_app.state.registry.get("acquirer_alpha")

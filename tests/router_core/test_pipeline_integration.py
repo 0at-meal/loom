@@ -55,18 +55,22 @@ class TestPipelineEndToEnd:
             router = BanditRouter(config=router_config, http_client=client)
 
             counts: dict[str, int] = {"acquirer_alpha": 0, "acquirer_beta": 0}
-            for i in range(100):
+            for i in range(200):
                 req = AuthorizeRequest(transaction_id=f"tx_steady_{i}", amount=50.0)
                 res = await router.route(req)
-                counts[res.selected_acquirer] += 1
+                if i >= 100:
+                    counts[res.selected_acquirer] += 1
 
-            # Alpha (95%) should capture the vast majority of traffic over Beta (70%)
-            assert counts["acquirer_alpha"] >= 80, f"Expected Alpha >= 80, got {counts}"
-            assert counts["acquirer_beta"] > 0, "Expected at least 1 exploration probe to Beta"
+            # After a 100-tx warmup, Alpha (95%) captures the vast majority over Beta (70%).
+            # Both start from uniform technical and approval priors, so the first few dozen
+            # transactions explore more than a single belief did.
+            assert counts["acquirer_alpha"] >= 85, f"Expected Alpha >= 85, got {counts}"
 
             alpha_state = router.get_state("acquirer_alpha")
             beta_state = router.get_state("acquirer_beta")
-            assert alpha_state.expected_success_rate > beta_state.expected_success_rate
+            # Beta's declines are issuer declines: they lower its approval belief, not health.
+            assert alpha_state.expected_approval_rate > beta_state.expected_approval_rate
+            assert alpha_state.expected_psr > beta_state.expected_psr
 
     async def test_sudden_outage_causes_100_percent_hard_switch_to_backup(
         self, sim_service_app: FastAPI
