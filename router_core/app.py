@@ -244,7 +244,7 @@ def create_router_app(
             )
         if decision.admission == Admission.MISMATCH:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=422,  # Unprocessable Content; the starlette constant is deprecated
                 detail=(
                     f"transaction_id {request.transaction_id} was already used "
                     "with a different request body"
