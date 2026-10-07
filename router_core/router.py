@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 import logging
 import time
@@ -71,6 +72,15 @@ class BanditRouter:
         # Payments that failed because the router had no free connection (not booked
         # against any acquirer).
         self.pool_timeouts = 0
+        # Admission limit (AUDIT F-16): requests beyond max_in_flight wait for a slot, so
+        # their decisions see the outcomes of earlier requests.
+        self._admission = (
+            asyncio.Semaphore(config.max_in_flight) if config.max_in_flight is not None else None
+        )
+        self._in_flight = 0
+        self._waiting = 0
+        self._waited = 0
+        self._max_wait_ms = 0.0
 
         # Phase 4 PID state initialization
         self._pid_config: PIDConfig | None = config.pid_config
@@ -206,7 +216,38 @@ class BanditRouter:
         selected_id = max(raw_samples.keys(), key=lambda aid: (raw_samples[aid], aid))
         return selected_id, raw_samples
 
+    def in_flight_status(self) -> dict[str, Any]:
+        """Admission counters for /health."""
+        return {
+            "max_in_flight": self._config.max_in_flight,
+            "in_flight": self._in_flight,
+            "waiting": self._waiting,
+            "waited": self._waited,
+            "max_wait_ms": self._max_wait_ms,
+        }
+
     async def route(self, request: AuthorizeRequest) -> RoutingResult:
+        """Route one payment, waiting for an in-flight slot first if the limit is reached."""
+        if self._admission is None:
+            return await self._route(request)
+        t_wait = time.perf_counter()
+        self._waiting += 1
+        try:
+            await self._admission.acquire()
+        finally:
+            self._waiting -= 1
+        wait_ms = (time.perf_counter() - t_wait) * 1000.0
+        if wait_ms > 0.01:
+            self._waited += 1
+            self._max_wait_ms = max(self._max_wait_ms, wait_ms)
+        self._in_flight += 1
+        try:
+            return await self._route(request, queue_wait_ms=wait_ms)
+        finally:
+            self._in_flight -= 1
+            self._admission.release()
+
+    async def _route(self, request: AuthorizeRequest, queue_wait_ms: float = 0.0) -> RoutingResult:
         """Execute end-to-end routing decision, acquirer dispatch, and state update."""
         t_start = time.perf_counter()
 
@@ -418,7 +459,7 @@ class BanditRouter:
             updated_snapshot = self._fallback_snapshot(selected_id)
 
         t_end = time.perf_counter()
-        total_latency_ms = (t_end - t_start) * 1000.0
+        total_latency_ms = (t_end - t_start) * 1000.0 + queue_wait_ms
 
         logger.info(
             "Routing outcome: tx_id=%s acquirer=%s status=%s authorized=%s "
@@ -449,6 +490,7 @@ class BanditRouter:
             routing_latency_ms=routing_latency_ms,
             acquirer_latency_ms=acquirer_latency_ms,
             total_latency_ms=total_latency_ms,
+            queue_wait_ms=queue_wait_ms,
             state_snapshot=updated_snapshot,
             smoothed_allocation=smoothed_allocation,
             target_allocation=target_allocation,

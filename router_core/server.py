@@ -105,6 +105,15 @@ def parse_args(args: list[str] | None = None) -> argparse.Namespace:
         help="Enable auto-reload for development",
     )
     parser.add_argument(
+        "--max-in-flight",
+        type=int,
+        default=None,
+        help=(
+            "Most payments dispatched at once; 0 disables the limit "
+            "(default: $ROUTER_MAX_IN_FLIGHT, else 50)"
+        ),
+    )
+    parser.add_argument(
         "--ledger",
         action=argparse.BooleanOptionalAction,
         default=None,
@@ -172,7 +181,14 @@ def build_router_config(parsed: argparse.Namespace) -> RouterConfig:
             min_allocation=getattr(parsed, "min_allocation", 0.03),
         )
 
-    return RouterConfig(routes=routes, pid_config=pid_config)
+    max_in_flight = getattr(parsed, "max_in_flight", None)
+    if max_in_flight is None:
+        max_in_flight = int(os.environ.get("ROUTER_MAX_IN_FLIGHT", "50"))
+    return RouterConfig(
+        routes=routes,
+        pid_config=pid_config,
+        max_in_flight=max_in_flight if max_in_flight > 0 else None,
+    )
 
 
 def main() -> None:
