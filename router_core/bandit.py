@@ -82,3 +82,21 @@ class BanditStateRegistry:
     def list_acquirer_ids(self) -> list[str]:
         """Return list of all currently registered acquirer identifiers."""
         return list(self._acquirers.keys())
+
+    def export_beliefs(self) -> dict[str, dict[str, float]]:
+        """Return every acquirer's raw belief state, for snapshots."""
+        return {aid: state.export_beliefs() for aid, state in self._acquirers.items()}
+
+    def restore_beliefs(self, snapshot: dict[str, dict[str, float]]) -> list[str]:
+        """Load saved beliefs into registered acquirers; return the IDs restored.
+
+        Acquirers in the snapshot that are not registered here are ignored, and registered
+        acquirers missing from the snapshot keep their priors.
+        """
+        restored = []
+        for aid, data in snapshot.items():
+            state = self._acquirers.get(aid)
+            if state is not None:
+                state.restore_beliefs(data)
+                restored.append(aid)
+        return sorted(restored)

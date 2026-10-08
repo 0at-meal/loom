@@ -30,7 +30,10 @@ CREATE TABLE IF NOT EXISTS transactions (
     thompson_samples_json       TEXT NOT NULL,
     pid_diagnostics_json        TEXT,
     error_message               TEXT,
-    created_at                  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    created_at                  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- Belief the result was booked against; NULL for router-side errors (e.g. PoolTimeout)
+    -- and for rows written before this column existed.
+    outcome                     TEXT CHECK(outcome IN ('AUTHORIZED', 'ISSUER_DECLINE', 'TECHNICAL_FAILURE'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_transactions_timestamp
@@ -63,6 +66,10 @@ CREATE TABLE IF NOT EXISTS acquirer_outcomes (
     failure_count               INTEGER NOT NULL,
     total_count                 INTEGER NOT NULL,
     created_at                  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- Approval belief and expected PSR (technical mean x approval mean); NULL in older rows.
+    approval_alpha              REAL,
+    approval_beta               REAL,
+    expected_psr                REAL,
     FOREIGN KEY(transaction_id) REFERENCES transactions(transaction_id)
 );
 

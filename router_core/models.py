@@ -66,6 +66,15 @@ class RouterConfig(BaseModel):
         gt=0,
         description="Maximum pooled HTTP connections per acquirer (each has its own pool).",
     )
+    max_in_flight: int | None = Field(
+        default=50,
+        gt=0,
+        description=(
+            "Most payments dispatched at once across all acquirers; extra requests wait for "
+            "a slot and then decide with fresher beliefs (AUDIT F-16). None means no limit. "
+            "Caps throughput at max_in_flight / acquirer latency."
+        ),
+    )
     max_keepalive_connections: int = Field(
         default=20,
         gt=0,
@@ -132,6 +141,20 @@ class RoutingResult(BaseModel):
         ...,
         description="Whether the payment was authorized.",
         examples=[True],
+    )
+    queue_wait_ms: float = Field(
+        default=0.0,
+        description=(
+            "Time spent waiting for an in-flight slot before routing "
+            "(included in total_latency_ms)."
+        ),
+    )
+    replayed: bool = Field(
+        default=False,
+        description=(
+            "True when this is the stored result of an earlier request with the same "
+            "transaction_id; nothing was dispatched (AUDIT F-07)."
+        ),
     )
     outcome: Outcome | None = Field(
         default=None,

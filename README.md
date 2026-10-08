@@ -59,7 +59,7 @@ Seed 42 above is one draw. The table below comes from `python scripts/compare_ps
 
 ## How It Works
 
-Loom's pipeline is built from four stages behind separate module boundaries. In the served application today only stages 1, 2 and 4 are connected (see the Data Layer note below).
+Loom's pipeline is built from four stages behind separate module boundaries. Since PR #5 the served application connects all four: stage 3 logs every decision to SQLite by default and, if enabled, sends events and belief snapshots to Redis (see the Data Layer section below).
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
@@ -76,7 +76,7 @@ Loom's pipeline is built from four stages behind separate module boundaries. In 
 │  │    │   clamping (I_max=1.0) low-pass filters the target into w_smoothed.         │  │
 │  │    ├── Simplex Actuation: Simplex projection enforces exploration floor          │  │
 │  │    │   (w_min >= 0.03); deficit or categorical draw picks the acquirer.          │  │
-│  │    └── Optional Hooks: Emits RoutingResult to Data Layer when wired in.          │  │
+│  │    └── Data Hooks: Emits every RoutingResult to the ledger (and Redis if on).    │  │
 │  └──────────────────────────────────┬───────────────────────────────────────────────┘  │
 │                                     │                                                  │
 │             ┌───────────────────────┴───────────────────────┐                          │
@@ -115,7 +115,10 @@ Loom's pipeline is built from four stages behind separate module boundaries. In 
 - **Redis State & Pub/Sub (`redis_state.py`, `redis_pubsub.py`)**: Belief state in Redis hashes, updated with `WATCH`/`MULTI` optimistic transactions (up to 5 retries, synchronous client; no Lua scripts). Pub/Sub publishes typed telemetry (`RoutingEvent`, `HealthAlertEvent`), at-most-once by design.
 - **SQLite Analytical Ledger (`sqlite_logger.py`, `schema.sql`)**: Micro-batched asynchronous writer draining an in-memory queue via `aiosqlite.executemany` into Write-Ahead Logging (WAL) storage. `close()` waits for everything queued; a batch that fails is retried row by row, so a duplicate `transaction_id` loses only itself. Records dropped because the queue was full or the logger was not running are counted in `dropped_count`, and rows SQLite rejects in `failed_count`.
 - **Append-only guard triggers**: `prevent_transactions_update`, `prevent_transactions_delete`, `prevent_acquirer_outcomes_update` and `prevent_acquirer_outcomes_delete` raise `RAISE(ABORT)` on `UPDATE` or `DELETE`. They guard against accidental mutation; the error is an ordinary, catchable `sqlite3.IntegrityError`. They are not tamper-proofing: `DROP TRIGGER`, `INSERT OR REPLACE`, `DROP TABLE`, replacing the file, and `reset-demo` all bypass them.
-- **Not wired into the served app.** `router_core/app.py`, `router_core/server.py` and `scripts/run_demo.py` do not connect `MetricsLogger`, `EventPublisher` or the Redis state registry. The data layer is exercised only by tests and by scripts such as `scripts/compare_psr.py` and `scripts/run_phase5_e2e_verification.py`. A running router keeps its beliefs in process memory, and they are lost on restart.
+- **Wired into the served app (PR #5).** `router_core/app.py` (used by `router_core/server.py` and `scripts/run_demo.py`) connects the data layer at startup:
+  - **Ledger, on by default** (`LEDGER_ENABLED`, `--ledger/--no-ledger`, `--ledger-path`, `SQLITE_DB_PATH`): every `/route` decision is written to SQLite, including its `outcome` (`AUTHORIZED`, `ISSUER_DECLINE`, `TECHNICAL_FAILURE`, or NULL for router-side errors) and the approval belief. If the ledger cannot be opened at startup, the router refuses to start. Losses at runtime are counted, and `/health` shows the ledger as `degraded`. Older ledgers get the new columns automatically when opened.
+  - **Redis, off by default** (`REDIS_ENABLED`, `--redis`): routing and health events are published, and a belief snapshot is written every `REDIS_SNAPSHOT_INTERVAL_SEC` (5 s) and at shutdown (`data_layer/live.py`). On startup the router restores beliefs from the last snapshot, and decay continues across the downtime. Everything goes through background tasks with a bounded queue, so payments never wait on Redis. If Redis is down at startup or later, routing continues, lost events are counted and `/health` shows Redis as `degraded`.
+  - Beliefs stay in process memory for routing: the snapshot survives restarts, but several router processes still learn independently. `RedisBanditStateRegistry` (shared live state) is not used by the served app; it still has the restart and contention problems described in AUDIT F-13.
 
 ### 4. Mission-Control Dashboard (`dashboard/`)
 - React application built with Vite and Tailwind CSS. Connects via native WebSocket to `/ws/telemetry`. The router gives each connection its own bounded queue (256 events, oldest dropped first) and sender task, so a slow or stalled browser never delays `/route`; `/health` reports `telemetry_dropped`.
@@ -168,7 +171,7 @@ cp .env.example .env
 ```
 
 > [!IMPORTANT]
-> **Configuration Notice**: Only the data-layer keys in `.env` are read (`REDIS_*`, `KEY_PREFIX`, `REDIS_CHANNEL_*`, `SQLITE_*`, via `data_layer/config.py`). `DECAY_HALF_LIFE_SEC` is read by `router_core.server` as the default for `--half-life-sec`. `PID_KP`, `PID_KI`, `PID_KD`, `APP_ENV` and `LOG_LEVEL` are never read. PID gains default to $K_p=0.12, K_i=0.005, K_d=0.25, I_{\text{max}}=1.0, w_{\text{min}}=0.03$ in `PIDConfig` and are overridden via server CLI arguments (`--kp`, `--ki`, `--kd`, `--min-allocation`).
+> **Configuration Notice**: `.env` keys read through `data_layer/config.py`: `LEDGER_ENABLED`, `SQLITE_*`, `REDIS_ENABLED`, `REDIS_SNAPSHOT_INTERVAL_SEC`, the other `REDIS_*` keys, `KEY_PREFIX` and `REDIS_CHANNEL_*`. `router_core.server` also reads `DECAY_HALF_LIFE_SEC` (default for `--half-life-sec`) and `ROUTER_MAX_IN_FLIGHT` (default for `--max-in-flight`). CLI flags override `.env`. `PID_KP`, `PID_KI`, `PID_KD`, `APP_ENV` and `LOG_LEVEL` are never read. PID gains default to $K_p=0.12, K_i=0.005, K_d=0.25, I_{\text{max}}=1.0, w_{\text{min}}=0.03$ in `PIDConfig` and are overridden via server CLI arguments (`--kp`, `--ki`, `--kd`, `--min-allocation`).
 
 > [!NOTE]
 > **Running the tests:** `pytest` collects and runs 262 tests; CI runs the same suite with coverage. Dependencies are unpinned, and `pyproject.toml` turns warnings into errors, so a new library release can still break collection. A few tests assert wall-clock latency and can fail on a loaded machine.
@@ -189,7 +192,7 @@ docker compose ps
 ```
 
 #### Mode B: No Redis
-If Docker is unavailable, the router, simulator, dashboard and benchmark scripts still run, because none of them require Redis. Unit tests mock Redis with `fakeredis[json]`. The data-layer CLI reports Redis as down (see `ping` below).
+If Docker is unavailable, the router, simulator, dashboard and benchmark scripts still run, because none of them require Redis (the router uses it only with `--redis`). Unit tests mock Redis with `fakeredis[json]`. The data-layer CLI reports Redis as down (see `ping` below).
 
 #### Initialize the SQLite Ledger
 Create the SQLite database, WAL journal mode, and append-only guard triggers:
@@ -276,8 +279,7 @@ curl http://127.0.0.1:8001/health
 # Inspect live Bayesian belief parameters (alpha, beta, health_score) across all routes
 curl http://127.0.0.1:8000/state
 
-# Inspect SQLite transaction counts and WAL status
-# (the served router does not log, so counts stay at 0 unless a script wrote them)
+# Inspect SQLite transaction counts and WAL status (the served router logs every decision)
 python -m data_layer.cli status
 
 # Dump Redis acquirer state keys (requires Redis; exits 1 in Mode B)
@@ -360,7 +362,7 @@ python -m data_layer.cli reset-demo --force
 
 | Alert / Symptom | Root Cause | Immediate Action | Recovery Verification |
 | :--- | :--- | :--- | :--- |
-| **`[DOWN] Redis: Port unreachable`** | Redis container stopped or Docker daemon not running. | The router does not use Redis, so routing is unaffected. To restart: `docker compose restart redis`. | Run `python -m data_layer.cli ping`. Redis will replay `appendonly.aof`. |
+| **`[DOWN] Redis: Port unreachable`** | Redis container stopped or Docker daemon not running. | Routing is unaffected. A router started with `--redis` keeps going, counts the lost events and snapshots, and shows Redis as `degraded` on `/health`. To restart: `docker compose restart redis`. | Run `python -m data_layer.cli ping`. Redis will replay `appendonly.aof`. |
 | **`sqlite3.OperationalError: database is locked`** | Concurrent reader process holding an uncommitted lock beyond `busy_timeout` ($5\text{s}$). | Terminate zombie reader processes holding database locks: `Get-Process python` (Windows) or `fuser loom_metrics.db` (Linux). | Verify WAL mode: `PRAGMA journal_mode;` returns `wal`. |
 | **`ABORT: UPDATE operations are strictly prohibited`** | A script or query attempted an in-place mutation on `transactions`. | Check the caller stack trace. Ledger writes should be inserts via `MetricsLogger` or `SQLiteMetricsStore`. | The aborted statement did not mutate the ledger. |
 
@@ -368,7 +370,7 @@ python -m data_layer.cli reset-demo --force
 
 ### 10. Flagged Single Points of Failure (SPOFs)
 
-1. **In-process router state**: Beliefs, PID state and dispatch counters live in the router process, so a restart resets them, and multiple router processes would each learn independently.
+1. **In-process router state**: Beliefs, PID state, dispatch counters and the idempotency store live in the router process. With `--redis` beliefs are restored from the last snapshot after a restart; PID state, counters and idempotency entries are not. Multiple router processes would each learn independently and would not see each other's transaction IDs.
 2. **Single-Node Redis Instance (when used by scripts)**: `docker-compose.yml` provisions a single Redis container. For production topologies, migrate to Redis Sentinel (HA failover) or AWS ElastiCache / Redis Cluster.
 3. **Local Single-File SQLite Database**: `loom_metrics.db` resides on local disk. Multi-instance deployments would need to stream telemetry to analytical storage (ClickHouse, BigQuery, or PostgreSQL).
 
@@ -502,7 +504,7 @@ All project documentation resides in [`docs/`](docs/). The QA reports are the ph
 
 As defined in [`docs/prd.md`](docs/prd.md) and [`docs/decisions-log.md`](docs/decisions-log.md):
 - **Real Acquirer / Sandbox Integration**: Simulated acquirers only. A live sandbox cannot guarantee on-demand, deterministic outage injection, which is needed to evaluate control-loop dynamics.
-- **Production Banking Infrastructure**: Clustered Redis Sentinel/Cluster, multi-node replicated databases, multi-region routing, PCI-DSS cardholder tokenization, canary/shadow deployment, idempotency handling, eligibility rules, and automated failback kill-switches were excluded to keep the control loop demonstrable and testable.
+- **Production Banking Infrastructure**: Clustered Redis Sentinel/Cluster, multi-node replicated databases, multi-region routing, PCI-DSS cardholder tokenization, canary/shadow deployment, cross-process idempotency, eligibility rules, and automated failback kill-switches were excluded to keep the control loop demonstrable and testable.
 
 ### Value-Scaled Exploration (Phase 8, opt-in)
 
@@ -511,13 +513,13 @@ Phase 8 adds [`router_core/value_policy.py`](router_core/value_policy.py), which
 ### Known Limitations & Open Risks
 
 - **Loses to a standard breaker on hard outages; wins on gray failures**: see [Multi-seed results](#multi-seed-results-100-paired-seeds-same-schedule-and-configuration-as-the-table).
-- **Steady-state regret**: with Alpha at 95% and no outage, the share of transactions 501–2000 sent to the worse Beta (10 seeds) is 36.8% / 16.6% / 10.3% for Beta at 94% / 92% / 90% in the benchmark configuration and 43.9% / 9.0% / 6.3% in the served configuration (`scripts/steady_state_share.py`; the floor alone would give 3%). Before the approval belief (AUDIT F-03, per-observation decay) these were 46.3% / 38.6% / 30.5% and 46.8% / 29.2% / 19.2%.
+- **Steady-state regret**: with Alpha at 95% and no outage, the share of transactions 501–2000 sent to the worse Beta (10 seeds) is 36.8% / 16.6% / 10.3% for Beta at 94% / 92% / 90% in the benchmark configuration and 43.9% / 9.0% / 6.3% in the served configuration (`scripts/steady_state_share.py`; the floor alone would give 3%). Before the approval belief (AUDIT F-03, per-observation decay) these were 46.3% / 38.6% / 30.5% and 46.8% / 29.2% / 19.2%. In PR #5 a longer approval memory (10 min, 1 h) and routing on the approval mean instead of a draw were tried; neither lowered the 1-point share within this 2,000-transaction test, and the approval mean made the outage benchmark worse. Telling 95% from 94% apart takes roughly 4,000 observations per acquirer, more than the test contains.
 - **Decline classification is minimal**: only `ACQUIRER_OUTAGE` (plus HTTP errors, timeouts and unreadable replies) counts against an acquirer's technical belief; every other decline code is treated as an issuer decline. The static baseline still counts every decline as a route failure. A gray failure made of issuer declines, as the simulator models it, is learned through the 60 s approval memory, so Loom reacts to it more slowly than to an outage.
 - **Transaction-clocked control**: The PID steps once per transaction ($\Delta t = 1.0$), not per wall-clock second, so ramp time and memory scale inversely with traffic volume.
 - **Exploration Floor Reliability Tax**: The 3% floor keeps sending 3% of traffic to a failing route for the whole outage.
-- **Data layer not wired into the served router**: No live decision is logged or published (see Data Layer above).
+- **Idempotency is per process and in memory**: a `transaction_id` is remembered for 24 h (at most 100,000 IDs, oldest evicted first). A completed duplicate gets the stored result with `replayed: true`, a duplicate still in flight gets HTTP 409, and the same ID with a different body gets HTTP 422. Entries are lost on restart and not shared across processes.
 - **Single-Shot Routing Without Inline Cascading**: Each transaction goes to a single acquirer, with no retry on a second acquirer.
-- **In-Flight Concurrency Feedback Lag**: Under burst concurrency, simultaneous transactions sample against the same beliefs before any HTTP response returns and updates them.
+- **In-flight lag, bounded by an admission limit**: at most `max_in_flight` payments (default 50) are dispatched at once; the rest wait for a slot and then decide with fresher beliefs. In the audit's experiment (200 concurrent payments during a 503 outage on Alpha, 10 seeds, `python scripts/concurrency_inflight.py --seeds 10`), the dead acquirer receives 39.9 (stochastic actuation) / 28.6 (deficit) payments, down from 122.7 / 84.8 with no limit (`--max-in-flight 0`); routed one at a time it receives 14.5 / 10.6. The limit caps throughput at `max_in_flight` ÷ acquirer latency (for example 50 / 0.3 s ≈ 166 TPS), and waiting time is reported as `queue_wait_ms`.
 - **Unconstrained Mock Capacity**: The simulator never rate-limits, so the effect of shifting 100% of traffic onto a backup acquirer is not modelled.
 
 ---
@@ -526,12 +528,12 @@ Phase 8 adds [`router_core/value_policy.py`](router_core/value_policy.py), which
 
 Per the PRD roadmap and architectural risks log:
 
-1. **Wire the data layer into the served router**: logging and publishing for every live decision.
+1. **Shared state for several router processes**: beliefs, idempotency and the admission limit are per process; Redis holds only snapshots and events.
 2. **Map real decline codes**: technical vs issuer classification exists, but only for the simulator's two codes.
 3. **Secondary Capacity Throttling**: connection-pool limits and HTTP 429 rate limiting on simulated backup gateways, so the herd-migration argument for smoothing can actually be measured.
 4. **Time-based probing**: decay is now on the wall clock; the exploration floor is still a share of traffic, and the PID still steps once per transaction.
 5. **Distributed Infrastructure Topology**: Redis Sentinel / ElastiCache and PostgreSQL / ClickHouse for multi-node deployments.
-6. **In-Flight Virtual Loss Accounting**: temporary pessimistic penalties on uncompleted in-flight requests.
+6. **Adaptive admission limit**: size `max_in_flight` from observed acquirer latency instead of a fixed number. (Virtual loss was measured in PR #5 and not adopted: it only spread load in a burst and cost healthy authorizations.)
 
 ---
 
@@ -539,5 +541,5 @@ Per the PRD roadmap and architectural risks log:
 
 - **Smooths allocation weights, not individual routing decisions**: the weight changes by at most ~12.5% per transaction, but each transaction still goes to one acquirer (PID filter).
 - **Learns whether each acquirer is up from the last few seconds of outcomes** (2.3 s half-life) **and its issuer approval rate from the last minute** (60 s half-life), so issuer declines do not count against the acquirer (Thompson Sampling over the product of two wall-clock-decayed beliefs).
-- **Logs decisions to an append-only SQLite ledger and publishes them over Redis Pub/Sub only when wired in by a script or test**; the served router keeps state in memory.
+- **Logs every live decision to an append-only SQLite ledger** (on by default) **and, with `--redis`, publishes events and belief snapshots to Redis**; routing beliefs stay in memory and are restored from the snapshot after a restart.
 - **Updates beliefs and pushes a WebSocket frame for every transaction** (in-process broadcast from the router).

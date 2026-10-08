@@ -62,7 +62,38 @@ class DataLayerConfig(BaseSettings):
         description="Redis Pub/Sub channel for acquirer health alerts.",
     )
 
-    # SQLite configuration (reserved for Phase 5 Ticket C)
+    # Served-router wiring (AUDIT F-04)
+    ledger_enabled: bool = Field(
+        default=True,
+        description=(
+            "Log every routing decision to the SQLite ledger (LEDGER_ENABLED). If the ledger "
+            "cannot be opened at startup the router refuses to start."
+        ),
+    )
+    redis_enabled: bool = Field(
+        default=False,
+        description=(
+            "Publish routing and health events to Redis and keep belief snapshots there "
+            "(REDIS_ENABLED). Optional: payments never wait on Redis."
+        ),
+    )
+    redis_snapshot_interval_sec: float = Field(
+        default=5.0,
+        gt=0.0,
+        description="Seconds between belief snapshots written to Redis.",
+    )
+    redis_event_queue_size: int = Field(
+        default=1000,
+        ge=1,
+        description="Events buffered for Redis before the oldest are dropped.",
+    )
+    redis_retry_interval_sec: float = Field(
+        default=2.0,
+        gt=0.0,
+        description="Seconds to wait before retrying Redis after an error.",
+    )
+
+    # SQLite configuration
     sqlite_db_path: str = Field(
         default="loom_metrics.db",
         description="Path to SQLite metrics database file or ':memory:'.",

@@ -6,9 +6,11 @@ import argparse
 import logging
 import os
 import sys
+from typing import Any
 
 import uvicorn
 
+from data_layer.config import DataLayerConfig
 from router_core.app import create_router_app
 from router_core.models import AcquirerRouteConfig, RouterConfig
 from router_core.pid import PIDConfig
@@ -102,7 +104,45 @@ def parse_args(args: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Enable auto-reload for development",
     )
+    parser.add_argument(
+        "--max-in-flight",
+        type=int,
+        default=None,
+        help=(
+            "Most payments dispatched at once; 0 disables the limit "
+            "(default: $ROUTER_MAX_IN_FLIGHT, else 50)"
+        ),
+    )
+    parser.add_argument(
+        "--ledger",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Log every decision to the SQLite ledger (default: $LEDGER_ENABLED, else on)",
+    )
+    parser.add_argument(
+        "--ledger-path",
+        default=None,
+        help="SQLite ledger file (default: $SQLITE_DB_PATH, else loom_metrics.db)",
+    )
+    parser.add_argument(
+        "--redis",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Publish events and belief snapshots to Redis (default: $REDIS_ENABLED, else off)",
+    )
     return parser.parse_args(args)
+
+
+def build_data_config(parsed: argparse.Namespace) -> DataLayerConfig:
+    """Data-layer settings from the environment, overridden by any CLI flags given."""
+    overrides: dict[str, Any] = {}
+    if getattr(parsed, "ledger", None) is not None:
+        overrides["ledger_enabled"] = parsed.ledger
+    if getattr(parsed, "ledger_path", None) is not None:
+        overrides["sqlite_db_path"] = parsed.ledger_path
+    if getattr(parsed, "redis", None) is not None:
+        overrides["redis_enabled"] = parsed.redis
+    return DataLayerConfig(**overrides)
 
 
 def build_router_config(parsed: argparse.Namespace) -> RouterConfig:
@@ -141,7 +181,14 @@ def build_router_config(parsed: argparse.Namespace) -> RouterConfig:
             min_allocation=getattr(parsed, "min_allocation", 0.03),
         )
 
-    return RouterConfig(routes=routes, pid_config=pid_config)
+    max_in_flight = getattr(parsed, "max_in_flight", None)
+    if max_in_flight is None:
+        max_in_flight = int(os.environ.get("ROUTER_MAX_IN_FLIGHT", "50"))
+    return RouterConfig(
+        routes=routes,
+        pid_config=pid_config,
+        max_in_flight=max_in_flight if max_in_flight > 0 else None,
+    )
 
 
 def main() -> None:
@@ -154,7 +201,7 @@ def main() -> None:
     )
 
     config = build_router_config(parsed)
-    app = create_router_app(config=config)
+    app = create_router_app(config=config, data_config=build_data_config(parsed))
 
     uvicorn.run(
         app,

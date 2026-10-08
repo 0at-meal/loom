@@ -326,6 +326,38 @@ class AcquirerState:
         generator = rng if rng is not None else np.random.default_rng()
         return float(generator.beta(self._approval_alpha, self._approval_beta))
 
+    def export_beliefs(self) -> dict[str, float]:
+        """Return the raw belief state, including decay reference times, for persistence."""
+        return {
+            "alpha": self._alpha,
+            "beta": self._beta,
+            "health_score": self._health_score,
+            "success_count": float(self._success_count),
+            "failure_count": float(self._failure_count),
+            "last_updated_at": self._last_updated_at,
+            "decayed_at": self._decayed_at,
+            "approval_alpha": self._approval_alpha,
+            "approval_beta": self._approval_beta,
+            "approval_decayed_at": self._approval_decayed_at,
+        }
+
+    def restore_beliefs(self, data: dict[str, float]) -> None:
+        """Load beliefs saved by :meth:`export_beliefs`.
+
+        Decay reference times are kept, so the next read or update applies decay for the
+        whole time since the snapshot, including any downtime.
+        """
+        self._alpha = float(data["alpha"])
+        self._beta = float(data["beta"])
+        self._health_score = float(data["health_score"])
+        self._success_count = int(data["success_count"])
+        self._failure_count = int(data["failure_count"])
+        self._last_updated_at = float(data["last_updated_at"])
+        self._decayed_at = float(data["decayed_at"])
+        self._approval_alpha = float(data["approval_alpha"])
+        self._approval_beta = float(data["approval_beta"])
+        self._approval_decayed_at = float(data["approval_decayed_at"])
+
     def get_state(self, now: float | None = None) -> AcquirerStateSnapshot:
         """Return a snapshot, decayed to ``now`` when given, else as of the last event."""
         if now is not None:
