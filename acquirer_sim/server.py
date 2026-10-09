@@ -46,11 +46,6 @@ def parse_args(args: list[str] | None = None) -> argparse.Namespace:
         choices=["debug", "info", "warning", "error", "critical"],
         help="Server logging level (default: info)",
     )
-    parser.add_argument(
-        "--reload",
-        action="store_true",
-        help="Enable auto-reload for development",
-    )
     return parser.parse_args(args)
 
 

@@ -1,10 +1,10 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 
 /**
  * useSimulatorControls
  *
  * Manages operator interaction with the simulated acquirer endpoints via the backend proxy:
- * - Per-acquirer outage toggles (with optimistic state updates and in-flight locking)
+ * - Per-acquirer outage toggles (applied locally only after the simulator confirms, with in-flight locking)
  * - Per-acquirer failure behaviors (RETURN_DECLINE, HTTP_503, LATENCY_SPIKE)
  * - Per-acquirer gray-failure base success rates (sliders)
  * - Global benchmark scenario gauntlet presets (Standard Cliff, Sensitive Blip M=1, Gray Failure, Reset)
@@ -17,6 +17,13 @@ export function useSimulatorControls({ activeOutages = {}, setOutageActiveState 
   });
 
   const [rates, setRates] = useState({
+    acquirer_alpha: 0.95,
+    acquirer_beta: 0.90,
+    acquirer_gamma: 0.85,
+  });
+
+  // Last rates the simulator confirmed; a failed commit puts the slider back here.
+  const committedRates = useRef({
     acquirer_alpha: 0.95,
     acquirer_beta: 0.90,
     acquirer_gamma: 0.85,
@@ -45,11 +52,6 @@ export function useSimulatorControls({ activeOutages = {}, setOutageActiveState 
       });
 
       try {
-        // Optimistic local update
-        if (setOutageActiveState) {
-          setOutageActiveState(acquirerId, nextActive);
-        }
-
         const response = await fetch(`/api/simulator/acquirers/${acquirerId}/outage`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -65,9 +67,12 @@ export function useSimulatorControls({ activeOutages = {}, setOutageActiveState 
           console.warn(`Simulator outage proxy response: ${response.status} - ${errorText}`);
           setLastActionStatus({
             type: 'warning',
-            text: `Simulator returned ${response.status} (local telemetry state updated).`,
+            text: `Outage ${nextActive ? 'not armed' : 'not cleared'} on ${acquirerId}: proxy returned ${response.status}.`,
           });
         } else {
+          if (setOutageActiveState) {
+            setOutageActiveState(acquirerId, nextActive);
+          }
           setLastActionStatus({
             type: 'success',
             text: `${acquirerId} outage ${nextActive ? 'armed' : 'cleared'} successfully.`,
@@ -77,7 +82,7 @@ export function useSimulatorControls({ activeOutages = {}, setOutageActiveState 
         console.warn('Network error reaching simulator proxy:', err);
         setLastActionStatus({
           type: 'warning',
-          text: `Backend proxy unreachable; applied to local telemetry stream.`,
+          text: `Router unreachable; outage ${nextActive ? 'not armed' : 'not cleared'} on ${acquirerId}.`,
         });
       } finally {
         setSubmitting((prev) => ({ ...prev, [acquirerId]: false }));
@@ -101,13 +106,27 @@ export function useSimulatorControls({ activeOutages = {}, setOutageActiveState 
         });
 
         if (response.ok) {
+          committedRates.current[acquirerId] = newRate;
           setLastActionStatus({
             type: 'success',
             text: `${acquirerId} base rate set to ${(newRate * 100).toFixed(0)}%.`,
           });
+        } else {
+          const errorText = await response.text();
+          console.warn(`Simulator success-rate proxy response: ${response.status} - ${errorText}`);
+          setRates((prev) => ({ ...prev, [acquirerId]: committedRates.current[acquirerId] }));
+          setLastActionStatus({
+            type: 'warning',
+            text: `${acquirerId} base rate not changed: proxy returned ${response.status}.`,
+          });
         }
       } catch (err) {
         console.warn('Network error setting success rate:', err);
+        setRates((prev) => ({ ...prev, [acquirerId]: committedRates.current[acquirerId] }));
+        setLastActionStatus({
+          type: 'warning',
+          text: `Router unreachable; ${acquirerId} base rate not changed.`,
+        });
       } finally {
         setSubmitting((prev) => ({ ...prev, [`rate_${acquirerId}`]: false }));
       }
@@ -157,11 +176,6 @@ export function useSimulatorControls({ activeOutages = {}, setOutageActiveState 
   // Preset 4: Global Reset
   const handlePresetGlobalReset = useCallback(async () => {
     setLastActionStatus({ type: 'info', text: 'Executing global simulator reset...' });
-    setRates({
-      acquirer_alpha: 0.95,
-      acquirer_beta: 0.90,
-      acquirer_gamma: 0.85,
-    });
 
     for (const acq of acquirers) {
       if (activeOutages[acq.id]) {
@@ -170,11 +184,24 @@ export function useSimulatorControls({ activeOutages = {}, setOutageActiveState 
     }
 
     try {
-      await fetch('/api/simulator/admin/reset', { method: 'POST' });
+      const response = await fetch('/api/simulator/admin/reset', { method: 'POST' });
+      if (!response.ok) {
+        console.warn(`Simulator reset proxy response: ${response.status} - ${await response.text()}`);
+        setLastActionStatus({
+          type: 'warning',
+          text: `Simulator reset failed: proxy returned ${response.status}.`,
+        });
+        return;
+      }
     } catch (err) {
       console.warn('Failed to call reset endpoint:', err);
+      setLastActionStatus({ type: 'warning', text: 'Router unreachable; simulator not reset.' });
+      return;
     }
 
+    const defaults = { acquirer_alpha: 0.95, acquirer_beta: 0.90, acquirer_gamma: 0.85 };
+    committedRates.current = { ...defaults };
+    setRates(defaults);
     setLastActionStatus({ type: 'success', text: 'All simulator routes and telemetry states reset.' });
   }, [acquirers, activeOutages, handleToggleOutage]);
 

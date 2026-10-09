@@ -158,9 +158,8 @@ python -m venv .venv
 # Or activate on macOS / Linux:
 source .venv/bin/activate
 
-# 2. Install Loom with the [dev] extras.
-#    httpx is only declared in [dev], but router_core and the scripts import it at runtime;
-#    a plain `pip install -e .` fails with ModuleNotFoundError: httpx.
+# 2. Install Loom. `pip install -e .` is enough to run the router and simulator;
+#    the [dev] extras add the linters, test tools and fakeredis.
 pip install -e ".[dev]"
 
 # 3. Install React dashboard dependencies
@@ -295,6 +294,8 @@ Test traffic diversion by injecting outages into Acquirer Alpha:
 #### Option 1: Via the Web Cockpit UI
 In the Mission-Control dashboard (`http://localhost:5173`), find the **Acquirer Alpha** card and click the plain-text **`[trigger outage]`** button. Alpha's allocation weight eases down toward the 3% floor and traffic shifts to the other acquirers. Click **`[clear outage]`** to restore Alpha; its weight usually stays near the floor for a long time afterwards, because only probe traffic updates its belief.
 
+The dashboard's controls go through the router's `/api/simulator/...` admin proxies. An upstream 4xx (for example an unknown acquirer) is passed through; if the simulator is unreachable, returns a 5xx or returns a body that is not JSON, the proxy answers **HTTP 502** with the reason in `detail`. The outage alert is broadcast only after the simulator confirms the change. On any non-2xx the dashboard leaves the acquirer's state and slider unchanged and shows the error in the status bar.
+
 #### Option 2: Via the Operational CLI
 ```bash
 # Trigger an immediate outage on Acquirer Alpha (returns ACQUIRER_OUTAGE declines)
@@ -309,6 +310,8 @@ python scripts/simulate_outage.py --acquirer-id acquirer_alpha --action pulse --
 # Test transport-level resilience (HTTP 503 gateway crash instead of business decline)
 python scripts/simulate_outage.py --acquirer-id acquirer_alpha --action trigger --behavior HTTP_503
 ```
+
+`--action` accepts only `trigger`, `clear` or `pulse`. The script exits with status 1 if the simulator is unreachable or answers with an error, and a `pulse` whose trigger fails does not wait or send the clear. Neither server has a `--reload` flag (it was parsed but never used); for auto-reload during development run uvicorn directly, e.g. `uvicorn router_core.app:app --reload`, which serves the default three-acquirer topology.
 
 ---
 
