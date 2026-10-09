@@ -294,6 +294,8 @@ Test traffic diversion by injecting outages into Acquirer Alpha:
 #### Option 1: Via the Web Cockpit UI
 In the Mission-Control dashboard (`http://localhost:5173`), find the **Acquirer Alpha** card and click the plain-text **`[trigger outage]`** button. Alpha's allocation weight eases down toward the 3% floor and traffic shifts to the other acquirers. Click **`[clear outage]`** to restore Alpha; its weight usually stays near the floor for a long time afterwards, because only probe traffic updates its belief.
 
+The dashboard's controls go through the router's `/api/simulator/...` admin proxies. An upstream 4xx (for example an unknown acquirer) is passed through; if the simulator is unreachable, returns a 5xx or returns a body that is not JSON, the proxy answers **HTTP 502** with the reason in `detail`. The outage alert is broadcast only after the simulator confirms the change. On any non-2xx the dashboard leaves the acquirer's state and slider unchanged and shows the error in the status bar.
+
 #### Option 2: Via the Operational CLI
 ```bash
 # Trigger an immediate outage on Acquirer Alpha (returns ACQUIRER_OUTAGE declines)

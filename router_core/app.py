@@ -38,6 +38,7 @@ def create_router_app(
     router: BanditRouter | None = None,
     data_config: DataLayerConfig | None = None,
     idempotency_store: IdempotencyStore | None = None,
+    simulator_client: httpx.AsyncClient | None = None,
 ) -> FastAPI:
     """Create and configure a FastAPI application instance hosting the BanditRouter.
 
@@ -46,6 +47,9 @@ def create_router_app(
     ledger, and the app refuses to start if the ledger cannot be opened. With
     ``redis_enabled`` events and belief snapshots go to Redis; Redis being down never
     blocks startup or payments.
+
+    ``simulator_client`` (default: a fresh client per call) carries the ``/api/simulator``
+    admin proxy calls; tests pass one bound to an in-process simulator.
     """
     data_cfg = data_config if data_config is not None else DataLayerConfig()
     idempotency = idempotency_store if idempotency_store is not None else IdempotencyStore()
@@ -355,6 +359,50 @@ def create_router_app(
     # Simulator Proxy Endpoints (Phase 7 Ticket C)
     # -------------------------------------------------------------------------
 
+    async def call_simulator(
+        method: str, url: str, payload: Any = None, timeout: float = 5.0
+    ) -> Any:
+        """Forward an admin call to the simulator and return its JSON body (AUDIT F-18).
+
+        An upstream 4xx (e.g. unknown acquirer) is passed through. An unreachable simulator,
+        an upstream 5xx or an unreadable body is a 502: the router itself is up, but the
+        simulator behind it did not give a usable answer. Nothing is fabricated.
+        """
+        try:
+            if simulator_client is not None:
+                resp = await simulator_client.request(method, url, json=payload, timeout=timeout)
+            else:
+                async with httpx.AsyncClient(timeout=timeout) as client:
+                    resp = await client.request(method, url, json=payload)
+        except (httpx.HTTPError, OSError) as exc:
+            logger.warning("Simulator unreachable at %s: %s", url, exc)
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Simulator unreachable at {url}: {exc}",
+            ) from exc
+        if 400 <= resp.status_code < 500:
+            raise HTTPException(status_code=resp.status_code, detail=resp.text)
+        if not resp.is_success:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Simulator returned HTTP {resp.status_code}: {resp.text}",
+            )
+        try:
+            return resp.json()
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Simulator returned a non-JSON body from {url}",
+            ) from exc
+
+    def simulator_base(acquirer_id: str | None = None) -> str:
+        """Base URL of the simulator serving ``acquirer_id`` (default: the first route's)."""
+        routes = active_router.config.routes
+        route = next((r for r in routes if r.acquirer_id == acquirer_id), None)
+        if route is None and acquirer_id is None and routes:
+            route = routes[0]
+        return (route.base_url if route else "http://127.0.0.1:8001").rstrip("/")
+
     @app.post(
         "/api/simulator/acquirers/{acquirer_id}/outage",
         tags=["Simulator Proxy"],
@@ -363,31 +411,10 @@ def create_router_app(
         acquirer_id: str,
         payload: OutageToggleRequest,
     ) -> Any:
-        """Proxy outage toggle request to target acquirer simulator."""
-        route = next((r for r in active_router.config.routes if r.acquirer_id == acquirer_id), None)
-        target_base = route.base_url if route else "http://127.0.0.1:8001"
-        url = f"{target_base.rstrip('/')}/acquirers/{acquirer_id}/admin/outage"
+        """Proxy an outage toggle to the simulator; alert dashboards only once it is applied."""
+        url = f"{simulator_base(acquirer_id)}/acquirers/{acquirer_id}/admin/outage"
+        data = await call_simulator("POST", url, payload.model_dump(mode="json"))
 
-        try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                resp = await client.post(url, json=payload.model_dump())
-                if resp.status_code != 200:
-                    raise HTTPException(status_code=resp.status_code, detail=resp.text)
-                data = resp.json()
-        except (httpx.HTTPError, OSError) as exc:
-            logger.warning("Simulator offline or unreachable at %s: %s", url, exc)
-            data = {
-                "acquirer_id": acquirer_id,
-                "outage_active": payload.active,
-                "outage_behavior": (
-                    payload.behavior.value
-                    if hasattr(payload.behavior, "value")
-                    else str(payload.behavior)
-                ),
-                "simulated_offline": True,
-            }
-
-        # Emit health alert to WebSockets immediately
         alert_payload = {
             "event_type": "HEALTH_ALERT",
             "timestamp": time.time(),
@@ -411,59 +438,18 @@ def create_router_app(
         payload: SuccessRateUpdateRequest,
     ) -> Any:
         """Proxy success rate update to target acquirer simulator."""
-        route = next((r for r in active_router.config.routes if r.acquirer_id == acquirer_id), None)
-        target_base = route.base_url if route else "http://127.0.0.1:8001"
-        url = f"{target_base.rstrip('/')}/acquirers/{acquirer_id}/admin/success-rate"
-
-        try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                resp = await client.post(url, json=payload.model_dump())
-                if resp.status_code != 200:
-                    raise HTTPException(status_code=resp.status_code, detail=resp.text)
-                return resp.json()
-        except (httpx.HTTPError, OSError) as exc:
-            logger.warning("Simulator offline or unreachable at %s: %s", url, exc)
-            return {
-                "acquirer_id": acquirer_id,
-                "effective_success_rate": payload.success_rate,
-                "simulated_offline": True,
-            }
+        url = f"{simulator_base(acquirer_id)}/acquirers/{acquirer_id}/admin/success-rate"
+        return await call_simulator("POST", url, payload.model_dump(mode="json"))
 
     @app.get("/api/simulator/admin/states", tags=["Simulator Proxy"])
     async def proxy_get_states() -> Any:
         """Proxy telemetry retrieval across all acquirers."""
-        target_base = (
-            active_router.config.routes[0].base_url
-            if active_router.config.routes
-            else "http://127.0.0.1:8001"
-        )
-        url = f"{target_base.rstrip('/')}/admin/states"
-        try:
-            async with httpx.AsyncClient(timeout=2.0) as client:
-                resp = await client.get(url)
-                if resp.status_code == 200:
-                    return resp.json()
-        except (httpx.HTTPError, OSError):
-            pass
-        return {"acquirers": {}, "total_acquirers": 0}
+        return await call_simulator("GET", f"{simulator_base()}/admin/states", timeout=2.0)
 
     @app.post("/api/simulator/admin/reset", tags=["Simulator Proxy"])
     async def proxy_reset_all() -> Any:
         """Proxy reset telemetry across all acquirers."""
-        target_base = (
-            active_router.config.routes[0].base_url
-            if active_router.config.routes
-            else "http://127.0.0.1:8001"
-        )
-        url = f"{target_base.rstrip('/')}/admin/reset"
-        try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                resp = await client.post(url)
-                if resp.status_code == 200:
-                    return resp.json()
-        except (httpx.HTTPError, OSError) as exc:
-            logger.warning("Failed to reset acquirers: %s", exc)
-        return {"message": "Reset called"}
+        return await call_simulator("POST", f"{simulator_base()}/admin/reset")
 
     return app
 
