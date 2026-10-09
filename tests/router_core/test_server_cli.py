@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from starlette.testclient import TestClient
 
 from router_core.app import app, create_router_app
 from router_core.server import build_router_config, parse_args
@@ -90,3 +91,20 @@ class TestServerCLIAndAppPIDWiring:
         """--reload was parsed but never passed to uvicorn, so it is gone (AUDIT F-33)."""
         with pytest.raises(SystemExit):
             parse_args(["--reload"])
+
+
+def test_value_error_is_422_without_deprecation_warning(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The ValueError handler must not touch starlette's deprecated 422 constant.
+
+    pytest turns warnings into errors, so the deprecated name fails this request.
+    """
+    app_instance = create_router_app()
+
+    async def raise_value_error(_request: object) -> None:
+        raise ValueError("bad routing input")
+
+    monkeypatch.setattr(app_instance.state.router, "route", raise_value_error)
+    with TestClient(app_instance) as client:
+        resp = client.post("/route", json={"transaction_id": "tx_value_error", "amount": 1.0})
+    assert resp.status_code == 422
+    assert resp.json() == {"detail": "bad routing input"}

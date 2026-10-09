@@ -207,7 +207,7 @@ def create_router_app(
     async def value_error_handler(_request: Request, exc: ValueError) -> JSONResponse:
         """Handle validation and routing errors with HTTP 422."""
         return JSONResponse(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=422,  # Unprocessable Content; the starlette constant is deprecated
             content={"detail": str(exc)},
         )
 
