@@ -158,9 +158,8 @@ python -m venv .venv
 # Or activate on macOS / Linux:
 source .venv/bin/activate
 
-# 2. Install Loom with the [dev] extras.
-#    httpx is only declared in [dev], but router_core and the scripts import it at runtime;
-#    a plain `pip install -e .` fails with ModuleNotFoundError: httpx.
+# 2. Install Loom. `pip install -e .` is enough to run the router and simulator;
+#    the [dev] extras add the linters, test tools and fakeredis.
 pip install -e ".[dev]"
 
 # 3. Install React dashboard dependencies
