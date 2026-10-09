@@ -85,3 +85,8 @@ class TestServerCLIAndAppPIDWiring:
         assert router.config.pid_config.ki == 0.005
         assert router.config.pid_config.kd == 0.25
         assert router.config.pid_config.min_allocation == 0.03
+
+    def test_reload_flag_is_rejected(self) -> None:
+        """--reload was parsed but never passed to uvicorn, so it is gone (AUDIT F-33)."""
+        with pytest.raises(SystemExit):
+            parse_args(["--reload"])

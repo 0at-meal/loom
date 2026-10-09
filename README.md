@@ -311,6 +311,8 @@ python scripts/simulate_outage.py --acquirer-id acquirer_alpha --action pulse --
 python scripts/simulate_outage.py --acquirer-id acquirer_alpha --action trigger --behavior HTTP_503
 ```
 
+`--action` accepts only `trigger`, `clear` or `pulse`. The script exits with status 1 if the simulator is unreachable or answers with an error, and a `pulse` whose trigger fails does not wait or send the clear. Neither server has a `--reload` flag (it was parsed but never used); for auto-reload during development run uvicorn directly, e.g. `uvicorn router_core.app:app --reload`, which serves the default three-acquirer topology.
+
 ---
 
 ### 7. Running the Benchmark Comparison

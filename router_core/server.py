@@ -100,11 +100,6 @@ def parse_args(args: list[str] | None = None) -> argparse.Namespace:
         help="Minimum exploration allocation floor per acquirer (default: 0.03)",
     )
     parser.add_argument(
-        "--reload",
-        action="store_true",
-        help="Enable auto-reload for development",
-    )
-    parser.add_argument(
         "--max-in-flight",
         type=int,
         default=None,
