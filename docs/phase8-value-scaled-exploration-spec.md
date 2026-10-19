@@ -328,6 +328,8 @@ class RoutingResult(BaseModel):
 
 ## 7. Architectural Trade-Off Analysis
 
+> **Superseded in part (AUDIT F-10, Phase 4b).** Section 5 assumed the adjusted samples decide the route. With the PID on, they only set the PID's target, and the deficit or categorical draw picks the acquirer, so the blending did not protect high-value payments. The router now also applies a threshold at dispatch. A payment with $\lambda(V) \ge$ `protect_lambda` (default 0.95) goes to $\arg\max_i \hat{\mu}_i$ (technical mean × approval mean) and skips the PID step and the allocation draw. This reintroduces the knife-edge the table below rejected; it is accepted because without it the policy had no effect under the default configuration. Below the threshold the affine blending is unchanged. See `docs/decisions-log.md` and the README's Phase 8 section for the reasoning and the measured costs.
+
 | Decision | Alternative Considered | Selected Rationale | Trade-Off Incurred |
 | :--- | :--- | :--- | :--- |
 | **Affine Shrinkage toward Mean ($\tilde{\theta} = (1-\lambda)\theta + \lambda\hat{\mu}$)** | Hard rule threshold (e.g. `if amount > 500: route_to_leader()`) | Continuous exponential decay avoids knife-edge cliff instability at boundary amounts. | Small residual exploration variance still exists at moderate values (\$100–\$200). |
