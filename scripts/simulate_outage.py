@@ -32,6 +32,7 @@ def parse_args(args: list[str] | None = None) -> argparse.Namespace:
         "--action",
         type=str,
         default="trigger",
+        choices=["trigger", "clear", "pulse"],
         help=(
             "Action: trigger (engage outage), clear (restore normal), "
             "or pulse (outage for duration, then restore)"
@@ -53,41 +54,49 @@ def parse_args(args: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(args)
 
 
-def set_outage(base_url: str, acquirer_id: str, active: bool, behavior: str) -> None:
-    """Send admin POST request to toggle outage state on target acquirer."""
+def set_outage(base_url: str, acquirer_id: str, active: bool, behavior: str) -> bool:
+    """Send admin POST request to toggle outage state; return whether the simulator applied it."""
     url = f"{base_url.rstrip('/')}/acquirers/{acquirer_id}/admin/outage"
     payload = OutageToggleRequest(
         active=active,
         behavior=OutageBehavior(behavior),
     )
-    with httpx.Client(timeout=5.0) as client:
-        resp = client.post(url, json=payload.model_dump())
-        if resp.status_code == 200:
-            data = resp.json()
-            status_str = "ACTIVE" if active else "CLEARED"
-            rate = data["effective_success_rate"]
-            print(f"[{acquirer_id}] Outage {status_str}: effective_rate={rate:.2f}")
-        else:
-            print(f"Error updating outage: HTTP {resp.status_code} - {resp.text}", file=sys.stderr)
+    try:
+        with httpx.Client(timeout=5.0) as client:
+            resp = client.post(url, json=payload.model_dump(mode="json"))
+    except httpx.HTTPError as exc:
+        print(f"Error reaching simulator at {url}: {exc}", file=sys.stderr)
+        return False
+    if resp.status_code != 200:
+        print(f"Error updating outage: HTTP {resp.status_code} - {resp.text}", file=sys.stderr)
+        return False
+    data = resp.json()
+    status_str = "ACTIVE" if active else "CLEARED"
+    rate = data["effective_success_rate"]
+    print(f"[{acquirer_id}] Outage {status_str}: effective_rate={rate:.2f}")
+    return True
 
 
-def main() -> None:
-    """Execute outage simulation command."""
-    parsed = parse_args(sys.argv[1:])
+def main(argv: list[str] | None = None) -> int:
+    """Execute outage simulation command; return 0 on success, 1 if any request failed."""
+    parsed = parse_args(sys.argv[1:] if argv is None else argv)
+    url, acquirer, behavior = parsed.acquirer_url, parsed.acquirer_id, parsed.behavior
 
     if parsed.action == "trigger":
-        print(f"Triggering outage on {parsed.acquirer_id} (behavior: {parsed.behavior})...")
-        set_outage(parsed.acquirer_url, parsed.acquirer_id, active=True, behavior=parsed.behavior)
+        print(f"Triggering outage on {acquirer} (behavior: {behavior})...")
+        ok = set_outage(url, acquirer, active=True, behavior=behavior)
     elif parsed.action == "clear":
-        print(f"Clearing outage on {parsed.acquirer_id}...")
-        set_outage(parsed.acquirer_url, parsed.acquirer_id, active=False, behavior=parsed.behavior)
-    elif parsed.action == "pulse":
-        print(f"Engaging outage on {parsed.acquirer_id} for {parsed.duration:.1f}s...")
-        set_outage(parsed.acquirer_url, parsed.acquirer_id, active=True, behavior=parsed.behavior)
-        time.sleep(parsed.duration)
-        print(f"Pulse complete. Restoring normal operation on {parsed.acquirer_id}...")
-        set_outage(parsed.acquirer_url, parsed.acquirer_id, active=False, behavior=parsed.behavior)
+        print(f"Clearing outage on {acquirer}...")
+        ok = set_outage(url, acquirer, active=False, behavior=behavior)
+    else:  # pulse
+        print(f"Engaging outage on {acquirer} for {parsed.duration:.1f}s...")
+        ok = set_outage(url, acquirer, active=True, behavior=behavior)
+        if ok:
+            time.sleep(parsed.duration)
+            print(f"Pulse complete. Restoring normal operation on {acquirer}...")
+            ok = set_outage(url, acquirer, active=False, behavior=behavior)
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

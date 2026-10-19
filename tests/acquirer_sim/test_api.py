@@ -306,7 +306,6 @@ class TestCliServerParsing:
         assert "acquirer_alpha" in args.acquirers
         assert args.base_rate == 0.95
         assert args.log_level == "info"
-        assert args.reload is False
 
     def test_parse_args_custom(self) -> None:
         """Verify custom CLI arguments."""
@@ -325,7 +324,6 @@ class TestCliServerParsing:
                 "0.80",
                 "--log-level",
                 "debug",
-                "--reload",
             ]
         )
         assert args.host == "0.0.0.0"
@@ -333,4 +331,10 @@ class TestCliServerParsing:
         assert args.acquirers == ["stripe", "adyen"]
         assert args.base_rate == 0.80
         assert args.log_level == "debug"
-        assert args.reload is True
+
+    def test_reload_flag_is_rejected(self) -> None:
+        """--reload was parsed but never passed to uvicorn, so it is gone (AUDIT F-33)."""
+        from acquirer_sim.server import parse_args
+
+        with pytest.raises(SystemExit):
+            parse_args(["--reload"])
