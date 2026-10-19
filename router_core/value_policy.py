@@ -24,6 +24,17 @@ class ValueScaledExplorationConfig(BaseModel):
             "Defines the scale where exploration width is compressed by 63.2%."
         ),
     )
+    protect_lambda: float = Field(
+        default=0.95,
+        gt=0.0,
+        le=1.0,
+        description=(
+            "Payments whose shrinkage lambda(V) is at least this value skip the PID and "
+            "the deficit/categorical draw and go to the acquirer with the highest posterior "
+            "mean (AUDIT F-10). The default 0.95 protects amounts >= tau * ln(20), about "
+            "3 tau. 1.0 turns protection off."
+        ),
+    )
 
     @property
     def sensitivity(self) -> float:
@@ -35,6 +46,13 @@ class ValueScaledExplorationConfig(BaseModel):
         if not self.enabled or amount <= 0.0:
             return 0.0
         return 1.0 - math.exp(-amount / self.tau)
+
+    def protects(self, amount: float) -> bool:
+        """Whether a payment of ``amount`` bypasses the allocation draw (AUDIT F-10)."""
+        if not self.enabled or amount <= 0.0 or self.protect_lambda >= 1.0:
+            # lambda(V) rounds to exactly 1.0 for V > ~37 tau, so 1.0 must be checked here
+            return False
+        return self.calculate_shrinkage(amount) >= self.protect_lambda
 
 
 def apply_value_scaled_policy(
@@ -54,3 +72,8 @@ def apply_value_scaled_policy(
         adjusted[aid] = (1.0 - lam) * sample + lam * mu
 
     return adjusted, lam
+
+
+def best_posterior_mean(posterior_means: dict[str, float]) -> str:
+    """Acquirer with the highest posterior mean; ties go to the larger id, as in sampling."""
+    return max(posterior_means, key=lambda aid: (posterior_means[aid], aid))
