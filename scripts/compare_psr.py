@@ -241,6 +241,16 @@ async def execute_scenario(
             ),
             "max_step_delta": max_delta,
             "alpha_allocation": alloc_alpha,
+            "transactions": [
+                {
+                    "id": k + 1,
+                    "tx_id": r.transaction_id,
+                    "chosen_acquirer": r.selected_acquirer,
+                    "alpha_weight": alloc_alpha[k],
+                    "authorized": r.authorized,
+                }
+                for k, r in enumerate(results)
+            ],
             "outage_flips": outage_flips,
             "total_flips": sum(
                 1 for k in range(1, len(routes_chosen)) if routes_chosen[k] != routes_chosen[k - 1]
@@ -515,6 +525,19 @@ def format_multi_seed_report(summary: dict[str, Any]) -> str:
     return "\n".join(report)
 
 
+def reference_run(base_res: dict[str, Any]) -> dict[str, Any]:
+    """The static baseline's run as the dashboard overlay replays it."""
+    txs = base_res["transactions"]
+    outage_start = next(i for i, t in enumerate(txs) if "_outage_" in t["tx_id"])
+    recovery_start = next(i for i, t in enumerate(txs) if "_recovery_" in t["tx_id"])
+    return {
+        "total_transactions": len(txs),
+        "outage_trigger_index": outage_start,
+        "recovery_trigger_index": recovery_start,
+        "transactions": txs,
+    }
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build the command-line parser."""
     parser = argparse.ArgumentParser(description="Compare Loom vs Static Baseline PSR")
@@ -541,6 +564,14 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"Loom's technical prior Beta(alpha_prior, 1) (default {DEFAULT_ALPHA_PRIOR:g})",
     )
     parser.add_argument("--out-json", default=None, help="Write results to this JSON file")
+    parser.add_argument(
+        "--out-reference-json",
+        default=None,
+        help=(
+            "Single-seed mode: write the static baseline's per-transaction run in the "
+            "dashboard's reference format (dashboard/src/data/baselineReferenceRun.json)"
+        ),
+    )
     return parser
 
 
@@ -586,6 +617,11 @@ async def main(argv: list[str] | None = None) -> None:
         )
 
         print("\n" + format_report(base_res, loom_res, args.threshold_m, args.cooldown_n))
+        if args.out_reference_json:
+            Path(args.out_reference_json).write_text(
+                json.dumps(reference_run(base_res), indent=2) + "\n", encoding="utf-8"
+            )
+            print(f"Wrote {args.out_reference_json}")
         summary = {
             "mode": "single_seed",
             "seed": args.seed,

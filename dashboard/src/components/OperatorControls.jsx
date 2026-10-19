@@ -85,7 +85,7 @@ export function OperatorControls({
               <span className="text-[9px] font-mono text-[#8B8F98]">M=3 gauntlet</span>
             </div>
             <p className="text-[10.5px] text-[#8B8F98] leading-relaxed">
-              Triggers hard step outage on Acquirer Alpha. Demonstrates Loom's smooth PID 11.8% max step vs static router 100% stampede.
+              Triggers a hard step outage on Acquirer Alpha. Watch the PID ramp the live weights while the static baseline line replays its recorded cliff.
             </p>
           </div>
           <button
@@ -107,7 +107,7 @@ export function OperatorControls({
               <span className="text-[9px] font-mono text-[#8B8F98]">M=1 overreaction</span>
             </div>
             <p className="text-[10.5px] text-[#8B8F98] leading-relaxed">
-              Fires a 3.5s transient dip on Alpha. Demonstrates why M=1 static baseline collapsed by 1000 bps while Loom absorbed the blip cleanly.
+              Fires a 3.5 s transient outage on Alpha. A breaker that trips on one failure (M=1) overreacts to short dips; see Diagnostics for the measured comparison.
             </p>
           </div>
           <button
@@ -129,7 +129,7 @@ export function OperatorControls({
               <span className="text-[9px] font-mono text-[#8B8F98]">p=0.60 brownout</span>
             </div>
             <p className="text-[10.5px] text-[#8B8F98] leading-relaxed">
-              Degrades Alpha success rate to 60%. Demonstrates Loom continuous traffic shedding vs static counter-reset bleed.
+              Degrades Alpha success rate to 60%. A consecutive-failure breaker rarely trips on this; see Diagnostics for the measured comparison.
             </p>
           </div>
           <button

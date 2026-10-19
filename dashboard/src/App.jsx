@@ -27,6 +27,7 @@ export function App() {
     activeOutages,
     acquirerStates,
     metrics,
+    stream,
     setOutageActiveState,
     reconnect,
   } = useLoomTelemetry();
@@ -56,6 +57,7 @@ export function App() {
         <section aria-label="Headline telemetry and acquirer status">
           <MetricReadouts
             metrics={metrics}
+            stream={stream}
             acquirerStates={acquirerStates}
             activeOutages={activeOutages}
             submitting={simulatorControls.submitting}
@@ -101,6 +103,7 @@ export function App() {
             connectionStatus={connectionStatus}
             isStale={isStale}
             peakStepDelta={metrics.peakStepDelta}
+            stream={stream}
           />
         </section>
       </main>
@@ -112,7 +115,7 @@ export function App() {
           <span>Learns which gateway is healthiest from the last few seconds of outcomes</span>
         </div>
         <div className="flex flex-col gap-1 sm:text-right">
-          <span>This demo server keeps decisions in memory only</span>
+          <span>Logs every decision to a SQLite ledger (on by default)</span>
           <span>Updates its beliefs after every transaction</span>
         </div>
       </footer>

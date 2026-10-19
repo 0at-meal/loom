@@ -14,36 +14,33 @@ import React from 'react';
  */
 export function MetricReadouts({
   metrics = {},
+  stream = null,
   acquirerStates = {},
   activeOutages = {},
   submitting = {},
   onToggleOutage,
 }) {
-  const {
-    rollingPSR = 100.0,
-    totalCount = 0,
-  } = metrics;
+  const { rollingPSR = null, totalCount = 0 } = metrics;
+  const hasPSR = typeof rollingPSR === 'number';
+  const droppedFrames = stream?.droppedFrames ?? 0;
 
   // Derive PSR color: Accent when healthy (>= 80%), Alert when in danger (< 80%)
-  const psrColor = rollingPSR < 80.0 ? '#E5484D' : '#5B8DEF';
+  const psrColor = hasPSR && rollingPSR < 80.0 ? '#E5484D' : '#5B8DEF';
 
   const acquirers = [
     {
       id: 'acquirer_alpha',
       name: 'Alpha',
-      defaultRate: 0.95,
       nominalColor: '#5B8DEF',
     },
     {
       id: 'acquirer_beta',
       name: 'Beta',
-      defaultRate: 0.90,
       nominalColor: '#C084FC',
     },
     {
       id: 'acquirer_gamma',
       name: 'Gamma',
-      defaultRate: 0.85,
       nominalColor: '#7C808A',
     },
   ];
@@ -55,13 +52,16 @@ export function MetricReadouts({
         {/* Left Headline: Rolling PSR */}
         <div className="flex flex-col gap-1">
           <span className="text-xs text-[#8B8F98]">
-            Rolling PSR (50 txs)
+            Rolling PSR (last 50 received)
+            {droppedFrames > 0 && (
+              <span className="text-[#E5484D]"> · {droppedFrames} frames dropped, not counted</span>
+            )}
           </span>
           <span
             className="font-mono text-6xl sm:text-7xl font-bold tracking-tight"
-            style={{ color: totalCount > 0 ? psrColor : '#8B8F98' }}
+            style={{ color: hasPSR ? psrColor : '#8B8F98' }}
           >
-            {totalCount > 0 ? `${rollingPSR.toFixed(1)}%` : '--.-%'}
+            {hasPSR ? `${rollingPSR.toFixed(1)}%` : '--.-%'}
           </span>
         </div>
 
@@ -84,7 +84,7 @@ export function MetricReadouts({
             !!activeOutages[acq.id] ||
             (state.health_score !== undefined && state.health_score < 0.70);
           const isPending = !!submitting[acq.id];
-          const healthScore = state.health_score !== undefined ? state.health_score : 1.0;
+          const healthScore = typeof state.health_score === 'number' ? state.health_score : null;
 
           // Deterministic color mapping & inviolable alert override
           const statusColor = isOutage ? '#E5484D' : acq.nominalColor;
@@ -112,7 +112,7 @@ export function MetricReadouts({
                 className="font-mono text-sm w-16"
                 style={{ color: statusColor }}
               >
-                {healthScore.toFixed(3)}
+                {healthScore === null ? 'no data' : healthScore.toFixed(3)}
               </span>
 
               {/* Plain Text-Style Outage Button */}
