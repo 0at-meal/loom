@@ -2,6 +2,8 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { AllocationChart, baselineOverlay } from '../components/AllocationChart';
 import { MetricReadouts } from '../components/MetricReadouts';
+import { AcquirerTable } from '../components/AcquirerTable';
+import { EventTape } from '../components/EventTape';
 import reference from '../data/baselineReferenceRun.json';
 import { applyFrame, initialTelemetryState } from '../hooks/telemetryState';
 
@@ -34,7 +36,7 @@ describe('AllocationChart', () => {
   it('shows the empty state before any frame', () => {
     render(<AllocationChart events={[]} />);
     expect(screen.getByText('Awaiting telemetry stream')).toBeTruthy();
-    expect(screen.getAllByText('no data').length).toBe(4); // three weights + peak delta
+    expect(screen.getAllByText('no data').length).toBe(3); // three weights
   });
 
   it('marks dropped frames and restarts', () => {
@@ -98,23 +100,87 @@ describe('baselineOverlay', () => {
 });
 
 describe('MetricReadouts', () => {
-  it('shows no data for acquirers and PSR before telemetry arrives', () => {
-    render(<MetricReadouts metrics={initialTelemetryState.metrics} acquirerStates={{}} />);
-    expect(screen.getAllByText('no data')).toHaveLength(3);
+  it('shows placeholders, not numbers, before telemetry arrives', () => {
+    render(<MetricReadouts metrics={initialTelemetryState.metrics} />);
     expect(screen.getByText('--.-%')).toBeTruthy();
-    expect(screen.queryByText('1.000')).toBeNull();
+    // lifetime PSR, declined share, peak step
+    expect(screen.getAllByText('no data')).toHaveLength(3);
+    expect(screen.getAllByText('--')).toHaveLength(3); // routed, declined, errors
+    expect(screen.queryByText('0')).toBeNull();
   });
 
-  it('shows live health and flags dropped frames next to PSR', () => {
+  it('shows live figures and flags dropped frames next to PSR', () => {
     render(
       <MetricReadouts
-        metrics={{ rollingPSR: 92.5, totalCount: 40 }}
+        metrics={{ rollingPSR: 92.5, lifetimePSR: 90, totalCount: 40, declinedCount: 4, errorCount: 0, peakStepDelta: 6.2 }}
         stream={{ droppedFrames: 3 }}
-        acquirerStates={{ acquirer_alpha: { health_score: 0.731 } }}
       />,
     );
     expect(screen.getByText('92.5%')).toBeTruthy();
-    expect(screen.getByText('0.731')).toBeTruthy();
+    expect(screen.getByText('90.00%')).toBeTruthy();
+    expect(screen.getByText('10.0% of routed')).toBeTruthy();
+    expect(screen.getByText('6.2%')).toBeTruthy();
     expect(screen.getByText(/3 frames dropped/)).toBeTruthy();
+  });
+});
+
+describe('AcquirerTable', () => {
+  it('shows no data for every cell before telemetry arrives', () => {
+    render(<AcquirerTable acquirerStates={{}} />);
+    // 3 acquirers x 6 data columns
+    expect(screen.getAllByText('no data')).toHaveLength(18);
+    expect(screen.queryByText('1.000')).toBeNull();
+  });
+
+  it('shows live state from frames and only that', () => {
+    const s = stateFrom([
+      frame(1, { acquirer_alpha: 0.82 }, {
+        thompson_samples: { acquirer_alpha: 0.913 },
+        target_allocation: { acquirer_alpha: 0.9 },
+        updated_state: { health_score: 0.731, expected_success_rate: 0.95, alpha: 19, beta: 1 },
+      }),
+    ]);
+    render(<AcquirerTable acquirerStates={s.acquirerStates} />);
+    expect(screen.getByText('0.731')).toBeTruthy();
+    expect(screen.getByText('0.913')).toBeTruthy();
+    expect(screen.getByText('90.0%')).toBeTruthy();
+    expect(screen.getByText('82.0%')).toBeTruthy();
+    expect(screen.getByText('95.0%')).toBeTruthy();
+    // beta and gamma were not in the frame: 2 rows x 6 columns
+    expect(screen.getAllByText('no data')).toHaveLength(12);
+  });
+
+  it('labels the outage control for a degraded acquirer', () => {
+    render(
+      <AcquirerTable
+        acquirerStates={{ acquirer_beta: { health_score: 0.5 } }}
+        activeOutages={{ acquirer_alpha: true }}
+      />,
+    );
+    expect(screen.getAllByText('clear outage')).toHaveLength(2);
+    expect(screen.getAllByText('trigger outage')).toHaveLength(1);
+  });
+});
+
+describe('EventTape', () => {
+  it('says no data before any frame', () => {
+    render(<EventTape events={[]} />);
+    expect(screen.getByText(/no data/)).toBeTruthy();
+  });
+
+  it('lists frames newest first and marks gaps and restarts', () => {
+    const s = stateFrom([
+      frame(1, {}, { total_latency_ms: 12.34 }),
+      frame(4, {}, { authorized: false, status: 'DECLINED', decline_code: 'ACQUIRER_OUTAGE' }),
+      frame(1, {}, { stream_id: 's2' }),
+    ]);
+    render(<EventTape events={s.events} />);
+    const rows = screen.getByTestId('event-tape').querySelectorAll('tbody tr');
+    expect(rows[0].textContent).toMatch(/AUTHORIZED/);
+    expect(rows[1].textContent).toMatch(/router restarted/);
+    expect(rows[2].textContent).toMatch(/DECLINED.*ACQUIRER_OUTAGE/);
+    expect(rows[3].textContent).toMatch(/2 frames dropped/);
+    expect(rows[4].textContent).toMatch(/12\.3/);
+    expect(screen.getAllByTestId('tape-break')).toHaveLength(2);
   });
 });

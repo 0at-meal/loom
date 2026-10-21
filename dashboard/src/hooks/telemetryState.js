@@ -49,6 +49,8 @@ export const initialTelemetryState = {
   stream: initialStream,
 };
 
+const isObject = (v) => v !== null && typeof v === 'object';
+
 const shortName = (acquirerId) => String(acquirerId).replace('acquirer_', '').toUpperCase();
 
 /**
@@ -216,6 +218,15 @@ function applyRouting(state, frame, receivedAt) {
       acquirerStates[aid] = { ...(acquirerStates[aid] || {}), weight: w };
     }
   }
+  // Latest Thompson draw and PID target per acquirer, only as sent in this frame
+  const samples = isObject(frame.thompson_samples) ? frame.thompson_samples : null;
+  const target = isObject(frame.target_allocation) ? frame.target_allocation : null;
+  for (const [aid, v] of Object.entries(samples || {})) {
+    if (typeof v === 'number') acquirerStates[aid] = { ...(acquirerStates[aid] || {}), sample: v };
+  }
+  for (const [aid, v] of Object.entries(target || {})) {
+    if (typeof v === 'number') acquirerStates[aid] = { ...(acquirerStates[aid] || {}), target: v };
+  }
 
   const event = {
     index,
@@ -225,6 +236,7 @@ function applyRouting(state, frame, receivedAt) {
     authorized,
     status: frame.status,
     declineCode: frame.decline_code ?? null,
+    latencyMs: typeof frame.total_latency_ms === 'number' ? frame.total_latency_ms : null,
     weights: smoothed,
     missingBefore: missing,
     restartBefore: restarted,

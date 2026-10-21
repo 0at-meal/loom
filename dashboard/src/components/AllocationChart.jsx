@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import BASELINE_REFERENCE_RUN from '../data/baselineReferenceRun.json';
+import { ACQUIRERS, ACQUIRER_IDS, COLORS, acquirerColor, isDegraded } from '../theme';
 
-const ACQUIRER_IDS = ['acquirer_alpha', 'acquirer_beta', 'acquirer_gamma'];
 // Recorded frames drawn before the outage so the overlay starts from its pre-outage level
 const BASELINE_LEAD_IN = 4;
 
@@ -39,11 +39,15 @@ export function baselineOverlay(events, markers, reference = BASELINE_REFERENCE_
   return points;
 }
 
+const GRID = [0, 0.25, 0.5, 0.75, 1];
+// Draw order: Gamma at the back, Alpha (the usual leader) in front
+const DRAW_ORDER = ['acquirer_gamma', 'acquirer_beta', 'acquirer_alpha'];
+const STROKE = { acquirer_alpha: 2, acquirer_beta: 1.5, acquirer_gamma: 1.25 };
+
 /**
- * Live Traffic Allocation Chart with outage markers.
+ * Live Traffic Allocation Chart with outage markers (the body of the F2 pane).
  *
- * Phase 7 Revision 6 visual contract (colors, alert override, legend), with the AUDIT F-27
- * honesty rules:
+ * AUDIT F-27 honesty rules:
  * - Lines are drawn only from weights the router sent. A frame without a weight for an
  *   acquirer leaves a hole in that line; nothing is filled in.
  * - Dropped frames (skipped sequence numbers) and router restarts break every line and are
@@ -59,28 +63,15 @@ export function AllocationChart({
   acquirerStates = {},
   connectionStatus = 'connected',
   isStale = false,
-  peakStepDelta = null,
   stream = null,
 }) {
   const width = 800;
   const height = 300;
-  const padding = { top: 35, right: 30, bottom: 35, left: 45 };
+  const padding = { top: 30, right: 52, bottom: 26, left: 40 };
   const chartWidth = width - padding.left - padding.right;
   const chartHeight = height - padding.top - padding.bottom;
 
-  // Deterministic acquirer color assignment & inviolable alert override (Phase 7 Revision 3):
-  // Alpha #5B8DEF, Beta #C084FC, Gamma #7C808A; Alert #E5484D when in outage or H < 0.70.
-  const isDegraded = (aid) =>
-    !!activeOutages[aid] ||
-    (typeof acquirerStates[aid]?.health_score === 'number' &&
-      acquirerStates[aid].health_score < 0.7);
-  const isAlphaDegraded = isDegraded('acquirer_alpha');
-  const isBetaDegraded = isDegraded('acquirer_beta');
-  const isGammaDegraded = isDegraded('acquirer_gamma');
-
-  const alphaColor = isAlphaDegraded ? '#E5484D' : '#5B8DEF';
-  const betaColor = isBetaDegraded ? '#E5484D' : '#C084FC';
-  const gammaColor = isGammaDegraded ? '#E5484D' : '#7C808A';
+  const colorOf = (aid) => acquirerColor(aid, activeOutages, acquirerStates);
 
   const { paths, pathStaticBaseline, currentWeights, markerPositions, breaks } = useMemo(() => {
     const empty = {
@@ -152,115 +143,49 @@ export function AllocationChart({
     return { paths, pathStaticBaseline, currentWeights, markerPositions, breaks };
   }, [events, outageMarkers, chartWidth, chartHeight, padding.left, padding.top]);
 
-  const pathAlpha = paths.acquirer_alpha;
-  const pathBeta = paths.acquirer_beta;
-  const pathGamma = paths.acquirer_gamma;
+  const yOf = (w) => padding.top + chartHeight - w * chartHeight;
   const weightText = (aid) =>
     typeof currentWeights[aid] === 'number' ? `${(currentWeights[aid] * 100).toFixed(1)}%` : 'no data';
   const droppedFrames = stream?.droppedFrames ?? 0;
   const restarts = stream?.restarts ?? 0;
 
   return (
-    <div className="mission-panel p-4 flex flex-col gap-3 relative font-sans">
-      {/* Panel Header */}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#2A2D34] pb-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="text-xs font-semibold text-[#E4E6EB]">
-            Live traffic allocation
+    <div className="flex flex-col h-full">
+      {/* Legend: live weights per acquirer, and which line is the recorded baseline */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-2 py-1.5 border-b border-rule text-[11px]">
+        {ACQUIRERS.map((acq) => {
+          const color = colorOf(acq.id);
+          const bad = isDegraded(acq.id, activeOutages, acquirerStates);
+          return (
+            <span key={acq.id} className="flex items-center gap-1.5">
+              <span className="inline-block w-3 h-0.5" style={{ backgroundColor: color }} />
+              <span className="text-dim uppercase tracking-[0.08em]">{acq.ticker}</span>
+              <span className="font-mono" style={{ color: typeof currentWeights[acq.id] === 'number' ? color : COLORS.dim }}>
+                {weightText(acq.id)}
+              </span>
+              {bad && (
+                <span className="text-[9px] px-1 bg-alert text-ground font-semibold uppercase">Outage</span>
+              )}
+            </span>
+          );
+        })}
+        <span className="ml-auto flex items-center gap-3 text-dim">
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block w-3 h-0.5 bg-amber" />
+            Loom (live)
           </span>
-
-          {/* Load-Bearing System Disambiguation Legend (Phase 7 Revision 6) */}
-          <div className="flex items-center gap-3 pl-2.5 sm:border-l sm:border-[#2A2D34] text-[11px]">
-            <div className="flex items-center gap-1.5">
-              <span className="inline-block w-3 h-0.5 bg-[#5B8DEF]" />
-              <span className="text-[#E4E6EB] font-medium">Loom (live)</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="inline-block w-3 h-0.5 border-b-2 border-dashed border-[#8B8F98]" />
-              <span className="text-[#8B8F98]">Static baseline (recorded run)</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Legend and Metrics Readout */}
-        <div className="flex items-center gap-4 text-xs">
-          {/* Acquirer Alpha Indicator */}
-          <div className="flex items-center gap-1.5">
-            <span
-              className="inline-block w-2.5 h-0.5"
-              style={{ backgroundColor: alphaColor }}
-            />
-            <span className="text-[#8B8F98]">Alpha:</span>
-            <span
-              className="font-mono text-[11px]"
-              style={{ color: alphaColor }}
-            >
-              {weightText('acquirer_alpha')}
-            </span>
-            {isAlphaDegraded && (
-              <span className="text-[9px] px-1 py-0.2 bg-[#E5484D]/15 text-[#E5484D] border border-[#E5484D]/40 font-mono">
-                Outage
-              </span>
-            )}
-          </div>
-
-          {/* Acquirer Beta Indicator */}
-          <div className="flex items-center gap-1.5">
-            <span
-              className="inline-block w-2.5 h-0.5"
-              style={{ backgroundColor: betaColor }}
-            />
-            <span className="text-[#8B8F98]">Beta:</span>
-            <span
-              className="font-mono text-[11px]"
-              style={{ color: betaColor }}
-            >
-              {weightText('acquirer_beta')}
-            </span>
-            {isBetaDegraded && (
-              <span className="text-[9px] px-1 py-0.2 bg-[#E5484D]/15 text-[#E5484D] border border-[#E5484D]/40 font-mono">
-                Outage
-              </span>
-            )}
-          </div>
-
-          {/* Acquirer Gamma Indicator */}
-          <div className="flex items-center gap-1.5">
-            <span
-              className="inline-block w-2.5 h-0.5"
-              style={{ backgroundColor: gammaColor }}
-            />
-            <span className="text-[#8B8F98]">Gamma:</span>
-            <span
-              className="font-mono text-[11px]"
-              style={{ color: gammaColor }}
-            >
-              {weightText('acquirer_gamma')}
-            </span>
-            {isGammaDegraded && (
-              <span className="text-[9px] px-1 py-0.2 bg-[#E5484D]/15 text-[#E5484D] border border-[#E5484D]/40 font-mono">
-                Outage
-              </span>
-            )}
-          </div>
-
-          {/* Peak Jump Delta */}
-          <div className="pl-3 border-l border-[#2A2D34] hidden md:flex items-center gap-1.5">
-            <span className="text-[10px] text-[#8B8F98]">Peak step delta:</span>
-            <span className="font-mono text-[11px] text-[#5B8DEF] font-medium">
-              {typeof peakStepDelta === 'number' ? `${peakStepDelta.toFixed(1)}%` : 'no data'}
-            </span>
-            <span className="text-[10px] text-[#8B8F98]">(vs 100% cliff)</span>
-          </div>
-        </div>
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block w-3 border-b border-dashed border-dim" />
+            Static baseline (recorded run)
+          </span>
+        </span>
       </div>
 
-      {/* Main Chart Canvas / Well */}
-      <div className="mission-well w-full relative h-[300px] flex items-center justify-center overflow-hidden bg-[#0F1115]">
-        {/* Disconnected / Stale honest status banner */}
+      {/* Chart well */}
+      <div className="relative flex-1 min-h-[260px] lg:min-h-[300px] flex items-center justify-center overflow-hidden bg-well">
         {connectionStatus !== 'connected' && (
-          <div className="absolute top-2 right-3 z-20 px-2 py-1 bg-[#16181D] border border-[#E5484D] text-[#E5484D] text-[10px] font-mono flex items-center gap-1.5 shadow-none">
-            <span className="w-1.5 h-1.5 bg-[#E5484D] inline-block" />
+          <div className="absolute top-2 right-2 z-20 px-2 py-0.5 bg-ground border border-alert text-alert text-[10px] uppercase tracking-[0.08em] flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 bg-alert inline-block lamp-blink" />
             <span>
               {connectionStatus === 'reconnecting'
                 ? 'Connection lost — stream reconnecting'
@@ -272,7 +197,7 @@ export function AllocationChart({
         {(droppedFrames > 0 || restarts > 0) && (
           <div
             data-testid="stream-gaps"
-            className="absolute top-2 left-14 z-20 px-2 py-1 bg-[#16181D] border border-[#E5484D] text-[#E5484D] text-[10px] font-mono"
+            className="absolute top-2 left-12 z-20 px-2 py-0.5 bg-ground border border-alert text-alert text-[10px] font-mono"
           >
             {droppedFrames > 0 && `${droppedFrames} frame${droppedFrames === 1 ? '' : 's'} dropped`}
             {droppedFrames > 0 && restarts > 0 && ' · '}
@@ -281,132 +206,70 @@ export function AllocationChart({
         )}
 
         {connectionStatus === 'connected' && isStale && events.length > 0 && (
-          <div className="absolute top-2 right-3 z-20 px-2 py-1 bg-[#16181D] border border-[#2A2D34] text-[#8B8F98] text-[10px] font-mono flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 bg-[#5B8DEF] inline-block" />
-            <span>Idle stream (awaiting new transactions)</span>
+          <div className="absolute top-2 right-2 z-20 px-2 py-0.5 bg-ground border border-rule text-dim text-[10px] uppercase tracking-[0.08em]">
+            Idle stream (awaiting new transactions)
           </div>
         )}
 
-        {/* Empty State */}
         {events.length === 0 ? (
           <div className="text-center px-4 py-8 flex flex-col items-center gap-2">
-            <div className="w-6 h-6 border border-[#2A2D34] flex items-center justify-center text-[#5B8DEF] font-mono text-xs mb-1">
-              [ ]
-            </div>
-            <span className="text-xs font-semibold text-[#E4E6EB]">
+            <span className="font-mono text-amber text-sm">
+              &gt; awaiting_telemetry<span className="lamp-blink">_</span>
+            </span>
+            <span className="text-xs font-semibold text-text uppercase tracking-[0.12em]">
               Awaiting telemetry stream
             </span>
-            <p className="text-[11px] text-[#8B8F98] max-w-sm">
-              No live transaction events received from Phase 5 yet. Start the transaction generator
-              or trigger a test transaction to see the live allocation.
+            <p className="text-[11px] text-dim max-w-sm">
+              No live transaction events received yet. Start the transaction generator or trigger
+              a test transaction to see the live allocation.
             </p>
           </div>
         ) : (
-          /* SVG Real-Time Chart */
-          <svg
-            viewBox={`0 0 ${width} ${height}`}
-            className="w-full h-full"
-            preserveAspectRatio="none"
-          >
-            {/* Subtle Baseline at 0%, 50%, and 100% */}
-            {/* 100% baseline */}
-            <line
-              x1={padding.left}
-              y1={padding.top}
-              x2={width - padding.right}
-              y2={padding.top}
-              stroke="#2A2D34"
-              strokeWidth="1"
-              strokeDasharray="2 2"
-              opacity="0.5"
-            />
-            {/* 50% midpoint guideline */}
-            <line
-              x1={padding.left}
-              y1={padding.top + chartHeight / 2}
-              x2={width - padding.right}
-              y2={padding.top + chartHeight / 2}
-              stroke="#2A2D34"
-              strokeWidth="1"
-              strokeDasharray="4 4"
-              opacity="0.3"
-            />
-            {/* 0% subtle baseline */}
-            <line
-              x1={padding.left}
-              y1={padding.top + chartHeight}
-              x2={width - padding.right}
-              y2={padding.top + chartHeight}
-              stroke="#2A2D34"
-              strokeWidth="1.5"
-            />
+          <svg viewBox={`0 0 ${width} ${height}`} className="absolute inset-0 w-full h-full" preserveAspectRatio="none">
+            {/* Gridlines every 25% */}
+            {GRID.map((g) => (
+              <g key={g}>
+                <line
+                  x1={padding.left}
+                  y1={yOf(g)}
+                  x2={width - padding.right}
+                  y2={yOf(g)}
+                  stroke={COLORS.rule}
+                  strokeWidth={g === 0 ? 1.5 : 1}
+                  strokeDasharray={g === 0 || g === 1 ? undefined : '2 4'}
+                  vectorEffect="non-scaling-stroke"
+                />
+                <text x={padding.left - 6} y={yOf(g) + 3} fill={COLORS.dim} fontSize="9" textAnchor="end" className="font-mono">
+                  {Math.round(g * 100)}%
+                </text>
+              </g>
+            ))}
 
-            {/* Y-Axis tick labels (monospace, compact) */}
-            <text
-              x={padding.left - 8}
-              y={padding.top + 4}
-              fill="#8B8F98"
-              fontSize="9"
-              textAnchor="end"
-              className="font-mono"
-            >
-              100%
-            </text>
-            <text
-              x={padding.left - 8}
-              y={padding.top + chartHeight / 2 + 3}
-              fill="#8B8F98"
-              fontSize="9"
-              textAnchor="end"
-              className="font-mono"
-            >
-              50%
-            </text>
-            <text
-              x={padding.left - 8}
-              y={padding.top + chartHeight + 3}
-              fill="#8B8F98"
-              fontSize="9"
-              textAnchor="end"
-              className="font-mono"
-            >
-              0%
-            </text>
-
-            {/* Vertical Outage & Recovery Markers */}
+            {/* Vertical outage, recovery and restart markers */}
             {markerPositions.map((marker) => {
               const isOutage = marker.type === 'outage';
               const markerColor =
-                marker.type === 'restart' ? '#8B8F98' : isOutage ? '#E5484D' : '#5B8DEF';
-
+                marker.type === 'restart' ? COLORS.dim : isOutage ? COLORS.alert : COLORS.ok;
+              const tagX = Math.max(padding.left, Math.min(width - padding.right - 140, marker.x - 70));
               return (
                 <g key={marker.id} data-testid={`marker-${marker.type}`}>
-                  {/* Vertical hairline marker line */}
                   <line
                     x1={marker.x}
                     y1={padding.top}
                     x2={marker.x}
                     y2={padding.top + chartHeight}
                     stroke={markerColor}
-                    strokeWidth="1.5"
-                    strokeDasharray="4 3"
-                  />
-                  {/* Marker Tag Badge at top */}
-                  <rect
-                    x={Math.max(padding.left, Math.min(width - padding.right - 140, marker.x - 70))}
-                    y={padding.top - 18}
-                    width="140"
-                    height="16"
-                    fill="#16181D"
-                    stroke={markerColor}
                     strokeWidth="1"
+                    strokeDasharray="3 3"
+                    vectorEffect="non-scaling-stroke"
                   />
+                  <rect x={tagX} y={padding.top - 22} width="140" height="15" fill={markerColor} />
                   <text
-                    x={Math.max(padding.left, Math.min(width - padding.right - 140, marker.x - 70)) + 70}
-                    y={padding.top - 7}
-                    fill={markerColor}
-                    fontSize="8.5"
-                    fontWeight="500"
+                    x={tagX + 70}
+                    y={padding.top - 11}
+                    fill={COLORS.ground}
+                    fontSize="9"
+                    fontWeight="600"
                     textAnchor="middle"
                     className="font-mono"
                   >
@@ -424,135 +287,73 @@ export function AllocationChart({
                   y1={padding.top}
                   x2={b.x}
                   y2={padding.top + chartHeight}
-                  stroke="#8B8F98"
+                  stroke={COLORS.dim}
                   strokeWidth="1"
                   strokeDasharray="1 3"
+                  vectorEffect="non-scaling-stroke"
                 />
-                <text
-                  x={b.x + 3}
-                  y={padding.top + chartHeight - 4}
-                  fill="#8B8F98"
-                  fontSize="8"
-                  className="font-mono"
-                >
+                <text x={b.x + 3} y={padding.top + chartHeight - 4} fill={COLORS.dim} fontSize="8" className="font-mono">
                   {b.label}
                 </text>
               </g>
             ))}
 
-            {/* Static Baseline Reference Line (Phase 6 Recorded Run) */}
-            {/* Rendered strictly behind Loom's live lines in z-order so it never competes with them */}
+            {/* Static baseline (recorded run), behind the live lines */}
             {pathStaticBaseline && (
               <path
                 d={pathStaticBaseline}
                 fill="none"
-                stroke="#8B8F98"
-                strokeWidth="1.5"
+                stroke={COLORS.dim}
+                strokeWidth="1.25"
                 strokeDasharray="4 4"
-                strokeOpacity="0.55"
-                strokeLinecap="round"
-                strokeLinejoin="round"
+                strokeOpacity="0.8"
+                vectorEffect="non-scaling-stroke"
               />
             )}
 
-            {/* Line Series 1: Gamma (Tertiary floor - #7C808A or Alert #E5484D) */}
-            {pathGamma && (
-              <path
-                d={pathGamma}
-                fill="none"
-                stroke={gammaColor}
-                strokeWidth={isGammaDegraded ? '2' : '1'}
-                strokeOpacity={isGammaDegraded ? '1' : '0.75'}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
+            {/* Live lines */}
+            {DRAW_ORDER.map((aid) =>
+              paths[aid] ? (
+                <path
+                  key={aid}
+                  d={paths[aid]}
+                  fill="none"
+                  stroke={colorOf(aid)}
+                  color={colorOf(aid)}
+                  className="glow-line"
+                  strokeWidth={isDegraded(aid, activeOutages, acquirerStates) ? 2 : STROKE[aid]}
+                  strokeLinecap="square"
+                  strokeLinejoin="miter"
+                  vectorEffect="non-scaling-stroke"
+                />
+              ) : null,
             )}
 
-            {/* Line Series 2: Beta (Secondary backup - #C084FC or Alert #E5484D) */}
-            {pathBeta && (
-              <path
-                d={pathBeta}
-                fill="none"
-                stroke={betaColor}
-                strokeWidth={isBetaDegraded ? '2' : '1.5'}
-                strokeOpacity="1"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            )}
+            {/* Live head: square marker and last value, Bloomberg-style price tag */}
+            {DRAW_ORDER.map((aid) => {
+              const w = currentWeights[aid];
+              if (typeof w !== 'number') return null;
+              const y = yOf(w);
+              const c = colorOf(aid);
+              return (
+                <g key={`head-${aid}`}>
+                  <rect x={width - padding.right - 3} y={y - 3} width="6" height="6" fill={c} />
+                  <rect x={width - padding.right + 4} y={y - 6} width={padding.right - 6} height="12" fill={c} />
+                  <text x={width - padding.right + 6} y={y + 3} fill={COLORS.ground} fontSize="9" fontWeight="600" className="font-mono">
+                    {(w * 100).toFixed(1)}
+                  </text>
+                </g>
+              );
+            })}
 
-            {/* Line Series 3: Alpha (Primary leader - #5B8DEF or Alert #E5484D) */}
-            {pathAlpha && (
-              <path
-                d={pathAlpha}
-                fill="none"
-                stroke={alphaColor}
-                strokeWidth="2"
-                strokeOpacity="1"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            )}
-
-            {/* Live Head Indicators (end dots) */}
-            {events.length > 0 && (
-              <>
-                {typeof currentWeights.acquirer_alpha === 'number' && (
-                  <circle
-                    cx={width - padding.right}
-                    cy={padding.top + chartHeight - currentWeights.acquirer_alpha * chartHeight}
-                    r="3.5"
-                    fill={alphaColor}
-                  />
-                )}
-                {typeof currentWeights.acquirer_beta === 'number' && (
-                  <circle
-                    cx={width - padding.right}
-                    cy={padding.top + chartHeight - currentWeights.acquirer_beta * chartHeight}
-                    r="2.5"
-                    fill={betaColor}
-                  />
-                )}
-                {typeof currentWeights.acquirer_gamma === 'number' && (
-                  <circle
-                    cx={width - padding.right}
-                    cy={padding.top + chartHeight - currentWeights.acquirer_gamma * chartHeight}
-                    r="2"
-                    fill={gammaColor}
-                    fillOpacity={isGammaDegraded ? '1' : '0.75'}
-                  />
-                )}
-              </>
-            )}
-
-            {/* Time Axis Markers */}
-            <text
-              x={padding.left}
-              y={height - 10}
-              fill="#8B8F98"
-              fontSize="9"
-              className="font-mono"
-            >
+            {/* Time axis */}
+            <text x={padding.left} y={height - 8} fill={COLORS.dim} fontSize="9" className="font-mono">
               {events.length} frames ago
             </text>
-            <text
-              x={width / 2}
-              y={height - 10}
-              fill="#8B8F98"
-              fontSize="9"
-              textAnchor="middle"
-              className="font-sans"
-            >
+            <text x={width / 2} y={height - 8} fill={COLORS.dim} fontSize="9" textAnchor="middle" className="font-mono">
               One point per received frame
             </text>
-            <text
-              x={width - padding.right}
-              y={height - 10}
-              fill="#8B8F98"
-              fontSize="9"
-              textAnchor="end"
-              className="font-mono"
-            >
+            <text x={width - padding.right} y={height - 8} fill={COLORS.amber} fontSize="9" textAnchor="end" className="font-mono">
               Now
             </text>
           </svg>
