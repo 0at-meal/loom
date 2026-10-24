@@ -123,7 +123,10 @@ Loom's pipeline is built from four stages behind separate module boundaries. Sin
 ### 4. Mission-Control Dashboard (`dashboard/`)
 - React application built with Vite and Tailwind CSS. Connects via native WebSocket to `/ws/telemetry`. The router gives each connection its own bounded queue (256 events, oldest dropped first) and sender task, so a slow or stalled browser never delays `/route`; `/health` reports `telemetry_dropped`.
 - Keeps the latest 120 routing events in React state and re-renders on each message.
-- On connect, the server sends a `BOOTSTRAP` frame with the current in-memory acquirer beliefs; no transaction history is loaded.
+- On connect, the server sends a `BOOTSTRAP` frame with the current in-memory acquirer beliefs, the router's `stream_id` and the last frame number published; no transaction history is loaded.
+- Shows only what the router sent: a value the stream has not provided yet reads "no data", and a missing weight leaves a hole in its line (AUDIT F-27). Frames are numbered in the order they are published (payment completion order), and the numbering restarts with the router process under a new `stream_id`. The dashboard counts skipped numbers as dropped frames, breaks the lines there and says how many were dropped; a new `stream_id` (or a number that goes backwards) is shown as a router restart. PSR on the dashboard covers received frames only.
+- The dashed "Static baseline (recorded run)" line replays `dashboard/src/data/baselineReferenceRun.json`, the static $M=3$ router's run at seed 42, written by `python scripts/compare_psr.py --out-reference-json dashboard/src/data/baselineReferenceRun.json`. It is aligned to the latest Alpha outage marker in view; it is a recording, not a second live router.
+- Frontend tests (Vitest, jsdom): `cd dashboard && npm test`. They cover the telemetry reducer (gaps, restarts, markers), the WebSocket hook's lifecycle (reconnect, cleanup on unmount) and the no-data states of the chart and readouts.
 - Sensor-actuator colocation: individual acquirer health readouts are paired with their trigger controls. Collapsible disclosures isolate diagnostics and advanced simulator settings.
 - The benchmark comparison card (under **Diagnostics**) reads its numbers from `dashboard/src/data/baselineComparison.json`, which `scripts/compare_psr.py --n-seeds 100 --out-json …` writes. It shows Loom against static $M=1$, $M=3$ and the gray-failure case side by side.
 
@@ -173,7 +176,7 @@ cp .env.example .env
 > **Configuration Notice**: `.env` keys read through `data_layer/config.py`: `LEDGER_ENABLED`, `SQLITE_*`, `REDIS_ENABLED`, `REDIS_SNAPSHOT_INTERVAL_SEC`, the other `REDIS_*` keys, `KEY_PREFIX` and `REDIS_CHANNEL_*`. `router_core.server` also reads `DECAY_HALF_LIFE_SEC` (default for `--half-life-sec`) and `ROUTER_MAX_IN_FLIGHT` (default for `--max-in-flight`). CLI flags override `.env`. `PID_KP`, `PID_KI`, `PID_KD`, `APP_ENV` and `LOG_LEVEL` are never read. PID gains default to $K_p=0.12, K_i=0.005, K_d=0.25, I_{\text{max}}=1.0, w_{\text{min}}=0.03$ in `PIDConfig` and are overridden via server CLI arguments (`--kp`, `--ki`, `--kd`, `--min-allocation`).
 
 > [!NOTE]
-> **Running the tests:** `pytest` collects and runs 262 tests; CI runs the same suite with coverage. Dependencies are unpinned, and `pyproject.toml` turns warnings into errors, so a new library release can still break collection. A few tests assert wall-clock latency and can fail on a loaded machine.
+> **Running the tests:** `pytest` collects and runs 358 tests; CI runs the same suite with coverage, plus the dashboard's 27 Vitest tests (`cd dashboard && npm test`) and its production build. Dependencies are unpinned, and `pyproject.toml` turns warnings into errors, so a new library release can still break collection. A few tests assert wall-clock latency and can fail on a loaded machine.
 
 ---
 
@@ -342,6 +345,9 @@ The report header prints the $M$ and $N$ actually used. `--alpha-prior` sets Loo
 # 5. Steady state: share of traffic sent to the worse of two healthy acquirers (about 10 minutes)
 python scripts/steady_state_share.py
 python scripts/steady_state_share.py --config served
+
+# 6. Value-scaled protection with the PID on: high-value payments during an outage (30 seeds, ~1 minute)
+python scripts/value_policy_outage.py
 ```
 
 ---
@@ -406,7 +412,7 @@ loom/
 - [`baseline_router/`](baseline_router/): Isolated static reference router (`router.py`, `models.py`) implementing priority-tier failover and circuit-breaker debouncing for comparison.
 - [`dashboard/`](dashboard/): Vite + React live mission-control user interface (`src/App.jsx`, `src/components/`, `src/hooks/useLoomTelemetry.js`).
 - [`scripts/`](scripts/): Operational scripts, synthetic transaction generator (`generate_transactions.py`), benchmark runners (`run_qa_baseline_scenario.py`, `compare_psr.py`), and all-in-one cluster launcher (`run_demo.py`).
-- [`tests/`](tests/): 262 automated tests mirroring the source hierarchy (`tests/router_core/`, `tests/acquirer_sim/`, `tests/data_layer/`, `tests/baseline_router/`, `tests/dashboard/`, `tests/scripts/`). `tests/dashboard/` contains Python backend tests for the Phase 7 scenarios; the React code itself has no tests.
+- [`tests/`](tests/): 358 automated Python tests mirroring the source hierarchy (`tests/router_core/`, `tests/acquirer_sim/`, `tests/data_layer/`, `tests/baseline_router/`, `tests/dashboard/`, `tests/scripts/`). `tests/dashboard/` contains Python backend tests for the Phase 7 scenarios; the React code's tests live in `dashboard/src/__tests__/` (`npm test`).
 - [`docs/`](docs/): Architectural contracts, decision records, specs, and role personas.
 
 ---
@@ -474,7 +480,7 @@ All project documentation resides in [`docs/`](docs/). The QA reports are the ph
 - [`docs/phase6-qa-report.md`](docs/phase6-qa-report.md): Static routing pathologies ($M=1, M=3, M=5$, Gray Failure) and PSR baseline calculation.
 - [`docs/phase7-qa-report.md`](docs/phase7-qa-report.md): End-to-end live socket verification, delivery latency, and reconnect behaviour.
 - [`docs/phase8-qa-report.md`](docs/phase8-qa-report.md): Controlled experiment and regression audit for value-scaled exploration (run without PID).
-- [`docs/phase8-tech-lead-review.md`](docs/phase8-tech-lead-review.md): Phase 8 keep/cut review.
+- [`docs/phase8-tech-lead-review.md`](docs/phase8-tech-lead-review.md): Phase 8 keep/cut review (its production approval and its health-term formula are retracted; AUDIT F-10).
 
 ### Schemas & Runbooks
 - [`docs/schemas/routing_event.json`](docs/schemas/routing_event.json): JSON schema contract for routing telemetry events.
@@ -511,7 +517,29 @@ As defined in [`docs/prd.md`](docs/prd.md) and [`docs/decisions-log.md`](docs/de
 
 ### Value-Scaled Exploration (Phase 8, opt-in)
 
-Phase 8 adds [`router_core/value_policy.py`](router_core/value_policy.py), which shrinks each Thompson sample toward the posterior mean as transaction value grows. It is **off by default** (`value_scaled_config=None`) and was evaluated only with PID disabled. With PID enabled (the default), the policy changes only the PID target, not which acquirer the current transaction goes to. In a test with 10 high-value (5,000) transactions per run during an outage on Alpha (30 seeds), the number sent to the dead acquirer was 1.23 → 1.53 (deficit) and 1.40 → 1.10 (stochastic) with the policy off → on: no protective effect.
+Phase 8 adds [`router_core/value_policy.py`](router_core/value_policy.py). It is **off by default** (`value_scaled_config=None`). When enabled it does two things:
+
+- **High-value payments are protected at dispatch.** A payment with $\lambda(V) = 1 - e^{-V/	au} \ge$ `protect_lambda` (default 0.95, so $V \gtrsim 3	au$) goes to the acquirer with the highest posterior mean (technical mean × approval mean). It skips the PID step and the deficit or categorical draw, so the PID state and deficit counters stay as the other payments left them. Its outcome updates the beliefs like any other payment; the amount never enters the updates or the health score.
+- **Below that threshold**, each Thompson sample is blended toward its posterior mean before it sets the PID target. With the PID on this has almost no effect on where a payment goes.
+
+Before this change only the blending existed, and with the PID on it did not protect anything (AUDIT F-10). `python scripts/value_policy_outage.py` reproduces the comparison: two acquirers at 95%, an outage on Alpha, every fifth outage payment 5,000 (τ = 100), 30 seeds, the audit's configuration:
+
+| Actuation | Policy | High-value sent to dead Alpha (of 10) | Share of low-value sent to dead Alpha | Outage PSR | Recovery PSR | High-value sent to recovered Alpha (of 10) |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: |
+| Deficit | off | 1.57 | 13.8% | 81.53% | 95.47% | 0.33 |
+| Deficit | blending only (old behaviour) | 1.43 | 12.3% | 82.87% | 95.47% | 0.33 |
+| Deficit | **protection (new default)** | **0.50** | 14.1% | 83.33% | 95.47% | 0.00 |
+| Stochastic | off | 2.03 | 14.4% | 79.87% | 94.87% | 0.40 |
+| Stochastic | blending only (old behaviour) | 1.93 | 14.8% | 79.80% | 94.87% | 0.27 |
+| Stochastic | **protection (new default)** | **0.60** | 17.9% | 79.93% | 95.00% | 0.00 |
+
+The audit measured 1.23 → 1.53 (deficit) and 1.40 → 1.10 (stochastic) for off → blending at commit `8001acb`, with a wall clock instead of the script's virtual one; later belief changes (PR #3, PR #4) moved those numbers. Both acquirers run at 95% in warmup, so either one can be the leader when the outage starts. Under deficit actuation every protected high-value payment that reached the dead acquirer was the first outage payment, sent before any failure had been seen (15 of 30 seeds); under stochastic actuation 3 more did.
+
+What it costs:
+- **Low-value payments carry more of the exploration.** Under stochastic actuation 17.9% of low-value outage payments reach the dead acquirer, vs 14.8% with blending only.
+- **High-value payments never probe a recovered acquirer** (0 of 10 in the recovery window), so recovery is detected only through low-value traffic and the 3% floor.
+- **The PID ramps more slowly per second** when part of the traffic is protected, because it steps once per unprotected payment.
+- Outage and recovery PSR are within noise of blending only in this test (+0.46 pp deficit, +0.13 pp stochastic for outage PSR).
 
 ### Known Limitations & Open Risks
 
@@ -524,6 +552,8 @@ Phase 8 adds [`router_core/value_policy.py`](router_core/value_policy.py), which
 - **Single-Shot Routing Without Inline Cascading**: Each transaction goes to a single acquirer, with no retry on a second acquirer.
 - **In-flight lag, bounded by an admission limit**: at most `max_in_flight` payments (default 50) are dispatched at once; the rest wait for a slot and then decide with fresher beliefs. In the audit's experiment (200 concurrent payments during a 503 outage on Alpha, 10 seeds, `python scripts/concurrency_inflight.py --seeds 10`), the dead acquirer receives 39.9 (stochastic actuation) / 28.6 (deficit) payments, down from 122.7 / 84.8 with no limit (`--max-in-flight 0`); routed one at a time it receives 14.5 / 10.6. The limit caps throughput at `max_in_flight` ÷ acquirer latency (for example 50 / 0.3 s ≈ 166 TPS), and waiting time is reported as `queue_wait_ms`.
 - **Unconstrained Mock Capacity**: The simulator never rate-limits, so the effect of shifting 100% of traffic onto a backup acquirer is not modelled.
+- **Value-scaled protection (opt-in) trades exploration for safety**: protected high-value payments never probe a recovered acquirer and leave more of the exploration to low-value payments; see [Value-Scaled Exploration](#value-scaled-exploration-phase-8-opt-in).
+- **Dashboard sees only what reaches it**: frames dropped for a slow client, or missed while it was disconnected, are counted and marked but not recovered, so the dashboard's PSR covers received frames only. Frames are numbered in completion order, and the numbering restarts with the router process (each process has its own `stream_id`).
 
 ---
 

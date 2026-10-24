@@ -17,7 +17,11 @@ from router_core.bandit import BanditStateRegistry
 from router_core.models import AcquirerRouteConfig, RouterConfig, RoutingResult
 from router_core.pid import PIDConfig, PIDDiagnostics, PIDState, calculate_pid_step
 from router_core.state import AcquirerStateSnapshot, Outcome
-from router_core.value_policy import ValueScaledExplorationConfig, apply_value_scaled_policy
+from router_core.value_policy import (
+    ValueScaledExplorationConfig,
+    apply_value_scaled_policy,
+    best_posterior_mean,
+)
 
 if TYPE_CHECKING:
     from data_layer.redis_pubsub import AsyncEventPublisher, EventPublisher
@@ -206,6 +210,8 @@ class BanditRouter:
                 amount=amount,
                 config=self._value_scaled_config,
             )
+            if self._value_scaled_config.protects(amount):
+                return best_posterior_mean(means), adjusted_samples
             selected_id = max(
                 adjusted_samples.keys(),
                 key=lambda aid: (adjusted_samples[aid], aid),
@@ -257,6 +263,7 @@ class BanditRouter:
         effective_samples = raw_samples
         adjusted_samples: dict[str, float] | None = None
         shrinkage: float | None = None
+        protected_id: str | None = None
 
         if (
             self._value_scaled_config is not None
@@ -272,12 +279,24 @@ class BanditRouter:
                 config=self._value_scaled_config,
             )
             effective_samples = adjusted_samples
+            if self._value_scaled_config.protects(request.amount):
+                # High-value payment (AUDIT F-10): send it to the best posterior mean. It
+                # stays out of the allocation stream, so the PID state and the deficit
+                # counters are left exactly as the other payments set them.
+                protected_id = best_posterior_mean(means)
 
         target_allocation: dict[str, float] | None = None
         smoothed_allocation: dict[str, float] | None = None
         diagnostics: PIDDiagnostics | None = None
 
-        if self._pid_config is not None and self._pid_state is not None:
+        if protected_id is not None:
+            selected_id = protected_id
+            target_allocation = {aid: 1.0 if aid == selected_id else 0.0 for aid in raw_samples}
+            if self._pid_config is not None:
+                smoothed_allocation = dict(self._current_allocation)
+            else:
+                smoothed_allocation = dict(target_allocation)
+        elif self._pid_config is not None and self._pid_state is not None:
             # Thompson sampling target allocation using effective samples
             win_id = max(effective_samples.keys(), key=lambda aid: (effective_samples[aid], aid))
             target_allocation = {aid: 1.0 if aid == win_id else 0.0 for aid in effective_samples}
@@ -331,12 +350,13 @@ class BanditRouter:
             adj_str = ", ".join(f"{k}={v:.4f}" for k, v in sorted(adjusted_samples.items()))
             logger.info(
                 "Routing decision: tx_id=%s -> selected=%s "
-                "(raw: [%s], adjusted: [%s], lambda=%.4f)",
+                "(raw: [%s], adjusted: [%s], lambda=%.4f, protected=%s)",
                 request.transaction_id,
                 selected_id,
                 sample_str,
                 adj_str,
                 shrinkage or 0.0,
+                protected_id is not None,
             )
         else:
             logger.info(
@@ -497,6 +517,7 @@ class BanditRouter:
             pid_diagnostics=diagnostics,
             adjusted_samples=adjusted_samples,
             exploration_shrinkage=shrinkage,
+            value_protected=protected_id is not None,
             timestamp=time.time(),
         )
 

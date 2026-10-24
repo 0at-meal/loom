@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 
 /**
  * useSimulatorControls
@@ -38,11 +38,18 @@ export function useSimulatorControls({ activeOutages = {}, setOutageActiveState 
     { id: 'acquirer_gamma', name: 'Acquirer Gamma', role: 'Tertiary floor', baseRate: 0.85 },
   ];
 
-  // Toggle outage on a single acquirer
-  const handleToggleOutage = useCallback(
-    async (acquirerId) => {
-      const isCurrentlyOut = !!activeOutages[acquirerId];
-      const nextActive = !isCurrentlyOut;
+  // Pending timer of the sensitive-blip preset, cleared on unmount
+  const blipTimerRef = useRef(null);
+  useEffect(
+    () => () => {
+      if (blipTimerRef.current) clearTimeout(blipTimerRef.current);
+    },
+    []
+  );
+
+  // Arm or clear the outage on a single acquirer
+  const setOutage = useCallback(
+    async (acquirerId, nextActive) => {
       const currentBehavior = behaviors[acquirerId] || 'RETURN_DECLINE';
 
       setSubmitting((prev) => ({ ...prev, [acquirerId]: true }));
@@ -88,7 +95,13 @@ export function useSimulatorControls({ activeOutages = {}, setOutageActiveState 
         setSubmitting((prev) => ({ ...prev, [acquirerId]: false }));
       }
     },
-    [activeOutages, behaviors, setOutageActiveState]
+    [behaviors, setOutageActiveState]
+  );
+
+  // Toggle outage on a single acquirer
+  const handleToggleOutage = useCallback(
+    (acquirerId) => setOutage(acquirerId, !activeOutages[acquirerId]),
+    [activeOutages, setOutage]
   );
 
   // Commit base success rate change (gray failure slider)
@@ -156,12 +169,15 @@ export function useSimulatorControls({ activeOutages = {}, setOutageActiveState 
   const handlePresetSensitiveBlip = useCallback(async () => {
     setLastActionStatus({ type: 'info', text: 'Executing Preset 2: Sensitive blip (Transient Alpha outage)...' });
     if (!activeOutages.acquirer_alpha) {
-      await handleToggleOutage('acquirer_alpha');
-      setTimeout(async () => {
-        await handleToggleOutage('acquirer_alpha');
+      await setOutage('acquirer_alpha', true);
+      if (blipTimerRef.current) clearTimeout(blipTimerRef.current);
+      // Clear explicitly: a toggle here would read the outage flags from before the blip
+      blipTimerRef.current = setTimeout(() => {
+        blipTimerRef.current = null;
+        setOutage('acquirer_alpha', false);
       }, 3500);
     }
-  }, [activeOutages.acquirer_alpha, handleToggleOutage]);
+  }, [activeOutages.acquirer_alpha, setOutage]);
 
   // Preset 3: Gray Failure (Partial degradation p=0.60 on Alpha)
   const handlePresetGrayFailure = useCallback(async () => {

@@ -1,93 +1,78 @@
-# Loom Live Mission-Control Dashboard (Phase 7)
+# Loom Terminal (dashboard)
 
-Real-time telemetry and control cockpit for Loom's dynamic payment routing engine.
+Live, Bloomberg-style terminal over Loom's routing telemetry: one screen of labelled panes,
+keyboard-driven, fed by the router's WebSocket. The original Phase 7 contract is in
+[`docs/phase7-dashboard-spec.md`](../docs/phase7-dashboard-spec.md); this README describes
+what the code does today.
 
----
+## Run
 
-## 1. Specification & Architectural Contract
-
-The complete, binding architecture contract for this module is defined in:
-**[`docs/phase7-dashboard-spec.md`](../docs/phase7-dashboard-spec.md)**
-
-All component development, styling, and networking MUST conform to the decisions and interfaces recorded in:
-- `docs/CONSTITUTION.md` (React, native WebSocket, component naming conventions)
-- `docs/decisions-log.md` (Phase 7 Decisions, Interface Contracts, and Open Risks)
-- `docs/schemas/routing_event.json` & `docs/schemas/health_alert_event.json` (Phase 5 Pub/Sub telemetry contracts)
-
----
-
-## 2. Visual Direction & Design Tokens (Phase 7 Revision 3)
-
-Per Section 11 of `docs/phase7-dashboard-spec.md` and Decisions Log (`[Phase 7 Revision 3]`):
-- **Ground**: Base Canvas Ground (`#0F1115`)
-- **Panels**: Cockpit Slate Panel (`#16181D`)
-- **Data Wells**: Inset Well (`#0F1115`)
-- **Hairline Borders**: `1px solid #2A2D34`
-- **Text Primary**: `#E4E6EB`
-- **Text Secondary**: `#8B8F98`
-- **Deterministic Acquirer Color Mapping**:
-  - **Acquirer 1 (Alpha)**: Accent (`#5B8DEF`) — 2.0px chart stroke, status dot/badge, EWMA bar fill
-  - **Acquirer 2 (Beta)**: Accent 2 (`#C084FC`) — 1.5px chart stroke, status dot/badge, EWMA bar fill
-  - **Acquirer 3 (Gamma)**: Secondary text gray (`#7C808A`) — 1.0px chart stroke, status dot/badge, EWMA bar fill
-- **Inviolable Alert Override**: Alert (`#E5484D`) overrides any acquirer's assigned color across all surfaces the instant that acquirer enters an outage or degraded state ($H < 0.70$), reverting immediately upon recovery ($H \ge 0.70$).
-- **Semantic Quarantine**: Alert (`#E5484D`) is strictly an emergency signal; Accent 2 (`#C084FC`) is strictly reserved for Acquirer Beta identity.
-- **Typography**: IBM Plex Sans for all interface text, labels, and headings in strict sentence case; IBM Plex Mono (with `tnum` tabular alignment) strictly reserved for live numeric telemetry (PSR%, health scores, RTT, sequence numbers).
-- **Geometry**: Sharp corners (`border-radius: 0px` or max `2px`); **zero rounded-card-kit drop shadows** (`box-shadow: none`).
-
----
-
-## 3. Implementation Structure & Information Architecture
-
-1. **Top Header (`HeaderBar.jsx`)**
-   - Brand title and system metadata in clean sentence case.
-   - Live transaction counter, router latency, and UTC telemetry clock.
-   - **Consolidated Single Status Element**: Persistent indicator transitioning dynamically across `Live` (accent `#5B8DEF`), `Reconnecting (n)` (pulsing alert `#E5484D`), and `Connection lost` (alert `#E5484D` with inline Reconnect button).
-
-2. **Ticket A: Live Allocation Chart (`AllocationChart.jsx`)**
-   - Hero centerpiece: rolling 60s time series of smoothed multi-acquirer traffic allocation ($w_i \in [0.0, 1.0]$).
-   - Demonstrates Phase 4 PID dampening curve vs static cliff jumps.
-   - Pinned vertical hairline alert marker in `#E5484D` on outage injection (`ACQUIRER_OUTAGE`).
-   - Peak step delta readout ($\Delta w_{\text{max}} = 11.77\%$ vs $100.0\%$).
-
-3. **Ticket B: Cluster Readouts & Colocated Acquirer Controls (`MetricReadouts.jsx`)**
-   - Headline lifetime & rolling 50-tx PSR (accent `#5B8DEF` $\to$ alert `#E5484D` when $<80\%$).
-   - Sensor-Actuator Colocation: Each acquirer's outage control (Trigger/Clear outage button, failure mode selector, and brownout slider) is physically colocated adjacent to that acquirer's own EWMA health readout and Beta belief parameters.
-
-4. **Progressive Disclosure: Diagnostics (`BaselineComparisonCard.jsx`)**
-   - Collapsed behind a default-closed `<details>` disclosure labeled `"Diagnostics"`.
-   - Displays Phase 6 empirical comparison audit ($M=1$ overreaction, $M=3$ standard cliff, gray failure).
-
-5. **Progressive Disclosure: Simulation Controls (`OperatorControls.jsx`)**
-   - Collapsed behind a default-closed `<details>` disclosure labeled `"Simulation controls"`.
-   - Benchmark scenario gauntlet presets (Standard Cliff, Sensitive Blip $M=1$, Gray Failure $p=0.60$, and Reset All).
-
-6. **Ticket D: WebSocket Gateway & Streaming Hook (`useLoomTelemetry.js`)**
-   - Native browser WebSocket connection to `@app.websocket("/ws/telemetry")`.
-   - Circular ring buffer ($N = 200$) with `requestAnimationFrame` 60 FPS animation loop.
-   - Hybrid cold-start bootstrap (SQLite recent transactions + Redis live streaming).
-   - Resilient auto-reconnect with exponential backoff.
-
----
-
-## 4. Directory Structure (Vite + React)
-
+```bash
+python scripts/run_demo.py --tps 15   # simulator :8001, router :8000, synthetic traffic
+cd dashboard && npm install && npm run dev   # http://localhost:5173
 ```
-dashboard/
-├── index.html                   # HTML entry point with dark background and font links
-├── package.json                 # Dependencies: react, react-dom, tailwindcss, etc.
-├── vite.config.js               # Vite configuration with proxy to backend port 8000
-├── src/
-│   ├── main.jsx                 # Application mount
-│   ├── App.jsx                  # Main Mission-Control layout grid
-│   ├── index.css                # Pinned design tokens, CSS variables, typography
-│   ├── components/
-│   │   ├── HeaderBar.jsx        # Navigation, connection status badge, live clock
-│   │   ├── AllocationChart.jsx  # Ticket A: Live allocation chart with outage marker
-│   │   ├── MetricReadouts.jsx   # Ticket B: Global & rolling PSR, latency readouts
-│   │   ├── BaselineComparisonCard.jsx # Ticket B: Phase 6 empirical comparison audit
-│   │   ├── AcquirerHealthCard.jsx     # Ticket B: Per-acquirer EWMA and Beta belief cards
-│   │   └── OperatorControls.jsx # Ticket C: Outage buttons, sliders, presets
-│   └── hooks/
-│       └── useLoomTelemetry.js  # Ticket D: WebSocket hook, ring buffer, requestAnimationFrame
-└── README.md
-```
+
+`npm test` runs the Vitest suite; `npm run build` builds to `dist/`.
+
+## Design principles
+
+- **Calm until something breaks** (ISA-101 high-performance HMI). The screen is cream on warm
+  black; amber marks focus and Loom's own numbers; red, motion and blinking are kept for
+  abnormal states (outage, health < 0.70, dropped frames, lost connection).
+- **Density is value per unit of space.** Overview first (status bar, key figures), then
+  allocation and acquirer detail, then the event tape, benchmark and controls.
+- **Panels, not cards.** Every pane has a hairline rule, an amber function-key tag and an
+  uppercase title. No radius, no shadows.
+- **Honest data** (AUDIT F-27). Every figure comes from a received frame or a recorded run.
+  Missing values read `no data` or `--`; dropped frames and restarts break the chart lines
+  and appear in the tape.
+- **Subtle CRT.** Faint scanlines and phosphor glow on the hero readout and live lines;
+  toggle with `C` or the status-bar button; off under `prefers-reduced-motion`.
+
+## Tokens (`src/index.css`, `tailwind.config.js`, `src/theme.js`)
+
+| Token | Hex | Use |
+| :--- | :--- | :--- |
+| ground / well | `#0A0A09` | page and chart well |
+| pane | `#111110` | pane background |
+| rule | `#2B2924` | borders and gridlines |
+| text | `#E8E2D0` | primary text |
+| dim | `#8A8473` | labels, secondary text |
+| amber | `#FFA028` | accent, Alpha, Loom's figures |
+| cyan | `#5CC8E0` | Beta |
+| cream | `#D8D2BE` | Gamma |
+| alert | `#FF4A3D` | abnormal states only; overrides an acquirer's color in outage or below 0.70 health |
+| ok | `#4FD18B` | healthy lamp, authorized frames, significant benchmark wins |
+
+Type: IBM Plex Mono (tabular, slashed zero) for everything; IBM Plex Sans Condensed for the
+wordmark and pane titles.
+
+## Panes
+
+| Key | Pane | Component |
+| :--- | :--- | :--- |
+| — | Status bar: link state, stream id, last seq, dropped, restarts, CRT toggle, UTC clock | `HeaderBar.jsx` |
+| F1 | Key figures: rolling PSR (last 50), lifetime PSR, routed, declined, errors, peak step Δ | `MetricReadouts.jsx` |
+| F2 | Live traffic allocation chart with outage markers and recorded static baseline | `AllocationChart.jsx` |
+| F3 | Acquirers: health, E[SR], α/β, latest Thompson draw, PID target, weight, outage toggle | `AcquirerTable.jsx` |
+| F4 | Event tape: received routing frames, newest first | `EventTape.jsx` |
+| F5 | Benchmark vs static baseline (from `src/data/baselineComparison.json`) | `BaselineComparisonCard.jsx` |
+| F6 | Simulation presets and reset | `OperatorControls.jsx` |
+
+All panes share `Pane.jsx`.
+
+## Keyboard
+
+`F1`–`F6` or `1`–`6` focus a pane · `Shift+1/2/3` run the standard cliff, sensitive blip and
+gray failure presets · `R` resets all routes (asks first) · `C` toggles the CRT effect.
+
+## Data
+
+- `src/hooks/useLoomTelemetry.js`: native WebSocket to `/ws/telemetry` (direct to
+  `127.0.0.1:8000` under the dev server), 15 s ping, reconnect backoff 0.5 s × 1.5 up to
+  10 s, stale after 5 s without a frame.
+- `src/hooks/telemetryState.js`: pure reducer. Keeps the last 120 frames, a 50-frame PSR
+  window, per-acquirer state (bootstrap snapshot, `updated_state`, latest Thompson sample,
+  PID target, smoothed weight), outage/recovery/restart markers, and sequence-gap accounting.
+- `src/hooks/useSimulatorControls.js`: outage toggles, success-rate commits and presets,
+  proxied through the router to the simulator.

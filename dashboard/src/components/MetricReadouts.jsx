@@ -1,134 +1,86 @@
 import React from 'react';
 
+const NO_DATA = 'no data';
+
+function Readout({ label, value, sub, tone = 'text-text', hero = false }) {
+  return (
+    <div className="flex flex-col justify-between gap-1 px-3 py-2 border-rule min-w-0">
+      <span className="text-[10px] uppercase tracking-[0.12em] text-dim truncate">{label}</span>
+      <span
+        className={`font-mono leading-none ${tone} ${
+          hero ? 'text-4xl sm:text-[42px] font-semibold glow' : 'text-xl sm:text-2xl font-medium'
+        }`}
+      >
+        {value}
+      </span>
+      {sub && <span className="text-[10px] text-dim truncate">{sub}</span>}
+    </div>
+  );
+}
+
 /**
- * MetricReadouts Component: Projector-Scale Headline Telemetry & Single-Row Acquirers
- *
- * Phase 7 Revision 4 Contract:
- * - The two headline numbers (PSR, transactions routed) are the largest text on the page by a clear margin
- *   rendered in Space Mono (text-6xl sm:text-7xl font-bold tracking-tight)
- * - Zero container box, zero border, zero panel background
- * - Everything else (labels, secondary text) stays small and quiet by contrast
- * - Each acquirer is reduced to a single row: color dot, name, one number, plain text-style button
- * - No per-acquirer bordered panels, no micro-gauge bars, no repeated representations
- * - Preserves all functional logic (button states, outage toggling, and alert override) untouched
+ * KPI strip: rolling PSR (the hero readout), lifetime PSR, routed, declined, errors and the
+ * peak allocation step. Every figure comes from received frames; before the first frame
+ * they read "--" or "no data", never a made-up value.
  */
-export function MetricReadouts({
-  metrics = {},
-  acquirerStates = {},
-  activeOutages = {},
-  submitting = {},
-  onToggleOutage,
-}) {
+export function MetricReadouts({ metrics = {}, stream = null }) {
   const {
-    rollingPSR = 100.0,
+    rollingPSR = null,
+    lifetimePSR = null,
     totalCount = 0,
+    declinedCount = 0,
+    errorCount = 0,
+    peakStepDelta = null,
   } = metrics;
-
-  // Derive PSR color: Accent when healthy (>= 80%), Alert when in danger (< 80%)
-  const psrColor = rollingPSR < 80.0 ? '#E5484D' : '#5B8DEF';
-
-  const acquirers = [
-    {
-      id: 'acquirer_alpha',
-      name: 'Alpha',
-      defaultRate: 0.95,
-      nominalColor: '#5B8DEF',
-    },
-    {
-      id: 'acquirer_beta',
-      name: 'Beta',
-      defaultRate: 0.90,
-      nominalColor: '#C084FC',
-    },
-    {
-      id: 'acquirer_gamma',
-      name: 'Gamma',
-      defaultRate: 0.85,
-      nominalColor: '#7C808A',
-    },
-  ];
+  const hasPSR = typeof rollingPSR === 'number';
+  const hasData = totalCount > 0;
+  const droppedFrames = stream?.droppedFrames ?? 0;
+  const psrTone = !hasPSR ? 'text-dim' : rollingPSR < 80 ? 'text-alert' : 'text-amber';
 
   return (
-    <div className="flex flex-col gap-6 font-sans">
-      {/* Borderless Projector-Scale Headline Metrics: The two largest elements on screen */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-12">
-        {/* Left Headline: Rolling PSR */}
-        <div className="flex flex-col gap-1">
-          <span className="text-xs text-[#8B8F98]">
-            Rolling PSR (50 txs)
-          </span>
-          <span
-            className="font-mono text-6xl sm:text-7xl font-bold tracking-tight"
-            style={{ color: totalCount > 0 ? psrColor : '#8B8F98' }}
-          >
-            {totalCount > 0 ? `${rollingPSR.toFixed(1)}%` : '--.-%'}
-          </span>
-        </div>
-
-        {/* Right Headline: Transactions routed this session */}
-        <div className="flex flex-col gap-1">
-          <span className="text-xs text-[#8B8F98]">
-            Transactions routed
-          </span>
-          <span className="font-mono text-6xl sm:text-7xl font-bold tracking-tight text-[#E4E6EB]">
-            {totalCount > 0 ? totalCount.toLocaleString() : '--'}
-          </span>
-        </div>
-      </div>
-
-      {/* Radical Single-Row Acquirer Strip: Zero panels, zero bars, zero redundancy */}
-      <div className="flex flex-col gap-2 pt-2">
-        {acquirers.map((acq) => {
-          const state = acquirerStates[acq.id] || {};
-          const isOutage =
-            !!activeOutages[acq.id] ||
-            (state.health_score !== undefined && state.health_score < 0.70);
-          const isPending = !!submitting[acq.id];
-          const healthScore = state.health_score !== undefined ? state.health_score : 1.0;
-
-          // Deterministic color mapping & inviolable alert override
-          const statusColor = isOutage ? '#E5484D' : acq.nominalColor;
-
-          return (
-            <div
-              key={acq.id}
-              className="flex items-center gap-4 text-xs py-0.5"
-            >
-              {/* Color Dot */}
-              <span
-                className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                  isOutage ? 'animate-pulse' : ''
-                }`}
-                style={{ backgroundColor: statusColor }}
-              />
-
-              {/* Acquirer Name */}
-              <span className="w-16 font-medium text-[#E4E6EB]">
-                {acq.name}
-              </span>
-
-              {/* One Single Telemetry Number */}
-              <span
-                className="font-mono text-sm w-16"
-                style={{ color: statusColor }}
-              >
-                {healthScore.toFixed(3)}
-              </span>
-
-              {/* Plain Text-Style Outage Button */}
-              <button
-                type="button"
-                disabled={isPending}
-                onClick={() => onToggleOutage && onToggleOutage(acq.id)}
-                className="text-xs transition-colors cursor-pointer bg-transparent border-0 p-0 hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
-                style={{ color: isOutage ? '#E5484D' : '#8B8F98' }}
-              >
-                {isPending ? 'dispatching...' : isOutage ? 'clear outage' : 'trigger outage'}
-              </button>
-            </div>
-          );
-        })}
-      </div>
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 divide-x divide-rule [&>*]:border-t [&>*]:border-rule lg:[&>*]:border-t-0">
+      <Readout
+        hero
+        label="Rolling PSR · last 50 recv"
+        value={hasPSR ? `${rollingPSR.toFixed(1)}%` : '--.-%'}
+        tone={psrTone}
+        sub={
+          droppedFrames > 0 ? (
+            <span className="text-alert">{droppedFrames} frames dropped, not counted</span>
+          ) : (
+            'payment success rate'
+          )
+        }
+      />
+      <Readout
+        label="Lifetime PSR"
+        value={typeof lifetimePSR === 'number' ? `${lifetimePSR.toFixed(2)}%` : NO_DATA}
+        tone={typeof lifetimePSR === 'number' ? 'text-text' : 'text-dim'}
+        sub="since this page connected"
+      />
+      <Readout
+        label="Transactions routed"
+        value={hasData ? totalCount.toLocaleString() : '--'}
+        sub="frames received"
+      />
+      <Readout
+        label="Declined"
+        value={hasData ? declinedCount.toLocaleString() : '--'}
+        tone={declinedCount > 0 ? 'text-alert' : 'text-text'}
+        sub={hasData ? `${((declinedCount / totalCount) * 100).toFixed(1)}% of routed` : NO_DATA}
+      />
+      <Readout
+        label="Errors"
+        value={hasData ? errorCount.toLocaleString() : '--'}
+        tone={errorCount > 0 ? 'text-alert' : 'text-text'}
+        sub="acquirer unreachable"
+      />
+      <Readout
+        label="Peak step Δ"
+        value={typeof peakStepDelta === 'number' ? `${peakStepDelta.toFixed(1)}%` : NO_DATA}
+        tone={typeof peakStepDelta === 'number' ? 'text-amber' : 'text-dim'}
+        sub="vs 100% breaker cliff"
+      />
     </div>
   );
 }
