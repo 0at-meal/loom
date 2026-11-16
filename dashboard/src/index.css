@@ -51,6 +51,7 @@ body {
   border: 1px solid var(--color-rule);
   border-radius: 0;
   box-shadow: none;
+  transition: background-color 150ms, border-color 150ms;
 }
 
 .well {
@@ -63,6 +64,7 @@ body {
 .pane:focus-within {
   outline: none;
   border-color: var(--color-amber);
+  box-shadow: 0 0 0 1px var(--color-amber);
 }
 
 /* Phosphor glow for the hero readout and live chart lines (CRT mode only) */
@@ -82,10 +84,10 @@ html[data-crt='on'] body::after {
   z-index: 50;
   background: repeating-linear-gradient(
     to bottom,
-    rgba(255, 255, 255, 0.035) 0,
-    rgba(255, 255, 255, 0.035) 1px,
+    rgba(255, 255, 255, 0.025) 0,
+    rgba(255, 255, 255, 0.025) 1px,
     transparent 1px,
-    transparent 3px
+    transparent 4px
   );
 }
 
@@ -99,8 +101,42 @@ html[data-crt='on'] body::after {
   animation: lamp-blink 1s steps(1, end) infinite;
 }
 
+/* Toast entrance animation */
+@keyframes toast-slide-in {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+.animate-toast-in {
+  animation: toast-slide-in 200ms ease-out;
+}
+
+/* Smooth state transitions on status text and backgrounds */
+.status-transition {
+  transition: color 150ms, background-color 150ms;
+}
+
+/* Colorblind-safe hatch pattern for degraded acquirers */
+.hatch-degraded {
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 2px,
+    rgba(255, 74, 61, 0.35) 2px,
+    rgba(255, 74, 61, 0.35) 4px
+  );
+}
+
 @media (prefers-reduced-motion: reduce) {
   .lamp-blink {
+    animation: none;
+  }
+  .animate-toast-in {
     animation: none;
   }
   html[data-crt='on'] body::after {
@@ -111,6 +147,12 @@ html[data-crt='on'] body::after {
   }
   html[data-crt='on'] .glow-line {
     filter: none;
+  }
+  .pane {
+    transition: none;
+  }
+  .status-transition {
+    transition: none;
   }
 }
 

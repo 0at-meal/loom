@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { ACQUIRERS, COLORS } from '../theme';
 
 const PRESETS = [
   {
@@ -27,12 +28,27 @@ const PRESETS = [
   },
 ];
 
+const BEHAVIORS = ['RETURN_DECLINE', 'HTTP_503', 'LATENCY_SPIKE'];
+
 /**
- * Scenario presets and global reset, as function-key style buttons (the body of the F6
- * pane). Shift+1/2/3 run the presets; R resets (see App.jsx).
+ * Scenario presets, advanced simulator controls (gray failure rate sliders and failure
+ * behavior selectors), and global route reset.
  */
 export function OperatorControls(props) {
-  const { lastActionStatus, onClearStatus, onPresetGlobalReset } = props;
+  const {
+    lastActionStatus,
+    onClearStatus,
+    onPresetGlobalReset,
+    rates = {},
+    behaviors = {},
+    onSetRate,
+    onRateCommit,
+    onSetBehavior,
+    submitting = {},
+  } = props;
+
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
   const statusTone =
     lastActionStatus?.type === 'success'
       ? 'text-ok'
@@ -42,6 +58,7 @@ export function OperatorControls(props) {
 
   return (
     <div className="flex flex-col">
+      {/* Preset buttons */}
       <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-rule">
         {PRESETS.map((p) => (
           <button
@@ -66,6 +83,68 @@ export function OperatorControls(props) {
         ))}
       </div>
 
+      {/* Advanced simulator controls (sliders & failure modes) */}
+      <div className="border-t border-rule bg-ground/50">
+        <button
+          type="button"
+          onClick={() => setShowAdvanced((v) => !v)}
+          className="w-full text-left px-2 py-1 flex items-center gap-1.5 text-[10px] uppercase tracking-[0.08em] text-dim hover:text-amber cursor-pointer"
+        >
+          <span>{showAdvanced ? '▾' : '▸'}</span>
+          <span>Advanced acquirer controls (rate sliders & failure behaviors)</span>
+        </button>
+
+        {showAdvanced && (
+          <div className="px-3 py-2 flex flex-col gap-2 border-t border-rule/50">
+            {ACQUIRERS.map((acq) => {
+              const currentRate = rates[acq.id] ?? 0.95;
+              const ratePct = Math.round(currentRate * 100);
+              const currentBehavior = behaviors[acq.id] || 'RETURN_DECLINE';
+              const isBusy = !!submitting[`rate_${acq.id}`];
+
+              return (
+                <div key={acq.id} className="flex flex-wrap items-center gap-3 text-[11px] font-mono">
+                  <span className="w-16 font-semibold uppercase tracking-[0.08em]" style={{ color: acq.color }}>
+                    {acq.ticker}
+                  </span>
+                  <span className="text-dim text-[10px] uppercase">Base rate:</span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="1"
+                    disabled={isBusy}
+                    value={ratePct}
+                    onChange={(e) => onSetRate && onSetRate(acq.id, Number(e.target.value) / 100)}
+                    onMouseUp={(e) => onRateCommit && onRateCommit(acq.id, Number(e.target.value) / 100)}
+                    onTouchEnd={(e) => onRateCommit && onRateCommit(acq.id, Number(e.target.value) / 100)}
+                    className="flex-1 min-w-[120px] max-w-xs accent-amber cursor-pointer"
+                    aria-label={`${acq.ticker} base success rate`}
+                  />
+                  <span className="w-10 text-right font-mono" style={{ color: ratePct < 70 ? COLORS.alert : COLORS.text }}>
+                    {ratePct}%
+                  </span>
+                  <span className="text-dim text-[10px] uppercase ml-2">Mode:</span>
+                  <select
+                    value={currentBehavior}
+                    onChange={(e) => onSetBehavior && onSetBehavior(acq.id, e.target.value)}
+                    className="bg-pane border border-rule px-1 py-0.5 text-[10px] text-text font-mono uppercase"
+                    aria-label={`${acq.ticker} failure behavior`}
+                  >
+                    {BEHAVIORS.map((b) => (
+                      <option key={b} value={b}>
+                        {b}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Reset & action status bar */}
       <div className="flex flex-wrap items-center gap-2 px-2 py-1.5 border-t border-rule text-[11px]">
         {onPresetGlobalReset && (
           <button
@@ -81,7 +160,7 @@ export function OperatorControls(props) {
             <span className={`${statusTone}`}>■</span>
             <span className="text-text truncate">{lastActionStatus.text}</span>
             {onClearStatus && (
-              <button type="button" onClick={onClearStatus} className="text-dim hover:text-text">
+              <button type="button" onClick={onClearStatus} className="text-dim hover:text-text cursor-pointer">
                 [close]
               </button>
             )}

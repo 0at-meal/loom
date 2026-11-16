@@ -4,6 +4,39 @@ import { ACQUIRERS, COLORS, isDegraded } from '../theme';
 const num = (v, digits) => (typeof v === 'number' ? v.toFixed(digits) : null);
 const pct = (v) => (typeof v === 'number' ? `${(v * 100).toFixed(1)}%` : null);
 
+function BarCell({ value, barFraction = null, color, thresholdFraction = null, className = '' }) {
+  if (value === null) {
+    return (
+      <td className={`px-2 py-1.5 text-right font-mono whitespace-nowrap text-dim ${className}`}>
+        no data
+      </td>
+    );
+  }
+
+  const barPercent = typeof barFraction === 'number' ? Math.max(0, Math.min(100, barFraction * 100)) : null;
+
+  return (
+    <td className={`px-2 py-1.5 text-right font-mono whitespace-nowrap relative ${className}`} style={{ color }}>
+      {barPercent !== null && (
+        <div className="absolute inset-y-1 right-2 left-4 pointer-events-none overflow-hidden opacity-20">
+          <div
+            className="h-full"
+            style={{ width: `${barPercent}%`, backgroundColor: color }}
+          />
+          {typeof thresholdFraction === 'number' && (
+            <div
+              className="absolute inset-y-0 w-[1px] bg-rule"
+              style={{ left: `${thresholdFraction * 100}%` }}
+              title="Alert threshold (0.700)"
+            />
+          )}
+        </div>
+      )}
+      <span className="relative z-10">{value}</span>
+    </td>
+  );
+}
+
 function Cell({ value, color, className = '' }) {
   return (
     <td className={`px-2 py-1.5 text-right font-mono whitespace-nowrap ${className}`} style={{ color: value === null ? COLORS.dim : color }}>
@@ -13,15 +46,20 @@ function Cell({ value, color, className = '' }) {
 }
 
 /**
- * Acquirer board: one row per acquirer with what the router believes about it (health,
- * expected success rate, Beta posterior alpha/beta), its latest Thompson draw, the PID
- * target and the smoothed weight actually used, plus the outage toggle. Cells the stream
- * has not provided read "no data".
+ * Acquirer board: one row per acquirer with health score, expected success rate,
+ * Thompson sample, target allocation, smoothed weight (with inline micro-bars),
+ * degraded hatch-swatch pattern, and outage control.
  */
-export function AcquirerTable({ acquirerStates = {}, activeOutages = {}, submitting = {}, onToggleOutage }) {
+export function AcquirerTable({
+  acquirerStates = {},
+  activeOutages = {},
+  submitting = {},
+  onToggleOutage,
+  onHoverAcquirer = null,
+}) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-[11px] border-collapse">
+      <table className="w-full text-[11px] border-collapse" role="table">
         <thead>
           <tr className="text-[10px] uppercase tracking-[0.1em] text-dim border-b border-rule">
             <th className="px-2 py-1 text-left font-normal">Acq</th>
@@ -44,22 +82,42 @@ export function AcquirerTable({ acquirerStates = {}, activeOutages = {}, submitt
               typeof s.alpha === 'number' && typeof s.beta === 'number'
                 ? `${s.alpha.toFixed(1)} / ${s.beta.toFixed(1)}`
                 : null;
+
             return (
-              <tr key={acq.id} className={`border-b border-rule last:border-b-0 ${bad ? 'bg-alert/10' : ''}`}>
+              <tr
+                key={acq.id}
+                onMouseEnter={() => onHoverAcquirer && onHoverAcquirer(acq.id)}
+                onMouseLeave={() => onHoverAcquirer && onHoverAcquirer(null)}
+                className={`border-b border-rule last:border-b-0 transition-colors hover:bg-amber/5 ${
+                  bad ? 'bg-alert/10' : ''
+                }`}
+              >
                 <td className="px-2 py-1.5 whitespace-nowrap">
                   <span className="inline-flex items-center gap-1.5">
-                    <span className={`inline-block w-2 h-2 ${bad ? 'lamp-blink' : ''}`} style={{ backgroundColor: color }} />
+                    <span
+                      className={`inline-block w-2.5 h-2.5 ${bad ? 'lamp-blink hatch-degraded' : ''}`}
+                      style={{ backgroundColor: color }}
+                    />
                     <span className="font-semibold tracking-[0.08em]" style={{ color }}>
-                      {acq.ticker}
+                      {bad ? '✗ ' : '✓ '}{acq.ticker}
                     </span>
                   </span>
                 </td>
-                <Cell value={num(s.health_score, 3)} color={color} />
+                <BarCell
+                  value={num(s.health_score, 3)}
+                  barFraction={typeof s.health_score === 'number' ? s.health_score : null}
+                  thresholdFraction={0.7}
+                  color={color}
+                />
                 <Cell value={pct(s.expected_success_rate)} color={COLORS.text} />
                 <Cell value={ab} color={COLORS.dim} className="hidden xl:table-cell" />
                 <Cell value={num(s.sample, 3)} color={COLORS.text} />
                 <Cell value={pct(s.target)} color={COLORS.dim} />
-                <Cell value={pct(s.weight)} color={color} />
+                <BarCell
+                  value={pct(s.weight)}
+                  barFraction={typeof s.weight === 'number' ? s.weight : null}
+                  color={color}
+                />
                 <td className="px-2 py-1.5 text-right">
                   <button
                     type="button"

@@ -176,7 +176,7 @@ cp .env.example .env
 > **Configuration Notice**: `.env` keys read through `data_layer/config.py`: `LEDGER_ENABLED`, `SQLITE_*`, `REDIS_ENABLED`, `REDIS_SNAPSHOT_INTERVAL_SEC`, the other `REDIS_*` keys, `KEY_PREFIX` and `REDIS_CHANNEL_*`. `router_core.server` also reads `DECAY_HALF_LIFE_SEC` (default for `--half-life-sec`) and `ROUTER_MAX_IN_FLIGHT` (default for `--max-in-flight`). CLI flags override `.env`. `PID_KP`, `PID_KI`, `PID_KD`, `APP_ENV` and `LOG_LEVEL` are never read. PID gains default to $K_p=0.12, K_i=0.005, K_d=0.25, I_{\text{max}}=1.0, w_{\text{min}}=0.03$ in `PIDConfig` and are overridden via server CLI arguments (`--kp`, `--ki`, `--kd`, `--min-allocation`).
 
 > [!NOTE]
-> **Running the tests:** `pytest` collects and runs 358 tests; CI runs the same suite with coverage, plus the dashboard's 27 Vitest tests (`cd dashboard && npm test`) and its production build. Dependencies are unpinned, and `pyproject.toml` turns warnings into errors, so a new library release can still break collection. A few tests assert wall-clock latency and can fail on a loaded machine.
+> **Running the tests:** `pytest` collects and runs 358 tests; CI runs the same suite with coverage, plus the dashboard's 39 Vitest tests (`cd dashboard && npm test`) and its production build. Dependencies are unpinned, and `pyproject.toml` turns warnings into errors, so a new library release can still break collection. A few tests assert wall-clock latency and can fail on a loaded machine.
 
 ---
 

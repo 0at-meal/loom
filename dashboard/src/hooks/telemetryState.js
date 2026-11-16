@@ -31,8 +31,11 @@ export const initialMetrics = {
   declinedCount: 0,
   errorCount: 0,
   rollingPSR: null,
+  previousRollingPSR: null,
   lifetimePSR: null,
   peakStepDelta: null,
+  rollingHistory: [],
+  perAcquirerRolling: {},
 };
 
 export const initialTelemetryState = {
@@ -45,6 +48,7 @@ export const initialTelemetryState = {
   acquirerStates: {},
   metrics: initialMetrics,
   rollingWindow: [],
+  perAcquirerWindow: {},
   prevAllocation: null,
   stream: initialStream,
 };
@@ -199,14 +203,33 @@ function applyRouting(state, frame, receivedAt) {
   const totalCount = m.totalCount + 1;
   const authorizedCount = m.authorizedCount + (authorized ? 1 : 0);
   const peakPct = stepDelta === null ? m.peakStepDelta : Math.max(m.peakStepDelta ?? 0, stepDelta * 100);
+  const newRollingPSR = (rollingSuccess / rollingWindow.length) * 100;
+  const rollingHistory = [...(m.rollingHistory || []), newRollingPSR].slice(-ROLLING_WINDOW);
+
+  // Per-acquirer rolling success rates within the window
+  const perAcqWindow = { ...(state.perAcquirerWindow || {}) };
+  if (selected) {
+    const prev = perAcqWindow[selected] || [];
+    perAcqWindow[selected] = [...prev, authorized ? 1 : 0].slice(-ROLLING_WINDOW);
+  }
+  const perAcquirerRolling = {};
+  for (const [aid, wins] of Object.entries(perAcqWindow)) {
+    if (wins.length > 0) {
+      perAcquirerRolling[aid] = (wins.reduce((a, b) => a + b, 0) / wins.length) * 100;
+    }
+  }
+
   const metrics = {
     totalCount,
     authorizedCount,
     declinedCount: m.declinedCount + (frame.status === 'DECLINED' ? 1 : 0),
     errorCount: m.errorCount + (frame.status === 'ERROR' ? 1 : 0),
-    rollingPSR: (rollingSuccess / rollingWindow.length) * 100,
+    rollingPSR: newRollingPSR,
+    previousRollingPSR: m.rollingPSR,
     lifetimePSR: (authorizedCount / totalCount) * 100,
     peakStepDelta: peakPct,
+    rollingHistory,
+    perAcquirerRolling,
   };
 
   const acquirerStates = { ...state.acquirerStates };
@@ -274,6 +297,7 @@ function applyRouting(state, frame, receivedAt) {
     acquirerStates,
     metrics,
     rollingWindow,
+    perAcquirerWindow: perAcqWindow,
     prevAllocation: smoothed ?? state.prevAllocation,
     stream,
   };

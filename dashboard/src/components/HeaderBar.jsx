@@ -9,9 +9,50 @@ function useUtcClock() {
   return now.toISOString().slice(11, 19);
 }
 
+function useSessionUptime() {
+  const [seconds, setSeconds] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setSeconds((s) => s + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  if (m >= 60) {
+    const h = Math.floor(m / 60);
+    const remM = m % 60;
+    return `${h}h ${remM}m`;
+  }
+  return `${m}m ${s}s`;
+}
+
 /**
- * Status bar: one terminal line across the top. Wordmark, link state, stream identity and
- * frame accounting, UTC clock. Only abnormal states get color (and a blinking lamp).
+ * Signal quality indicator icon (3 tiered bars).
+ */
+function SignalBars({ quality = 'good' }) {
+  // quality: 'good' (3 green), 'warn' (2 amber), 'poor' (1 red), 'off' (0)
+  const bar1 = quality !== 'off';
+  const bar2 = quality === 'good' || quality === 'warn';
+  const bar3 = quality === 'good';
+
+  const colorClass =
+    quality === 'good'
+      ? 'bg-ok'
+      : quality === 'warn'
+      ? 'bg-amber'
+      : 'bg-alert';
+
+  return (
+    <span className="inline-flex items-end gap-[1.5px] h-3 w-3 mr-0.5" aria-hidden="true">
+      <span className={`w-[2.5px] h-[3px] rounded-none ${bar1 ? colorClass : 'bg-rule'}`} />
+      <span className={`w-[2.5px] h-[6px] rounded-none ${bar2 ? colorClass : 'bg-rule'}`} />
+      <span className={`w-[2.5px] h-[10px] rounded-none ${bar3 ? colorClass : 'bg-rule'}`} />
+    </span>
+  );
+}
+
+/**
+ * Status bar: wordmark, connection signal quality icon, stream identity,
+ * session uptime, CRT toggle, keyboard shortcut trigger, and UTC clock.
  */
 export function HeaderBar({
   connectionStatus = 'connected',
@@ -22,24 +63,39 @@ export function HeaderBar({
   onReconnect,
   crt = true,
   onToggleCrt,
+  onOpenHelp,
 }) {
   const clock = useUtcClock();
+  const uptime = useSessionUptime();
   const dropped = stream?.droppedFrames ?? 0;
   const restarts = stream?.restarts ?? 0;
 
   let lamp;
+  let signalQuality = 'good';
+
   if (connectionStatus === 'connected') {
-    lamp = hasActiveOutage
-      ? { text: 'DEGRADED', color: 'text-alert', blink: true }
-      : isStale
-      ? { text: 'IDLE', color: 'text-dim', blink: false }
-      : { text: 'HEALTHY', color: 'text-ok', blink: false };
+    if (hasActiveOutage) {
+      lamp = { text: 'DEGRADED', prefix: '✗ ', color: 'text-alert', blink: true };
+      signalQuality = 'warn';
+    } else if (isStale) {
+      lamp = { text: 'IDLE', prefix: '• ', color: 'text-dim', blink: false };
+      signalQuality = 'warn';
+    } else if (dropped > 0) {
+      lamp = { text: 'HEALTHY (GAPS)', prefix: '✓ ', color: 'text-amber', blink: false };
+      signalQuality = 'warn';
+    } else {
+      lamp = { text: 'HEALTHY', prefix: '✓ ', color: 'text-ok', blink: false };
+      signalQuality = 'good';
+    }
   } else if (connectionStatus === 'reconnecting') {
-    lamp = { text: `RECONNECTING (${reconnectAttempt})`, color: 'text-alert', blink: true };
+    lamp = { text: `RECONNECTING (${reconnectAttempt})`, prefix: '✗ ', color: 'text-alert', blink: true };
+    signalQuality = 'poor';
   } else if (connectionStatus === 'connecting') {
-    lamp = { text: 'CONNECTING', color: 'text-dim', blink: true };
+    lamp = { text: 'CONNECTING', prefix: '• ', color: 'text-dim', blink: true };
+    signalQuality = 'poor';
   } else {
-    lamp = { text: 'CONNECTION LOST', color: 'text-alert', blink: false };
+    lamp = { text: 'CONNECTION LOST', prefix: '✗ ', color: 'text-alert', blink: false };
+    signalQuality = 'off';
   }
 
   return (
@@ -50,14 +106,19 @@ export function HeaderBar({
           <span className="text-text">ROUTER</span>
         </h1>
 
-        <span className={`flex items-center gap-1.5 ${lamp.color}`} role="status">
+        <span
+          className={`flex items-center gap-1.5 ${lamp.color}`}
+          role="status"
+          aria-live="polite"
+        >
+          <SignalBars quality={signalQuality} />
           <span className={`inline-block w-2 h-2 bg-current ${lamp.blink ? 'lamp-blink' : ''}`} />
-          {lamp.text}
+          <span>{lamp.text}</span>
           {connectionStatus === 'disconnected' && onReconnect && (
             <button
               type="button"
               onClick={onReconnect}
-              className="ml-1 px-1 border border-alert text-alert hover:bg-alert hover:text-ground uppercase"
+              className="ml-1 px-1 border border-alert text-alert hover:bg-alert hover:text-ground uppercase cursor-pointer"
             >
               Reconnect
             </button>
@@ -80,13 +141,26 @@ export function HeaderBar({
         )}
 
         <span className="ml-auto flex items-center gap-3">
+          <span className="text-dim font-mono hidden md:inline" title="Session connection uptime">
+            ↑ {uptime}
+          </span>
+          {onOpenHelp && (
+            <button
+              type="button"
+              onClick={onOpenHelp}
+              title="Keyboard shortcuts (?)"
+              className="px-1 border border-rule text-dim hover:text-amber hover:border-amber uppercase font-semibold cursor-pointer"
+            >
+              ?
+            </button>
+          )}
           {onToggleCrt && (
             <button
               type="button"
               onClick={onToggleCrt}
               aria-pressed={crt}
               title="Toggle CRT effect (C)"
-              className="px-1 border border-rule text-dim hover:text-amber hover:border-amber uppercase"
+              className="px-1 border border-rule text-dim hover:text-amber hover:border-amber uppercase cursor-pointer"
             >
               CRT {crt ? 'ON' : 'OFF'}
             </button>

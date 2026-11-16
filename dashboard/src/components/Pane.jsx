@@ -1,11 +1,15 @@
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 
 /**
  * Instrument pane: a bordered panel with a header bar carrying a function-key tag
- * ("F2"), an uppercase title and an optional right-side status slot. `alert` turns the
- * header red; color is otherwise kept out of the chrome.
+ * ("F2"), an uppercase title, an optional right-side status slot, and a collapsible
+ * body toggled by a chevron button. `alert` turns the header red; color is otherwise
+ * kept out of the chrome.
  */
 export function Pane({ code, title, status, alert = false, className = '', bodyClassName = '', id, children }) {
+  const [collapsed, setCollapsed] = useState(false);
+  const toggleCollapse = useCallback(() => setCollapsed((v) => !v), []);
+
   return (
     <section
       id={id}
@@ -31,8 +35,19 @@ export function Pane({ code, title, status, alert = false, className = '', bodyC
           {title}
         </span>
         {status && <span className="ml-auto min-w-0 overflow-hidden whitespace-nowrap text-ellipsis text-dim normal-case tracking-normal">{status}</span>}
+        <button
+          type="button"
+          onClick={toggleCollapse}
+          aria-expanded={!collapsed}
+          aria-label={collapsed ? `Expand ${title}` : `Collapse ${title}`}
+          className={`${status ? '' : 'ml-auto'} px-1 text-dim hover:text-amber bg-transparent border-none cursor-pointer text-[11px] leading-none`}
+        >
+          {collapsed ? '▸' : '▾'}
+        </button>
       </header>
-      <div className={`flex-1 min-h-0 ${bodyClassName}`}>{children}</div>
+      {!collapsed && (
+        <div className={`flex-1 min-h-0 ${bodyClassName}`}>{children}</div>
+      )}
     </section>
   );
 }
