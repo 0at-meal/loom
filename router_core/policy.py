@@ -7,14 +7,16 @@ current time in, so a scenario measured in the harness runs the served decision 
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 import numpy as np
 
 from router_core.bandit import BanditStateRegistry
+from router_core.gate import TechnicalGate
 from router_core.models import RouterConfig
 from router_core.pid import PIDConfig, PIDDiagnostics, PIDState, calculate_pid_step
 from router_core.state import AcquirerStateSnapshot, Outcome
@@ -158,12 +160,40 @@ class LoomTrace:
     value_protected: bool
 
 
+class ArrivalRate:
+    """Exponentially weighted count of first attempts per second (time constant ``tau``)."""
+
+    __slots__ = ("_last", "_n", "_tau")
+
+    def __init__(self, tau_sec: float = 10.0) -> None:
+        """Start with no arrivals seen."""
+        self._tau = tau_sec
+        self._n = 0.0
+        self._last: float | None = None
+
+    def observe(self, now: float) -> None:
+        """Count one arrival at ``now`` (mutates)."""
+        if self._last is not None and now > self._last:
+            self._n *= math.exp(-(now - self._last) / self._tau)
+        self._last = now if self._last is None else max(self._last, now)
+        self._n += 1.0
+
+    @property
+    def per_sec(self) -> float:
+        """Estimated arrivals per second as of the last arrival."""
+        return self._n / self._tau
+
+
 class LoomPolicy:
     """Thompson Sampling perception, optional value protection, PID smoothing and actuation.
 
     This is the decision and belief-update code of ``BanditRouter`` (Phases 3, 4, 8 and
-    Phase 4b's dispatch-time protection), moved without changes. Loom never retries in
-    Stage 0.
+    Phase 4b's dispatch-time protection), moved without changes in Stage 0. Stage 1 adds,
+    each off unless configured: a technical gate (``RouterConfig.gate_config``) that takes
+    acquirers out of the allocation and probes them on the wall clock, one cascade retry
+    (``RouterConfig.cascade``) and an exploration floor expressed as a rate
+    (``PIDConfig.floor_rate_per_sec``). With all three off, decisions are bit-for-bit the
+    Stage 0 ones.
     """
 
     name = "loom"
@@ -203,6 +233,18 @@ class LoomPolicy:
             self._cumulative_target = {aid: 0.0 for aid in acquirer_ids}
             self._dispatched_count = {aid: 0 for aid in acquirer_ids}
 
+        self._gate: TechnicalGate | None = (
+            TechnicalGate(
+                self._acquirer_ids,
+                config.gate_config,
+                {r.acquirer_id: r.timeout_sec for r in config.routes},
+            )
+            if config.gate_config is not None
+            else None
+        )
+        self._cascade = config.cascade
+        self._arrivals = ArrivalRate()
+
     @property
     def acquirer_ids(self) -> tuple[str, ...]:
         """Acquirers in route-config order."""
@@ -210,8 +252,17 @@ class LoomPolicy:
 
     @property
     def max_attempts(self) -> int:
-        """Loom makes one attempt per payment."""
-        return 1
+        """Two attempts with the cascade on, else one."""
+        return 2 if self._cascade else 1
+
+    @property
+    def gate(self) -> TechnicalGate | None:
+        """The technical gate, if configured."""
+        return self._gate
+
+    def gate_status(self, now: float) -> dict[str, dict[str, Any]] | None:
+        """Per-acquirer gate state for /health (None without a gate)."""
+        return None if self._gate is None else self._gate.status(now)
 
     @property
     def registry(self) -> BanditStateRegistry:
@@ -294,9 +345,21 @@ class LoomPolicy:
         """Choose an acquirer and return the diagnostics the router reports.
 
         Mutates the policy: Thompson draws advance the generator and decay beliefs to
-        ``now``; unless the payment is value-protected or ``exclude`` is non-empty, the PID
-        steps once and the deficit counters advance.
+        ``now``; unless the payment is value-protected, a gate probe, sent while every gate
+        is open, or a retry (``exclude`` non-empty), the PID steps once and the deficit
+        counters advance. With a gate, overdue in-flight attempts are counted first (which
+        may open a gate) and the chosen attempt is tracked until its feedback.
         """
+        gate = self._gate
+        probe_id: str | None = None
+        if gate is not None:
+            gate.scan_overdue(now)
+        if not exclude:
+            self._arrivals.observe(now)
+            if gate is not None and self._may_probe(ctx.amount):
+                probe_id = gate.due_probe(now)
+        blocked = self._blocked()
+
         # 1. Perception, Value-Scaled Policy, PID Smoothing & Selection
         raw_samples = self._registry.sample_all(rng=self._rng, now=now)
         effective_samples = raw_samples
@@ -322,7 +385,8 @@ class LoomPolicy:
                 # High-value payment (AUDIT F-10): send it to the best posterior mean. It
                 # stays out of the allocation stream, so the PID state and the deficit
                 # counters are left exactly as the other payments set them.
-                protected_id = best_posterior_mean(means)
+                eligible_means = {a: m for a, m in means.items() if a not in blocked}
+                protected_id = best_posterior_mean(eligible_means or means)
 
         target_allocation: dict[str, float] | None = None
         smoothed_allocation: dict[str, float] | None = None
@@ -330,13 +394,33 @@ class LoomPolicy:
         propensities: dict[str, float]
 
         if exclude:
-            # Another attempt for the same payment (unused by Loom in Stage 0): best remaining
-            # sample, leaving the PID and the deficit counters untouched.
-            remaining = [aid for aid in effective_samples if aid not in exclude]
+            # Another attempt for the same payment: never an excluded acquirer, never a
+            # gated one unless nothing else is left. The PID and deficit counters stay put.
+            remaining = [aid for aid in self._acquirer_ids if aid not in exclude]
             if not remaining:
                 raise ValueError(f"every acquirer is excluded: {sorted(exclude)}")
-            selected_id = max(remaining, key=lambda aid: (effective_samples[aid], aid))
-            reason = "excluded_fallback"
+            eligible = [aid for aid in remaining if aid not in blocked]
+            if not eligible:
+                assert gate is not None
+                selected_id = gate.fallback(exclude)
+                reason = "gate_all_open"
+            elif self._cascade:
+                # A retry is a payment that already failed once: exploit, best posterior mean.
+                states = self._registry.get_all_states()
+                selected_id = max(
+                    eligible,
+                    key=lambda aid: (states[aid].expected_psr, -self._acquirer_ids.index(aid)),
+                )
+                reason = "cascade_retry"
+            else:
+                selected_id = max(eligible, key=lambda aid: (effective_samples[aid], aid))
+                reason = "excluded_fallback"
+            propensities = one_hot(self._acquirer_ids, selected_id)
+        elif probe_id is not None:
+            # Wall-clock probe of an open gate; outside the allocation stream like a
+            # protected payment. A fast failure is retried by the cascade, so it costs a hop.
+            selected_id = probe_id
+            reason = "gate_probe"
             propensities = one_hot(self._acquirer_ids, selected_id)
         elif protected_id is not None:
             selected_id = protected_id
@@ -348,8 +432,14 @@ class LoomPolicy:
                 smoothed_allocation = dict(target_allocation)
             propensities = one_hot(self._acquirer_ids, selected_id)
         elif self._pid_config is not None and self._pid_state is not None:
+            eligible = [aid for aid in self._acquirer_ids if aid not in blocked]
             # Thompson sampling target allocation using effective samples
-            win_id = max(effective_samples.keys(), key=lambda aid: (effective_samples[aid], aid))
+            if blocked:
+                win_id = max(eligible, key=lambda aid: (effective_samples[aid], aid))
+            else:
+                win_id = max(
+                    effective_samples.keys(), key=lambda aid: (effective_samples[aid], aid)
+                )
             target_allocation = {aid: 1.0 if aid == win_id else 0.0 for aid in effective_samples}
 
             # PID smoothing step
@@ -359,6 +449,7 @@ class LoomPolicy:
                 state=self._pid_state,
                 config=self._pid_config,
                 dt=1.0,
+                floors=self._floors(blocked),
             )
             self._current_allocation = step_result.smoothed_allocation
             self._pid_state = step_result.next_state
@@ -366,12 +457,25 @@ class LoomPolicy:
             smoothed_allocation = dict(self._current_allocation)
             diagnostics = step_result.diagnostics
 
-            # Discrete Actuation (Stochastic or Deficit Round-Robin)
+            # Discrete Actuation (Stochastic or Deficit Round-Robin), over the acquirers
+            # whose gate is closed; the allocation is renormalised over them.
+            if not blocked:
+                act = self._current_allocation
+            else:
+                total = sum(self._current_allocation[aid] for aid in eligible)
+                act = {
+                    aid: (
+                        self._current_allocation[aid] / total if total > 0.0 else 1 / len(eligible)
+                    )
+                    if aid not in blocked
+                    else 0.0
+                    for aid in self._acquirer_ids
+                }
             if self._pid_config.actuation_mode == "deficit":
                 for aid in self._acquirer_ids:
-                    self._cumulative_target[aid] += self._current_allocation[aid]
+                    self._cumulative_target[aid] += act[aid]
                 selected_id = max(
-                    sorted(self._acquirer_ids),
+                    sorted(eligible),
                     key=lambda aid: (
                         self._cumulative_target[aid] - self._dispatched_count[aid],
                         aid,
@@ -381,17 +485,15 @@ class LoomPolicy:
                 reason = "pid_deficit"
                 propensities = one_hot(self._acquirer_ids, selected_id)
             else:
-                keys = sorted(self._current_allocation.keys())
-                probs = [self._current_allocation[k] for k in keys]
+                keys = sorted(eligible)
+                probs = [act[k] for k in keys]
                 selected_id = str(self._rng.choice(keys, p=probs))
                 reason = "pid_stochastic"
-                propensities = {aid: self._current_allocation[aid] for aid in self._acquirer_ids}
+                propensities = {aid: act[aid] for aid in self._acquirer_ids}
         else:
             # Winner-take-all argmax hard-switch (Phase 3 baseline using effective samples)
-            selected_id = max(
-                effective_samples.keys(),
-                key=lambda aid: (effective_samples[aid], aid),
-            )
+            candidates = [a for a in effective_samples if a not in blocked]
+            selected_id = max(candidates, key=lambda aid: (effective_samples[aid], aid))
             smoothed_allocation = {
                 aid: 1.0 if aid == selected_id else 0.0 for aid in effective_samples
             }
@@ -399,6 +501,10 @@ class LoomPolicy:
             reason = "thompson_argmax"
             propensities = one_hot(self._acquirer_ids, selected_id)
 
+        if gate is not None:
+            gate.record_dispatch(
+                ctx.transaction_id, ctx.attempt, selected_id, now, probe=reason == "gate_probe"
+            )
         decision = Decision(
             transaction_id=ctx.transaction_id,
             acquirer_id=selected_id,
@@ -414,28 +520,85 @@ class LoomPolicy:
             target_allocation=target_allocation,
             smoothed_allocation=smoothed_allocation,
             pid_diagnostics=diagnostics,
-            value_protected=protected_id is not None,
+            value_protected=reason == "value_protected",
         )
         return decision, trace
+
+    def _blocked(self) -> frozenset[str]:
+        """Acquirers that may not get ordinary traffic now: gated ones, unless all are gated.
+
+        When every gate is open, the acquirers still processing payments stay in the
+        allocation (and may take retries), rather than everything piling onto one of them.
+        """
+        gate = self._gate
+        if gate is None:
+            return frozenset()
+        blocked = gate.blocked()
+        if len(blocked) == len(self._acquirer_ids):
+            blocked = frozenset(self._acquirer_ids) - gate.recently_working()
+        return blocked
+
+    def _may_probe(self, amount: float) -> bool:
+        """Whether this payment is cheap enough to be a gate probe (value scaling on)."""
+        cfg = self._value_scaled_config
+        if self._gate is None or cfg is None or not cfg.enabled:
+            return True
+        return cfg.calculate_shrinkage(amount) <= self._gate.config.probe_max_shrinkage
+
+    def _floors(self, blocked: frozenset[str]) -> dict[str, float] | None:
+        """Per-acquirer PID floors, or None for the plain ``min_allocation`` floor."""
+        cfg = self._pid_config
+        assert cfg is not None
+        if cfg.floor_rate_per_sec is None and not blocked:
+            return None
+        base = cfg.min_allocation
+        rate = self._arrivals.per_sec
+        if cfg.floor_rate_per_sec is not None and rate > 0.0:
+            base = min(base, cfg.floor_rate_per_sec / rate)
+        return {aid: 0.0 if aid in blocked else base for aid in self._acquirer_ids}
 
     def feedback(self, decision: Decision, observation: Observation, now: float) -> None:
         """Record the attempt's outcome in the chosen acquirer's beliefs (mutates the registry).
 
         An observation without an outcome (router-side failure) is not evidence and is
-        ignored.
+        ignored by the beliefs. With a gate, the attempt is also applied to its CUSUM, probe
+        or overdue tracking.
         """
-        if observation.outcome is None:
-            return
-        self._registry.record_outcome(
-            acquirer_id=decision.acquirer_id,
-            success=observation.authorized,
-            timestamp=now,
-            outcome=observation.outcome,
-        )
+        if observation.outcome is not None:
+            self._registry.record_outcome(
+                acquirer_id=decision.acquirer_id,
+                success=observation.authorized,
+                timestamp=now,
+                outcome=observation.outcome,
+            )
+        if self._gate is not None:
+            self._gate.record_result(
+                decision.transaction_id,
+                decision.attempt,
+                observation.outcome,
+                now,
+                throttled=observation.failure == FailureKind.THROTTLED,
+                safe=observation.safe_to_retry,
+            )
 
     def should_retry(self, decision: Decision, observation: Observation) -> bool:
-        """Loom does not retry in Stage 0 (cascade is Stage 1)."""
-        return False
+        """With the cascade on, retry once after a failure that certainly was not processed.
+
+        Only if another acquirer is eligible (its gate closed); never after a timeout or an
+        ambiguous answer.
+        """
+        if (
+            not self._cascade
+            or decision.attempt != 1
+            or observation.authorized
+            or not observation.safe_to_retry
+        ):
+            return False
+        others = [a for a in self._acquirer_ids if a != decision.acquirer_id]
+        if self._gate is not None:
+            blocked = self._blocked()
+            others = [a for a in others if a not in blocked]
+        return bool(others)
 
     def snapshot(self, acquirer_id: str) -> AcquirerStateSnapshot:
         """Belief snapshot of one acquirer as of its last event."""

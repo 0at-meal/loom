@@ -288,6 +288,8 @@ def create_router_app(
             "redis": sidecar.status() if sidecar is not None else {"enabled": False},
             "router_pool_timeouts": active_router.pool_timeouts,
             "admission": active_router.in_flight_status(),
+            "gate": active_router.gate_status(),
+            "cascade": active_router.config.cascade,
         }
 
     @app.get(

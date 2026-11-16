@@ -7,6 +7,7 @@ import inspect
 import logging
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal
 
 import httpx
@@ -14,7 +15,12 @@ import numpy as np
 
 from acquirer_sim.models import AuthorizeRequest, AuthorizeResponse
 from router_core.bandit import BanditStateRegistry
-from router_core.models import AcquirerRouteConfig, RouterConfig, RoutingResult
+from router_core.models import (
+    AcquirerRouteConfig,
+    RouterConfig,
+    RoutingAttempt,
+    RoutingResult,
+)
 from router_core.pid import PIDDiagnostics, PIDState
 from router_core.policy import (
     DecisionContext,
@@ -36,6 +42,17 @@ logger = logging.getLogger("loom.router")
 
 class UnexpectedAcquirerResponse(Exception):
     """An acquirer answered with something the router cannot interpret."""
+
+
+@dataclass(frozen=True, slots=True)
+class _AttemptOutcome:
+    """What one dispatch returned, classified."""
+
+    status: Literal["AUTHORIZED", "DECLINED", "ERROR"]
+    observation: Observation
+    response_payload: AuthorizeResponse | None
+    error_message: str | None
+    latency_ms: float
 
 
 class BanditRouter:
@@ -189,6 +206,10 @@ class BanditRouter:
         """Sample Beta beliefs across all candidate routes and select argmax arm."""
         return self._policy.select_route(now=self._clock(), amount=amount)
 
+    def gate_status(self) -> dict[str, dict[str, Any]] | None:
+        """Per-acquirer technical gate state (None when no gate is configured)."""
+        return self._policy.gate_status(self._clock())
+
     def in_flight_status(self) -> dict[str, Any]:
         """Admission counters for /health."""
         return {
@@ -220,52 +241,13 @@ class BanditRouter:
             self._in_flight -= 1
             self._admission.release()
 
-    async def _route(self, request: AuthorizeRequest, queue_wait_ms: float = 0.0) -> RoutingResult:
-        """Execute end-to-end routing decision, acquirer dispatch, and state update."""
-        t_start = time.perf_counter()
-
-        # 1. Decision: perception, value-scaled policy, PID smoothing and actuation
-        t_sample_start = time.perf_counter()
-        decision, trace = self._policy.decide_traced(
-            DecisionContext(transaction_id=request.transaction_id, amount=request.amount),
-            now=self._clock(),
-        )
-        selected_id = decision.acquirer_id
-        raw_samples = trace.raw_samples
-        adjusted_samples = trace.adjusted_samples
-        shrinkage = trace.shrinkage
-
-        t_sample_end = time.perf_counter()
-        routing_latency_ms = (t_sample_end - t_sample_start) * 1000.0
-
-        sample_str = ", ".join(f"{k}={v:.4f}" for k, v in sorted(raw_samples.items()))
-        if adjusted_samples is not None:
-            adj_str = ", ".join(f"{k}={v:.4f}" for k, v in sorted(adjusted_samples.items()))
-            logger.info(
-                "Routing decision: tx_id=%s -> selected=%s "
-                "(raw: [%s], adjusted: [%s], lambda=%.4f, protected=%s)",
-                request.transaction_id,
-                selected_id,
-                sample_str,
-                adj_str,
-                shrinkage or 0.0,
-                trace.value_protected,
-            )
-        else:
-            logger.info(
-                "Routing decision: tx_id=%s -> selected=%s (samples: [%s])",
-                request.transaction_id,
-                selected_id,
-                sample_str,
-            )
-
-        route_info = self._routes[selected_id]
+    async def _dispatch(self, request: AuthorizeRequest, acquirer_id: str) -> _AttemptOutcome:
+        """Send one attempt to ``acquirer_id`` and classify the answer (never raises for I/O)."""
+        route_info = self._routes[acquirer_id]
         url = route_info.get_authorize_url()
-
-        # 2. HTTP Dispatch to Acquirer
         if self._client is None and not self._acquirer_clients:
             await self.start()
-        client = self.client_for(selected_id)
+        client = self.client_for(acquirer_id)
 
         t_dispatch_start = time.perf_counter()
         status: Literal["AUTHORIZED", "DECLINED", "ERROR"]
@@ -318,7 +300,7 @@ class BanditRouter:
             self.pool_timeouts += 1
             status = "ERROR"
             observation = Observation(None, FailureKind.NOT_SENT)
-            error_msg = f"Router connection pool exhausted for {selected_id}: PoolTimeout ({err})"
+            error_msg = f"Router connection pool exhausted for {acquirer_id}: PoolTimeout ({err})"
         except (httpx.TransportError, UnexpectedAcquirerResponse) as err:
             # Timeouts, connection and protocol errors, and unreadable 200 bodies
             status = "ERROR"
@@ -328,42 +310,158 @@ class BanditRouter:
                 if isinstance(err, httpx.TimeoutException)
                 else FailureKind.AMBIGUOUS,
             )
-            error_msg = f"Transport error to {selected_id}: {type(err).__name__} ({err})"
+            error_msg = f"Transport error to {acquirer_id}: {type(err).__name__} ({err})"
 
-        t_dispatch_end = time.perf_counter()
-        acquirer_latency_ms = (t_dispatch_end - t_dispatch_start) * 1000.0
+        latency_ms = (time.perf_counter() - t_dispatch_start) * 1000.0
+        return _AttemptOutcome(status, observation, response_payload, error_msg, latency_ms)
+
+    async def _route(self, request: AuthorizeRequest, queue_wait_ms: float = 0.0) -> RoutingResult:
+        """Execute end-to-end routing decision, acquirer dispatch, and state update.
+
+        With the cascade on, a failure that certainly was not processed is retried once on
+        another acquirer (Stage 1); the result describes the last attempt and lists all.
+        """
+        t_start = time.perf_counter()
+
+        # 1. Decision: perception, value-scaled policy, PID smoothing and actuation
+        t_sample_start = time.perf_counter()
+        decision, trace = self._policy.decide_traced(
+            DecisionContext(transaction_id=request.transaction_id, amount=request.amount),
+            now=self._clock(),
+        )
+        selected_id = decision.acquirer_id
+        raw_samples = trace.raw_samples
+        adjusted_samples = trace.adjusted_samples
+        shrinkage = trace.shrinkage
+
+        t_sample_end = time.perf_counter()
+        routing_latency_ms = (t_sample_end - t_sample_start) * 1000.0
+
+        sample_str = ", ".join(f"{k}={v:.4f}" for k, v in sorted(raw_samples.items()))
+        if adjusted_samples is not None:
+            adj_str = ", ".join(f"{k}={v:.4f}" for k, v in sorted(adjusted_samples.items()))
+            logger.info(
+                "Routing decision: tx_id=%s -> selected=%s "
+                "(raw: [%s], adjusted: [%s], lambda=%.4f, protected=%s)",
+                request.transaction_id,
+                selected_id,
+                sample_str,
+                adj_str,
+                shrinkage or 0.0,
+                trace.value_protected,
+            )
+        else:
+            logger.info(
+                "Routing decision: tx_id=%s -> selected=%s (samples: [%s])",
+                request.transaction_id,
+                selected_id,
+                sample_str,
+            )
+
+        attempts: list[RoutingAttempt] = []
+        errors: list[str] = []
+        retry_errors: list[str] = []
+        last_error: str | None = None
+        acquirer_latency_ms = 0.0
+        while True:
+            # 2. HTTP Dispatch to Acquirer
+            selected_id = decision.acquirer_id
+            sent = await self._dispatch(request, selected_id)
+            acquirer_latency_ms += sent.latency_ms
+            observation = sent.observation
+            error_msg = sent.error_message
+
+            # 3. State feedback. The acquirer has already answered, so a failure here must
+            # not turn an authorized payment into an error for the caller (AUDIT F-07).
+            try:
+                self._policy.feedback(decision, observation, now=self._clock())
+                updated_snapshot = self._registry.get_state(selected_id)
+            except Exception as exc:  # noqa: BLE001 - best-effort after dispatch
+                logger.error(
+                    "State update failed after dispatch: tx_id=%s acquirer=%s outcome=%s: %s",
+                    request.transaction_id,
+                    selected_id,
+                    observation.outcome,
+                    exc,
+                )
+                note = f"state update failed: {type(exc).__name__} ({exc})"
+                error_msg = f"{error_msg}; {note}" if error_msg else note
+                updated_snapshot = self._fallback_snapshot(selected_id)
+
+            attempts.append(
+                RoutingAttempt(
+                    attempt=decision.attempt,
+                    acquirer_id=selected_id,
+                    reason=decision.reason,
+                    status=sent.status,
+                    outcome=observation.outcome,
+                    failure=observation.failure.value if observation.failure else None,
+                    acquirer_latency_ms=sent.latency_ms,
+                    error_message=error_msg,
+                )
+            )
+            if error_msg:
+                errors.append(f"attempt {decision.attempt} ({selected_id}): {error_msg}")
+            last_error = error_msg
+
+            # 4. Cascade: one more attempt on another acquirer, only if certainly safe. The
+            # first attempt has been answered, so a fault here ends the payment with that
+            # answer instead of failing the call.
+            next_decision = None
+            try:
+                tried = frozenset(a.acquirer_id for a in attempts)
+                if (
+                    len(attempts) < self._policy.max_attempts
+                    and len(tried) < len(self._routes)
+                    and self._policy.should_retry(decision, observation)
+                ):
+                    t_retry = time.perf_counter()
+                    next_decision = self._policy.decide(
+                        DecisionContext(
+                            transaction_id=request.transaction_id,
+                            amount=request.amount,
+                            attempt=decision.attempt + 1,
+                        ),
+                        now=self._clock(),
+                        exclude=tried,
+                    )
+                    routing_latency_ms += (time.perf_counter() - t_retry) * 1000.0
+            except Exception as exc:  # noqa: BLE001 - best-effort after dispatch
+                logger.error("Retry decision failed: tx_id=%s: %s", request.transaction_id, exc)
+                retry_errors.append(f"retry decision failed: {type(exc).__name__} ({exc})")
+            if next_decision is None:
+                break
+            logger.info(
+                "Cascade: tx_id=%s %s failed (%s), retrying on %s",
+                request.transaction_id,
+                selected_id,
+                observation.failure,
+                next_decision.acquirer_id,
+            )
+            decision = next_decision
+
+        status = sent.status
         authorized = observation.authorized
         success = authorized
         outcome = observation.outcome
-
-        # 3. State feedback. The acquirer has already answered, so a failure here must not
-        # turn an authorized payment into an error for the caller (AUDIT F-07).
-        try:
-            self._policy.feedback(decision, observation, now=self._clock())
-            updated_snapshot = self._registry.get_state(selected_id)
-        except Exception as exc:  # noqa: BLE001 - best-effort after dispatch
-            logger.error(
-                "State update failed after dispatch: tx_id=%s acquirer=%s outcome=%s: %s",
-                request.transaction_id,
-                selected_id,
-                outcome,
-                exc,
-            )
-            note = f"state update failed: {type(exc).__name__} ({exc})"
-            error_msg = f"{error_msg}; {note}" if error_msg else note
-            updated_snapshot = self._fallback_snapshot(selected_id)
+        response_payload = sent.response_payload
+        # One attempt: its own message, as before Stage 1. Several: each one, labelled.
+        parts = errors if len(attempts) > 1 else ([last_error] if last_error else [])
+        parts = parts + retry_errors
+        error_msg = "; ".join(parts) if parts else None
 
         t_end = time.perf_counter()
         total_latency_ms = (t_end - t_start) * 1000.0 + queue_wait_ms
 
         logger.info(
-            "Routing outcome: tx_id=%s acquirer=%s status=%s authorized=%s "
+            "Routing outcome: tx_id=%s acquirer=%s status=%s authorized=%s attempts=%d "
             "acquirer_lat=%.2fms total_lat=%.2fms -> "
             "updated state: alpha=%.3f beta=%.3f health=%.3f mean=%.3f",
             request.transaction_id,
             selected_id,
             status,
             authorized,
+            len(attempts),
             acquirer_latency_ms,
             total_latency_ms,
             updated_snapshot.alpha,
@@ -393,6 +491,7 @@ class BanditRouter:
             adjusted_samples=adjusted_samples,
             exploration_shrinkage=shrinkage,
             value_protected=trace.value_protected,
+            attempts=attempts,
             timestamp=time.time(),
         )
 
