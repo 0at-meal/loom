@@ -121,6 +121,24 @@ class RouterConfig(BaseModel):
             "acquirer. Never after a timeout or an ambiguous answer."
         ),
     )
+    withhold_gated_failures: bool = Field(
+        default=False,
+        description=(
+            "Stage 2: once an acquirer's gate is not CLOSED, technical failures it answers "
+            "(and every failed gate probe) update the gate only, not the beliefs. The gate "
+            "already owns outage evidence; long-memory beliefs would carry it for hours."
+        ),
+    )
+    allocation_draws: int | None = Field(
+        default=None,
+        ge=2,
+        le=10_000,
+        description=(
+            "Stage 2: the PID setpoint becomes each eligible acquirer's Thompson win "
+            "probability, estimated from this many joint draws and projected onto the floored "
+            "simplex, instead of a one-hot of a single draw. None keeps the one-hot setpoint."
+        ),
+    )
 
 
 class RoutingAttempt(BaseModel):
