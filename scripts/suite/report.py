@@ -20,13 +20,17 @@ import json
 from typing import Any
 
 LOOM = "loom_served"
+FAILFAST = "loom_failfast"
+# Policies the acceptance criteria are applied to, when present in the JSON.
+CANDIDATES = (LOOM, FAILFAST)
 COMPETENT = "competent"
 # Acceptance criterion 1 of the proposal: lower CI bound of (Loom - competent) >= -0.15 pp.
 TIE_MARGIN_PP = -0.15
-DYNAMICS_POLICIES = (LOOM, "loom_bench", COMPETENT, "static_m3")
+DYNAMICS_POLICIES = (LOOM, FAILFAST, "loom_bench", COMPETENT, "static_m3")
 SHORT = {
     "loom_served": "Loom served",
     "loom_bench": "Loom bench",
+    "loom_failfast": "Loom fail-fast",
     "loom_raw": "Loom no PID",
     "static_m3": "Static M=3",
     "competent": "Competent",
@@ -171,65 +175,74 @@ def lost_total(lost: dict[str, Any], short_name: str) -> float:
 
 
 def acceptance(data: dict[str, Any]) -> list[str]:
-    """The proposal's acceptance criteria 1, 3, 4 and 5 applied to Loom as it is today."""
+    """The proposal's acceptance criteria 1, 3, 4 and 5, for each candidate Loom policy."""
     scen = data["scenarios"]
     lines: list[str] = []
-    key = f"{LOOM}_vs_{COMPETENT}"
-    if all(key in e["comparisons"] for e in scen.values()):
-        passing = [
-            n for n, e in scen.items() if e["comparisons"][key]["ci95_low_pp"] >= TIE_MARGIN_PP
-        ]
-        lines.append(
-            f"1. Lower 95% bound of (Loom served - competent) >= {TIE_MARGIN_PP} pp: "
-            f"**{len(passing)} of {len(scen)} scenarios**"
-            + (f" ({', '.join(f'`{n}`' for n in passing)})." if passing else ".")
-        )
-    refs = [p for p in ("sr_window", "sw_ucb") if p in data["policies"]]
-    if refs and LOOM in data["policies"]:
-        ties = 0
-        for e in scen.values():
-            ok = True
-            for r in refs:
-                c = e["comparisons"].get(f"{LOOM}_vs_{r}")
-                if c is None or c["ci95_low_pp"] < TIE_MARGIN_PP:
-                    ok = False
-            ties += ok
-        lines.append(
-            f"3. Ties or beats SR window and SW-UCB (same margin): "
-            f"**{ties} of {len(scen)} scenarios**."
-        )
-    for name, e in scen.items():
-        lost = e.get("annual_lost_gmv")
-        if not lost:
-            continue
-        best = min(lost, key=lambda p: lost[p]["total"]["mean"])
-        lines.append(
-            f"4. `{name}`: lowest annual lost GMV is **{SHORT.get(best, best)}** "
-            f"(Loom served: ${lost[LOOM]['total']['mean'] / 1e3:,.0f}k; "
-            f"{SHORT.get(best, best)}: ${lost[best]['total']['mean'] / 1e3:,.0f}k)."
-        )
+    for cand in (c for c in CANDIDATES if c in data["policies"]):
+        name = SHORT.get(cand, cand)
+        lines += ["", f"**{name}**", ""]
+        key = f"{cand}_vs_{COMPETENT}"
+        if all(key in e["comparisons"] for e in scen.values()):
+            passing = [
+                n for n, e in scen.items() if e["comparisons"][key]["ci95_low_pp"] >= TIE_MARGIN_PP
+            ]
+            failing = [n for n in scen if n not in passing]
+            lines.append(
+                f"1. Lower 95% bound of ({name} - competent) >= {TIE_MARGIN_PP} pp: "
+                f"**{len(passing)} of {len(scen)} scenarios**"
+                + (f"; misses {', '.join(f'`{n}`' for n in failing)}." if failing else ".")
+            )
+        refs = [p for p in ("sr_window", "sw_ucb") if p in data["policies"]]
+        if refs:
+            ties = 0
+            for e in scen.values():
+                ok = True
+                for r in refs:
+                    c = e["comparisons"].get(f"{cand}_vs_{r}")
+                    if c is None or c["ci95_low_pp"] < TIE_MARGIN_PP:
+                        ok = False
+                ties += ok
+            lines.append(
+                f"3. Ties or beats SR window and SW-UCB (same margin): "
+                f"**{ties} of {len(scen)} scenarios**."
+            )
+        for sname, e in scen.items():
+            lost = e.get("annual_lost_gmv")
+            if not lost or cand not in lost:
+                continue
+            best = min(lost, key=lambda p: lost[p]["total"]["mean"])
+            lines.append(
+                f"4. `{sname}`: lowest annual lost GMV is **{SHORT.get(best, best)}** "
+                f"({name}: ${lost[cand]['total']['mean'] / 1e3:,.0f}k; "
+                f"{SHORT.get(best, best)}: ${lost[best]['total']['mean'] / 1e3:,.0f}k)."
+            )
     amb = sum(
         (e["policies"][p]["ambiguous_retries"]["mean"] or 0.0)
         for e in scen.values()
         for p in data["policies"]
     )
-    lines.append(f"5. Ambiguous retries, all policies and scenarios: **{amb:g}**.")
+    lines += ["", f"5. Ambiguous retries, all policies and scenarios: **{amb:g}**."]
     return lines
 
 
 def readme_table(data: dict[str, Any]) -> list[str]:
     """Compact table for the README: PSR of the main policies and Loom - competent."""
-    main = (LOOM, "loom_bench", COMPETENT, "static_m3", "oracle")
+    main = (LOOM, FAILFAST, "loom_bench", COMPETENT, "static_m3", "oracle")
     pols = [p for p in main if p in data["policies"]]
+    cand = FAILFAST if FAILFAST in data["policies"] else LOOM
     rows = []
     for name, e in data["scenarios"].items():
-        c = e["comparisons"].get(f"{LOOM}_vs_{COMPETENT}")
+        c = e["comparisons"].get(f"{cand}_vs_{COMPETENT}")
         rows.append(
             [f"`{name}`"]
             + [_pct(_mean(e, p, "psr")) for p in pols]
             + ([_ci(c)] if c is not None else [])
         )
-    header = ["Scenario", *(SHORT[p] + " PSR %" for p in pols), "Loom - competent, pp [95% CI]"]
+    header = [
+        "Scenario",
+        *(SHORT[p] + " PSR %" for p in pols),
+        f"{SHORT[cand]} - competent, pp [95% CI]",
+    ]
     return _table(header, rows)
 
 
@@ -237,7 +250,7 @@ def render(data: dict[str, Any]) -> str:
     """The full Markdown report."""
     seeds = data["seeds"]
     out = [
-        "# Stage 0 scenario suite: results",
+        "# Scenario suite: results",
         "",
         "> Generated by `scripts/suite/report.py` from `docs/results/suite.json`; do not edit "
         "by hand. Regenerate with:",
@@ -252,12 +265,13 @@ def render(data: dict[str, Any]) -> str:
         "definitions: `scripts/suite/scenarios.py`; metric definitions: the Stage 0 entry in "
         "`docs/decisions-log.md`. This is simulator evidence only.",
         "",
-        "## Acceptance criteria applied to Loom as it is today",
+        "## Acceptance criteria",
         "",
         "The criteria are the targets of `docs/001-router_enhancements.md` for the finished "
-        "redesign. Stage 0 changes no routing behaviour, so this is the starting line, not a "
-        "verdict on the redesign.",
-        "",
+        "redesign, applied here to each stage as it stands: *Loom served* is the served "
+        "default (Stage 0 behaviour), *Loom fail-fast* adds Stage 1 (technical gate, one "
+        "cascade retry, rate floor; `python -m router_core.server --fail-fast`). Criterion 2 "
+        "(wins with the CI excluding 0) is read from the paired tables below.",
         *acceptance(data),
         "",
         "## Mean PSR (%)",

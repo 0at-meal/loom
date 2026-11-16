@@ -31,6 +31,7 @@ from scripts.suite.policies import (
     POLICIES,
     bench_router_config,
     build_policy,
+    failfast_router_config,
     served_router_config,
 )
 from scripts.suite.scenarios import SCENARIOS, TEST_SEED_BASE, Scenario, Window, run_seeds
@@ -50,7 +51,9 @@ def _parity_world(seed: int) -> World:
     return World(profiles, events=(outage,), seed=seed)
 
 
-async def _http_run(router_kind: str, crn_seed: int, policy_seed: int) -> list[tuple[str, bool]]:
+async def _http_run(
+    router_kind: str, crn_seed: int, policy_seed: int
+) -> list[tuple[tuple[str, ...], bool]]:
     """The same 150 payments through the async router and the HTTP simulator in CRN mode."""
     sim_app = create_app(
         default_acquirers=[A, B],
@@ -60,12 +63,13 @@ async def _http_run(router_kind: str, crn_seed: int, policy_seed: int) -> list[t
     sim_app.state.registry.get(A).set_success_rate(0.95)
     sim_app.state.registry.get(B).set_success_rate(0.94)
     now = [0.0]
-    out: list[tuple[str, bool]] = []
+    out: list[tuple[tuple[str, ...], bool]] = []
     transport = httpx.ASGITransport(app=sim_app)
     async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
         router: Any
-        if router_kind == "loom_bench":
-            config = bench_router_config([A, B], policy_seed)
+        if router_kind in ("loom_bench", "loom_failfast"):
+            make = bench_router_config if router_kind == "loom_bench" else failfast_router_config
+            config = make([A, B], policy_seed)
             for r in config.routes:
                 r.base_url = "http://testserver"
             router = BanditRouter(config=config, http_client=client, clock=lambda: now[0])
@@ -95,11 +99,12 @@ async def _http_run(router_kind: str, crn_seed: int, policy_seed: int) -> list[t
                 )
             now[0] = i / TPS
             res = await router.route(AuthorizeRequest(transaction_id=f"tx{i - 1}", amount=40.0))
-            out.append((res.selected_acquirer, res.authorized))
+            tried = tuple(a.acquirer_id for a in res.attempts) or (res.selected_acquirer,)
+            out.append((tried, res.authorized))
     return out
 
 
-@pytest.mark.parametrize("policy_name", ["loom_bench", "static_m3"])
+@pytest.mark.parametrize("policy_name", ["loom_bench", "loom_failfast", "static_m3"])
 @pytest.mark.parametrize("seed", [42, 7])
 async def test_des_matches_http_path(
     policy_name: str, seed: int, caplog: pytest.LogCaptureFixture
@@ -111,11 +116,15 @@ async def test_des_matches_http_path(
     times = Arrivals("constant", TPS).times((N + 0.5) / TPS, np.random.default_rng(0))
     assert len(times) == N
     des = simulate(world, policy, times, tx_prefix="tx")
-    des_trace = [(p.attempts[0].acquirer_id, p.authorized) for p in des.payments]
+    des_trace = [(tuple(a.acquirer_id for a in p.attempts), p.authorized) for p in des.payments]
     http_trace = await _http_run(policy_name, crn_seed=seed, policy_seed=777)
     assert des_trace == http_trace
     # The outage really happened and was routed around.
-    assert sum(1 for a, ok in des_trace[50:100] if a == A and not ok) > 0
+    if policy_name == "loom_failfast":
+        # Retried on B instead of lost.
+        assert sum(1 for a, ok in des_trace[50:100] if a == (A, B)) > 0
+    else:
+        assert sum(1 for a, ok in des_trace[50:100] if a == (A,) and not ok) > 0
 
 
 def test_served_config_matches_the_server_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -126,6 +135,18 @@ def test_served_config_matches_the_server_defaults(monkeypatch: pytest.MonkeyPat
     assert mine.pid_config == served.pid_config
     assert [r.state_config for r in mine.routes] == [r.state_config for r in served.routes]
     assert mine.technical_decline_codes == served.technical_decline_codes
+    assert mine.value_scaled_config == served.value_scaled_config is None
+
+
+def test_failfast_config_matches_the_server_flag(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The suite's 'loom_failfast' is `python -m router_core.server --fail-fast`."""
+    monkeypatch.delenv("DECAY_HALF_LIFE_SEC", raising=False)
+    served = build_router_config(parse_args(["--fail-fast"]))
+    mine = failfast_router_config([r.acquirer_id for r in served.routes], seed=1)
+    assert mine.pid_config == served.pid_config
+    assert mine.gate_config == served.gate_config is not None
+    assert mine.cascade is served.cascade is True
+    assert [r.state_config for r in mine.routes] == [r.state_config for r in served.routes]
     assert mine.value_scaled_config == served.value_scaled_config is None
 
 

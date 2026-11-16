@@ -16,6 +16,7 @@ from baseline_router.policies import (
     SRWindowPolicy,
     StaticBreakerPolicy,
 )
+from router_core.gate import GateConfig
 from router_core.models import AcquirerRouteConfig, RouterConfig
 from router_core.pid import PIDConfig
 from router_core.policy import (
@@ -26,6 +27,7 @@ from router_core.policy import (
     RoutingPolicy,
     one_hot,
 )
+from router_core.server import FAIL_FAST_FLOOR_RATE_PER_SEC
 from router_core.state import DEFAULT_HALF_LIFE_SEC, AcquirerStateConfig
 
 # compare_psr.py's benchmark configuration (kept in step by tests/scripts/test_suite.py).
@@ -118,6 +120,21 @@ def bench_router_config(ids: Sequence[str], seed: int) -> RouterConfig:
     )
 
 
+def failfast_router_config(ids: Sequence[str], seed: int) -> RouterConfig:
+    """Served defaults plus Stage 1 (``python -m router_core.server --fail-fast``)."""
+    served = served_router_config(ids, seed)
+    assert served.pid_config is not None
+    return served.model_copy(
+        update={
+            "pid_config": served.pid_config.model_copy(
+                update={"floor_rate_per_sec": FAIL_FAST_FLOOR_RATE_PER_SEC}
+            ),
+            "gate_config": GateConfig(),
+            "cascade": True,
+        }
+    )
+
+
 def raw_router_config(ids: Sequence[str], seed: int) -> RouterConfig:
     """Served half-life without the PID: raw Thompson winner-take-all."""
     return RouterConfig(routes=_routes(ids, DEFAULT_HALF_LIFE_SEC), pid_config=None, seed=seed)
@@ -135,6 +152,9 @@ POLICIES: dict[str, PolicyFactory] = {
         LoomPolicy(served_router_config(ids, s)), "loom_served"
     ),
     "loom_bench": lambda ids, w, s: _named(LoomPolicy(bench_router_config(ids, s)), "loom_bench"),
+    "loom_failfast": lambda ids, w, s: _named(
+        LoomPolicy(failfast_router_config(ids, s)), "loom_failfast"
+    ),
     "loom_raw": lambda ids, w, s: _named(LoomPolicy(raw_router_config(ids, s)), "loom_raw"),
     "static_m3": lambda ids, w, s: _named(
         StaticBreakerPolicy(
