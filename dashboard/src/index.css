@@ -2,70 +2,176 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Terminal palette. Calm until something breaks (ISA-101): the screen is neutral cream on
+ * warm black, amber marks focus and Loom's own numbers, and red is kept for abnormal states.
+ */
 :root {
-  --color-ground: #0F1115;
-  --color-panel: #16181D;
-  --color-panel-inset: #0F1115;
-  --color-border: #2A2D34;
-  --color-hairline: #2A2D34;
-  --color-text-primary: #E4E6EB;
-  --color-text-secondary: #8B8F98;
-  --color-accent: #5B8DEF;
-  --color-accent-2: #C084FC;
-  --color-route-gamma: #7C808A;
-  --color-alert: #E5484D;
+  --color-ground: #0A0A09;
+  --color-pane: #111110;
+  --color-well: #0A0A09;
+  --color-rule: #2B2924;
+  --color-text: #E8E2D0;
+  --color-dim: #8A8473;
+  --color-amber: #FFA028;
+  --color-cyan: #5CC8E0;
+  --color-cream: #D8D2BE;
+  --color-alert: #FF4A3D;
+  --color-ok: #4FD18B;
+}
+
+html,
+body {
+  background-color: var(--color-ground);
+  color: var(--color-text);
 }
 
 body {
-  background-color: #0F1115;
-  color: #E4E6EB;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'IBM Plex Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
   margin: 0;
   padding: 0;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Tabular figures for monospace elements to prevent layout shift */
-.font-mono, .telemetry-number {
-  font-family: 'Space Mono', monospace;
+/* Tabular, slashed-zero figures so live numbers never shift sideways */
+.font-mono,
+.telemetry-number {
+  font-family: 'IBM Plex Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
   font-feature-settings: "tnum" 1, "zero" 1;
 }
 
 .font-headline {
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: 'IBM Plex Sans Condensed', 'Arial Narrow', sans-serif;
 }
 
-/* Mission-control panels with crisp hairline border and zero drop shadows */
-.mission-panel {
-  background-color: #16181D;
-  border: 1px solid #2A2D34;
-  border-radius: 0px;
-  box-shadow: none !important;
+/* Instrument panes: hairline rule, no radius, no shadow */
+.pane {
+  background-color: var(--color-pane);
+  border: 1px solid var(--color-rule);
+  border-radius: 0;
+  box-shadow: none;
+  transition: background-color 150ms, border-color 150ms;
 }
 
-.mission-well {
-  background-color: #0F1115;
-  border: 1px solid #2A2D34;
-  border-radius: 0px;
-  box-shadow: none !important;
+.well {
+  background-color: var(--color-well);
+  border: 1px solid var(--color-rule);
+  border-radius: 0;
 }
 
-/* Custom hairline scrollbar */
+.pane:focus-visible,
+.pane:focus-within {
+  outline: none;
+  border-color: var(--color-amber);
+  box-shadow: 0 0 0 1px var(--color-amber);
+}
+
+/* Phosphor glow for the hero readout and live chart lines (CRT mode only) */
+html[data-crt='on'] .glow {
+  text-shadow: 0 0 6px currentColor;
+}
+html[data-crt='on'] .glow-line {
+  filter: drop-shadow(0 0 2px currentColor);
+}
+
+/* Faint scanlines over the whole screen (CRT mode only) */
+html[data-crt='on'] body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 50;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.025) 0,
+    rgba(255, 255, 255, 0.025) 1px,
+    transparent 1px,
+    transparent 4px
+  );
+}
+
+/* Blinking status lamp, only for abnormal states */
+@keyframes lamp-blink {
+  50% {
+    opacity: 0.25;
+  }
+}
+.lamp-blink {
+  animation: lamp-blink 1s steps(1, end) infinite;
+}
+
+/* Toast entrance animation */
+@keyframes toast-slide-in {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+.animate-toast-in {
+  animation: toast-slide-in 200ms ease-out;
+}
+
+/* Smooth state transitions on status text and backgrounds */
+.status-transition {
+  transition: color 150ms, background-color 150ms;
+}
+
+/* Colorblind-safe hatch pattern for degraded acquirers */
+.hatch-degraded {
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 2px,
+    rgba(255, 74, 61, 0.35) 2px,
+    rgba(255, 74, 61, 0.35) 4px
+  );
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lamp-blink {
+    animation: none;
+  }
+  .animate-toast-in {
+    animation: none;
+  }
+  html[data-crt='on'] body::after {
+    display: none;
+  }
+  html[data-crt='on'] .glow {
+    text-shadow: none;
+  }
+  html[data-crt='on'] .glow-line {
+    filter: none;
+  }
+  .pane {
+    transition: none;
+  }
+  .status-transition {
+    transition: none;
+  }
+}
+
+::selection {
+  background: var(--color-amber);
+  color: var(--color-ground);
+}
+
+/* Hairline scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
-
 ::-webkit-scrollbar-track {
-  background: #0F1115;
+  background: var(--color-ground);
 }
-
 ::-webkit-scrollbar-thumb {
-  background: #2A2D34;
-  border-radius: 0px;
+  background: var(--color-rule);
 }
-
 ::-webkit-scrollbar-thumb:hover {
-  background: #3A3E47;
+  background: #3D3A33;
 }

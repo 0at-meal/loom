@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import time
+import uuid
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -82,6 +83,10 @@ def create_router_app(
 
     # Per-client bounded queues: publishing never waits on a dashboard (AUDIT F-05).
     telemetry = TelemetryBroadcaster()
+    # Frames are numbered in the order they are published (payment completion order) and
+    # the counter restarts with the process. stream_id names this process's numbering, so
+    # a dashboard can tell a restart from dropped frames (AUDIT F-27, F-33).
+    stream_id = uuid.uuid4().hex
     ws_sequence_number = 0
 
     def broadcast_routing_result(result: RoutingResult) -> None:
@@ -113,6 +118,7 @@ def create_router_app(
 
         event_payload = {
             "event_type": "ROUTING_COMPLETED",
+            "stream_id": stream_id,
             "sequence_number": seq,
             "timestamp": result.timestamp,
             "transaction_id": result.transaction_id,
@@ -335,6 +341,9 @@ def create_router_app(
 
         bootstrap_payload = {
             "event_type": "BOOTSTRAP",
+            "stream_id": stream_id,
+            # Last frame number published before this client joined
+            "sequence_number": ws_sequence_number,
             "timestamp": time.time(),
             "states": states_dict,
             "registered_acquirers": active_router.list_acquirer_ids(),

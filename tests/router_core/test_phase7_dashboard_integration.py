@@ -183,3 +183,35 @@ class TestSimulatorProxyUnreachable:
 
     def test_reset_returns_502(self, offline_client: TestClient) -> None:
         assert offline_client.post("/api/simulator/admin/reset").status_code == 502
+
+
+class TestTelemetrySequence:
+    """Frame numbering the dashboard uses to detect gaps and restarts (AUDIT F-27)."""
+
+    def test_bootstrap_and_frames_carry_stream_id_and_sequence(
+        self, offline_client: TestClient
+    ) -> None:
+        with offline_client.websocket_connect("/ws/telemetry") as ws:
+            boot = json.loads(ws.receive_text())
+            assert boot["event_type"] == "BOOTSTRAP"
+            assert boot["sequence_number"] == 0
+            stream_id = boot["stream_id"]
+            for i in range(2):
+                offline_client.post("/route", json={"transaction_id": f"seq{i}", "amount": 5.0})
+            frames = [json.loads(ws.receive_text()) for _ in range(2)]
+        assert [f["sequence_number"] for f in frames] == [1, 2]
+        assert {f["stream_id"] for f in frames} == {stream_id}
+
+        # A client that joins later learns the last published number
+        with offline_client.websocket_connect("/ws/telemetry") as ws:
+            boot = json.loads(ws.receive_text())
+        assert boot["sequence_number"] == 2
+        assert boot["stream_id"] == stream_id
+
+    def test_each_app_instance_has_its_own_stream_id(self) -> None:
+        ids = []
+        for _ in range(2):
+            with TestClient(create_router_app(router=make_test_router())) as client:
+                with client.websocket_connect("/ws/telemetry") as ws:
+                    ids.append(json.loads(ws.receive_text())["stream_id"])
+        assert ids[0] != ids[1]

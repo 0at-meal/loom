@@ -2,12 +2,19 @@
 
 **Date:** 2026-09-19
 **Author:** Tech Lead / Reviewer
-**Status:** FINAL CALL — **KEEP (APPROVED FOR PRODUCTION)**
+**Status:** KEEP as an opt-in experiment. The original status line read "KEEP (APPROVED FOR PRODUCTION)"; that wording is retracted (see the correction below). Loom is not deployable (docs/AUDIT.md §1b), and this review was not an independent approval (AUDIT F-19).
 **Referenced Artifacts:**
 - Architecture Spec: [`docs/phase8-value-scaled-exploration-spec.md`](file:///d:/loom/docs/phase8-value-scaled-exploration-spec.md)
 - Backend Implementation: [`router_core/value_policy.py`](file:///d:/loom/router_core/value_policy.py), [`router_core/router.py`](file:///d:/loom/router_core/router.py)
 - QA Test Report: [`docs/phase8-qa-report.md`](file:///d:/loom/docs/phase8-qa-report.md)
 - Decisions Log: [`docs/decisions-log.md`](file:///d:/loom/docs/decisions-log.md)
+
+> **Correction (AUDIT F-10, Phase 4b).** Two parts of this review were wrong.
+>
+> 1. **The mechanism in §3 does not exist.** §3 explains the outage result with $\hat{\mu}_i = \mu_{\text{Bayes}} \times (0.5 + 0.5 H_i)$. No such formula was ever in the code: the policy blended samples toward the posterior mean `alpha / (alpha + beta)` (today the technical mean times the approval mean), with no health term. That explanation is retracted.
+> 2. **The policy did not protect high-value payments with the PID on (the default).** It only changed the PID's target; the deficit or categorical draw still chose the acquirer. Over 30 seeds, high-value payments sent to the dead acquirer during an outage went from 1.23 to 1.53 of 10 (deficit) and from 1.40 to 1.10 (stochastic) with the policy off → on. None of the Phase 8 tests set `pid_config`.
+>
+> Since Phase 4b, a payment with $\lambda(V) \ge 0.95$ (`protect_lambda`; about $3\tau$) goes to the acquirer with the highest posterior mean and skips the PID step and the allocation draw. With `python scripts/value_policy_outage.py` (30 seeds), sample blending alone sends 1.43 (deficit) / 1.93 (stochastic) of 10 high-value outage payments to the dead acquirer and protection sends 0.50 / 0.60; see the README's Phase 8 section and `docs/decisions-log.md`. The rest of this review is kept as written, apart from the "production" wording below.
 
 ---
 
@@ -15,7 +22,7 @@
 
 **Final Verdict: KEEP.**
 
-Phase 8 (Value-Scaled Exploration) is approved to remain in the Loom repository as an optional, production-grade policy layer.
+Phase 8 (Value-Scaled Exploration) is kept in the Loom repository as an optional, opt-in policy layer (originally described here as "production-grade"; retracted, see the correction above).
 
 This review evaluates whether Phase 8 genuinely strengthens Loom as a portfolio piece or adds unnecessary cognitive overhead and scope creep beyond Phases 1–7. Based on the code implementation, mathematical structure, and empirical QA findings, **Phase 8 provides immense portfolio leverage with virtually zero architectural liability.**
 
@@ -65,6 +72,8 @@ When Alpha abruptly suffered a 100% outage:
 - Under heavy value shrinkage ($\lambda \approx 1.0$), stochastic variance is collapsed to near zero ($\sigma \approx 0$). The router strictly exploits Alpha's expected mean until successive failures drag $\hat{\mu}_\alpha$ below Beta's mean ($0.94$).
 
 ### Why This Strengthens the Project
+> *Retracted (AUDIT F-10): the formula below is not in the code, so this section does not explain the result. See the correction at the top.*
+
 This demonstrates why Loom's **EWMA Health Signal ($H$)** was an essential architectural choice in Phase 1:
 $$\hat{\mu}_i = \mu_{\text{Bayes}} \times \left(0.5 + 0.5 \times H_i\right)$$
 Because $H$ decays geometrically with $\gamma = 0.95$, consecutive failures slash $\hat{\mu}_i$ in half after just 6 failures ($0.95^6 \approx 0.735$), breaking the value-shrinkage inertia and forcing a hard reroute to Beta. Once flipped, value shrinkage completely prevents nuisance flapping back to the dead leader (1 flip total vs 13 oscillatory flips).

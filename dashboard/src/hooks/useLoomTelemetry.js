@@ -1,326 +1,183 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useReducer } from 'react';
+import { initialTelemetryState, telemetryReducer } from './telemetryState';
+
+const STALE_AFTER_MS = 5000;
+const PING_EVERY_MS = 15000;
+
+export function telemetryUrl(location = window.location) {
+  const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  // Under the Vite dev server (port 5173) talk to the router on 8000 directly
+  const host = location.port === '5173' ? '127.0.0.1:8000' : location.host;
+  return `${protocol}//${host}/ws/telemetry`;
+}
+
+/** Reconnect delay: 0.5 s growing 1.5x per attempt, capped at 10 s, plus up to 0.3 s jitter. */
+export function reconnectDelayMs(attempt, random = Math.random) {
+  return Math.min(10000, 500 * Math.pow(1.5, attempt)) + random() * 300;
+}
 
 /**
- * Custom hook managing the real-time WebSocket connection to Phase 5's Redis Pub/Sub stream.
+ * WebSocket connection to the router's /ws/telemetry stream.
  *
- * Invariants:
- * - Matches real update cadence without artificial throttling
- * - Explicit visible reconnecting / disconnected states
- * - Stale data detection after 5 seconds of silence
- * - Tracks rolling PSR, lifetime PSR, peak allocation delta (dw_max), and outage markers
+ * Frames go through telemetryReducer (pure, see telemetryState.js), so handlers never read
+ * React state from a closure. On unmount the socket's handlers are detached and every
+ * timer is cleared, so nothing reconnects after the component is gone.
  */
-export function useLoomTelemetry() {
-  const [connectionStatus, setConnectionStatus] = useState('connecting'); // 'connected' | 'connecting' | 'reconnecting' | 'disconnected'
+export function useLoomTelemetry({ WebSocketImpl, url } = {}) {
+  const [connectionStatus, setConnectionStatus] = useState('connecting');
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
   const [lastEventTime, setLastEventTime] = useState(null);
   const [isStale, setIsStale] = useState(false);
-
-  // Time-series history for Ticket A allocation chart (max 120 items)
-  const [events, setEvents] = useState([]);
-
-  // Pinned outage/recovery event markers
-  const [outageMarkers, setOutageMarkers] = useState([]);
-
-  // Active outage flags per acquirer (acquirer_id -> boolean)
-  const [activeOutages, setActiveOutages] = useState({
-    acquirer_alpha: false,
-    acquirer_beta: false,
-    acquirer_gamma: false,
-  });
-
-  // Current per-acquirer belief and health snapshots
-  const [acquirerStates, setAcquirerStates] = useState({
-    acquirer_alpha: { health_score: 1.0, alpha: 1.0, beta: 1.0, expected_success_rate: 0.95, weight: 0.82 },
-    acquirer_beta: { health_score: 1.0, alpha: 1.0, beta: 1.0, expected_success_rate: 0.90, weight: 0.15 },
-    acquirer_gamma: { health_score: 1.0, alpha: 1.0, beta: 1.0, expected_success_rate: 0.85, weight: 0.03 },
-  });
-
-  // Running metrics
-  const [metrics, setMetrics] = useState({
-    totalCount: 0,
-    authorizedCount: 0,
-    declinedCount: 0,
-    errorCount: 0,
-    rollingPSR: 100.0,
-    lifetimePSR: 100.0,
-    peakStepDelta: 0.0,
-    avgRoutingLatency: 0.042,
-    avgAcquirerLatency: 22.5,
-  });
+  const [state, dispatch] = useReducer(telemetryReducer, initialTelemetryState);
 
   const wsRef = useRef(null);
   const reconnectTimerRef = useRef(null);
   const pingTimerRef = useRef(null);
-  const prevAllocRef = useRef({});
-  const rollingWindowRef = useRef([]); // sliding window of boolean success for last 50 txs
+  const attemptRef = useRef(0);
+  const mountedRef = useRef(false);
 
-  // Stale stream detection: checks if connected but no event received in 5s
+  // Stale stream detection: connected but no frame for STALE_AFTER_MS
   useEffect(() => {
     const interval = setInterval(() => {
-      if (lastEventTime && connectionStatus === 'connected') {
-        const elapsed = Date.now() - lastEventTime;
-        setIsStale(elapsed > 5000);
-      } else if (connectionStatus !== 'connected') {
+      if (connectionStatus !== 'connected') {
         setIsStale(true);
+      } else if (lastEventTime) {
+        setIsStale(Date.now() - lastEventTime > STALE_AFTER_MS);
       }
     }, 1000);
     return () => clearInterval(interval);
   }, [lastEventTime, connectionStatus]);
 
-  // Connect / Reconnect function
-  const connect = useCallback(() => {
-    if (wsRef.current && (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING)) {
-      return;
+  const clearTimers = useCallback(() => {
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
     }
-
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    // When running under Vite dev server on port 5173, point directly to backend 8000 or use Vite proxy
-    const host = window.location.port === '5173' ? '127.0.0.1:8000' : window.location.host;
-    const wsUrl = `${protocol}//${host}/ws/telemetry`;
-
-    try {
-      const ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
-
-      ws.onopen = () => {
-        setConnectionStatus('connected');
-        setReconnectAttempt(0);
-        setIsStale(false);
-
-        // Periodic ping to keep socket alive
-        if (pingTimerRef.current) clearInterval(pingTimerRef.current);
-        pingTimerRef.current = setInterval(() => {
-          if (ws.readyState === WebSocket.OPEN) {
-            ws.send('ping');
-          }
-        }, 15000);
-      };
-
-      ws.onmessage = (messageEvent) => {
-        try {
-          const data = JSON.parse(messageEvent.data);
-          const now = Date.now();
-          setLastEventTime(now);
-          setIsStale(false);
-
-          if (data.event_type === 'BOOTSTRAP') {
-            if (data.states) {
-              setAcquirerStates((prev) => ({
-                ...prev,
-                ...data.states,
-              }));
-            }
-          } else if (data.event_type === 'ROUTING_COMPLETED') {
-            // 1. Process routing transaction
-            const seq = data.sequence_number || 0;
-            const smoothed = data.smoothed_allocation || {};
-            const selected = data.selected_acquirer;
-            const authorized = data.authorized === true || data.status === 'AUTHORIZED';
-            const isOutage = data.decline_code === 'ACQUIRER_OUTAGE';
-
-            // Calculate peak allocation delta (|w_t - w_t-1|)
-            let stepDelta = 0;
-            if (prevAllocRef.current[selected] !== undefined && smoothed[selected] !== undefined) {
-              stepDelta = Math.abs(smoothed[selected] - prevAllocRef.current[selected]);
-            }
-            prevAllocRef.current = { ...smoothed };
-
-            // Update rolling 50-tx window
-            rollingWindowRef.current.push(authorized ? 1 : 0);
-            if (rollingWindowRef.current.length > 50) {
-              rollingWindowRef.current.shift();
-            }
-            const rollingSuccess = rollingWindowRef.current.reduce((a, b) => a + b, 0);
-            const currentRollingPSR = rollingWindowRef.current.length > 0
-              ? (rollingSuccess / rollingWindowRef.current.length) * 100
-              : 100.0;
-
-            // Update metrics
-            setMetrics((prev) => {
-              const newTotal = prev.totalCount + 1;
-              const newAuth = prev.authorizedCount + (authorized ? 1 : 0);
-              const newDeclined = prev.declinedCount + (!authorized && data.status === 'DECLINED' ? 1 : 0);
-              const newError = prev.errorCount + (data.status === 'ERROR' ? 1 : 0);
-              const newLifetimePSR = (newAuth / newTotal) * 100;
-              const newPeakJump = Math.max(prev.peakStepDelta, stepDelta * 100);
-
-              return {
-                totalCount: newTotal,
-                authorizedCount: newAuth,
-                declinedCount: newDeclined,
-                errorCount: newError,
-                rollingPSR: currentRollingPSR,
-                lifetimePSR: newLifetimePSR,
-                peakStepDelta: Math.round(newPeakJump * 100) / 100,
-                avgRoutingLatency: data.routing_latency_ms || prev.avgRoutingLatency,
-                avgAcquirerLatency: data.acquirer_latency_ms || prev.avgAcquirerLatency,
-              };
-            });
-
-            // Update per-acquirer state
-            if (data.updated_state && selected) {
-              setAcquirerStates((prev) => ({
-                ...prev,
-                [selected]: {
-                  ...prev[selected],
-                  ...data.updated_state,
-                  weight: smoothed[selected] !== undefined ? smoothed[selected] : prev[selected]?.weight,
-                },
-              }));
-            }
-
-            // Append to events history (max 120 points for live chart)
-            const eventPoint = {
-              seq,
-              timestamp: data.timestamp || now / 1000,
-              selected,
-              authorized,
-              status: data.status,
-              decline_code: data.decline_code,
-              smoothed: smoothed,
-              weights: {
-                acquirer_alpha: smoothed.acquirer_alpha ?? 0.82,
-                acquirer_beta: smoothed.acquirer_beta ?? 0.15,
-                acquirer_gamma: smoothed.acquirer_gamma ?? 0.03,
-              },
-            };
-
-            setEvents((prev) => {
-              const next = [...prev, eventPoint];
-              return next.length > 120 ? next.slice(next.length - 120) : next;
-            });
-
-            // If an outage decline was observed on an acquirer, pin an outage marker if not already pinned recently
-            if (isOutage) {
-              setActiveOutages((prev) => ({ ...prev, [selected]: true }));
-              setOutageMarkers((prev) => {
-                const alreadyPinned = prev.some((m) => m.acquirer_id === selected && m.type === 'outage' && Math.abs(m.seq - seq) < 15);
-                if (!alreadyPinned) {
-                  return [
-                    ...prev,
-                    {
-                      id: `outage-${selected}-${seq}`,
-                      seq,
-                      timestamp: data.timestamp || now / 1000,
-                      acquirer_id: selected,
-                      type: 'outage',
-                      label: `OUTAGE: ${selected.replace('acquirer_', '').toUpperCase()} (Tx #${seq})`,
-                    },
-                  ];
-                }
-                return prev;
-              });
-            }
-          } else if (data.event_type === 'HEALTH_ALERT') {
-            const acquirerId = data.acquirer_id;
-            const isCritical = data.severity === 'CRITICAL' || (data.new_health < 0.70 && data.old_health >= 0.70);
-            const isRecovery = data.severity === 'INFO' || (data.new_health >= 0.70 && data.old_health < 0.70);
-
-            if (isCritical) {
-              setActiveOutages((prev) => ({ ...prev, [acquirerId]: true }));
-              setOutageMarkers((prev) => [
-                ...prev,
-                {
-                  id: `alert-outage-${acquirerId}-${Date.now()}`,
-                  seq: events.length > 0 ? events[events.length - 1].seq : 0,
-                  timestamp: data.timestamp,
-                  acquirer_id: acquirerId,
-                  type: 'outage',
-                  label: `OUTAGE: ${acquirerId.replace('acquirer_', '').toUpperCase()}`,
-                },
-              ]);
-            } else if (isRecovery) {
-              setActiveOutages((prev) => ({ ...prev, [acquirerId]: false }));
-              setOutageMarkers((prev) => [
-                ...prev,
-                {
-                  id: `alert-recovery-${acquirerId}-${Date.now()}`,
-                  seq: events.length > 0 ? events[events.length - 1].seq : 0,
-                  timestamp: data.timestamp,
-                  acquirer_id: acquirerId,
-                  type: 'recovery',
-                  label: `RECOVERY: ${acquirerId.replace('acquirer_', '').toUpperCase()}`,
-                },
-              ]);
-            }
-          }
-        } catch (err) {
-          console.warn('Failed to parse WebSocket telemetry frame:', err);
-        }
-      };
-
-      ws.onclose = () => {
-        setConnectionStatus('reconnecting');
-        setIsStale(true);
-        if (pingTimerRef.current) clearInterval(pingTimerRef.current);
-
-        // Exponential backoff with jitter: min(10s, 0.5s * 2^attempt)
-        setReconnectAttempt((attempt) => {
-          const nextAttempt = attempt + 1;
-          const delay = Math.min(10000, 500 * Math.pow(1.5, attempt)) + Math.random() * 300;
-          reconnectTimerRef.current = setTimeout(connect, delay);
-          return nextAttempt;
-        });
-      };
-
-      ws.onerror = () => {
-        ws.close();
-      };
-    } catch (err) {
-      setConnectionStatus('disconnected');
+    if (pingTimerRef.current) {
+      clearInterval(pingTimerRef.current);
+      pingTimerRef.current = null;
     }
   }, []);
 
+  const detachSocket = useCallback(() => {
+    const ws = wsRef.current;
+    wsRef.current = null;
+    if (ws) {
+      ws.onopen = null;
+      ws.onmessage = null;
+      ws.onclose = null;
+      ws.onerror = null;
+      try {
+        ws.close();
+      } catch {
+        // already closed
+      }
+    }
+  }, []);
+
+  const connect = useCallback(() => {
+    if (!mountedRef.current) return;
+    const Impl = WebSocketImpl || window.WebSocket;
+    const current = wsRef.current;
+    if (current && (current.readyState === Impl.OPEN || current.readyState === Impl.CONNECTING)) {
+      return;
+    }
+
+    let ws;
+    try {
+      ws = new Impl(url || telemetryUrl());
+    } catch {
+      setConnectionStatus('disconnected');
+      return;
+    }
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      if (wsRef.current !== ws) return;
+      attemptRef.current = 0;
+      setConnectionStatus('connected');
+      setReconnectAttempt(0);
+      setIsStale(false);
+      if (pingTimerRef.current) clearInterval(pingTimerRef.current);
+      pingTimerRef.current = setInterval(() => {
+        if (ws.readyState === Impl.OPEN) ws.send('ping');
+      }, PING_EVERY_MS);
+    };
+
+    ws.onmessage = (messageEvent) => {
+      if (wsRef.current !== ws) return;
+      let frame;
+      try {
+        frame = JSON.parse(messageEvent.data);
+      } catch (err) {
+        console.warn('Failed to parse WebSocket telemetry frame:', err);
+        return;
+      }
+      const now = Date.now();
+      setLastEventTime(now);
+      setIsStale(false);
+      dispatch({ type: 'frame', frame, receivedAt: now });
+    };
+
+    ws.onclose = () => {
+      if (wsRef.current !== ws || !mountedRef.current) return;
+      wsRef.current = null;
+      if (pingTimerRef.current) {
+        clearInterval(pingTimerRef.current);
+        pingTimerRef.current = null;
+      }
+      setConnectionStatus('reconnecting');
+      setIsStale(true);
+      const attempt = attemptRef.current;
+      attemptRef.current = attempt + 1;
+      setReconnectAttempt(attempt + 1);
+      reconnectTimerRef.current = setTimeout(() => {
+        reconnectTimerRef.current = null;
+        connect();
+      }, reconnectDelayMs(attempt));
+    };
+
+    ws.onerror = () => {
+      ws.close();
+    };
+  }, [WebSocketImpl, url]);
+
   useEffect(() => {
+    mountedRef.current = true;
     connect();
     return () => {
-      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
-      if (pingTimerRef.current) clearInterval(pingTimerRef.current);
-      if (wsRef.current) wsRef.current.close();
+      mountedRef.current = false;
+      clearTimers();
+      detachSocket();
     };
+  }, [connect, clearTimers, detachSocket]);
+
+  const reconnect = useCallback(() => {
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+    attemptRef.current = 0;
+    connect();
   }, [connect]);
 
-  // Manual reset of outage flag from Ticket C
+  // Outage flag set by the operator controls, after the router confirmed the change
   const setOutageActiveState = useCallback((acquirerId, isActive) => {
-    setActiveOutages((prev) => ({ ...prev, [acquirerId]: isActive }));
-    if (isActive) {
-      setOutageMarkers((prev) => [
-        ...prev,
-        {
-          id: `manual-outage-${acquirerId}-${Date.now()}`,
-          seq: events.length > 0 ? events[events.length - 1].seq : 0,
-          timestamp: Date.now() / 1000,
-          acquirer_id: acquirerId,
-          type: 'outage',
-          label: `OUTAGE TRIGGERED: ${acquirerId.replace('acquirer_', '').toUpperCase()}`,
-        },
-      ]);
-    } else {
-      setOutageMarkers((prev) => [
-        ...prev,
-        {
-          id: `manual-recovery-${acquirerId}-${Date.now()}`,
-          seq: events.length > 0 ? events[events.length - 1].seq : 0,
-          timestamp: Date.now() / 1000,
-          acquirer_id: acquirerId,
-          type: 'recovery',
-          label: `OUTAGE CLEARED: ${acquirerId.replace('acquirer_', '').toUpperCase()}`,
-        },
-      ]);
-    }
-  }, [events]);
+    dispatch({ type: 'manual_outage', acquirerId, active: isActive });
+  }, []);
 
   return {
     connectionStatus,
     reconnectAttempt,
     lastEventTime,
     isStale,
-    events,
-    outageMarkers,
-    activeOutages,
-    acquirerStates,
-    metrics,
+    events: state.events,
+    outageMarkers: state.markers,
+    activeOutages: state.activeOutages,
+    acquirerStates: state.acquirerStates,
+    metrics: state.metrics,
+    stream: state.stream,
     setOutageActiveState,
-    reconnect: connect,
+    reconnect,
   };
 }

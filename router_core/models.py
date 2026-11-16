@@ -215,6 +215,13 @@ class RoutingResult(BaseModel):
         default=None,
         description="Shrinkage factor lambda(V) applied to Thompson samples in Phase 8.",
     )
+    value_protected: bool = Field(
+        default=False,
+        description=(
+            "True when the Phase 8 policy sent this payment to the acquirer with the highest "
+            "posterior mean, bypassing the PID and the allocation draw (AUDIT F-10)."
+        ),
+    )
     timestamp: float = Field(
         ...,
         description="Epoch timestamp when the routing decision completed.",

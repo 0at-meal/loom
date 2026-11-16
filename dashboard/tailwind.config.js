@@ -6,23 +6,24 @@ export default {
   ],
   theme: {
     extend: {
+      // Mirrors the CSS variables in src/index.css
       colors: {
-        ground: '#0F1115',
-        panel: '#16181D',
-        'panel-inset': '#0F1115',
-        border: '#2A2D34',
-        hairline: '#2A2D34',
-        primary: '#E4E6EB',
-        secondary: '#8B8F98',
-        accent: '#5B8DEF',
-        'accent-2': '#C084FC',
-        'route-gamma': '#7C808A',
-        alert: '#E5484D',
+        ground: '#0A0A09',
+        pane: '#111110',
+        well: '#0A0A09',
+        rule: '#2B2924',
+        text: '#E8E2D0',
+        dim: '#8A8473',
+        amber: '#FFA028',
+        cyan: '#5CC8E0',
+        cream: '#D8D2BE',
+        alert: '#FF4A3D',
+        ok: '#4FD18B',
       },
       fontFamily: {
-        headline: ['"Space Grotesk"', 'sans-serif'],
-        mono: ['"Space Mono"', 'monospace'],
-        sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+        headline: ['"IBM Plex Sans Condensed"', '"Arial Narrow"', 'sans-serif'],
+        mono: ['"IBM Plex Mono"', 'ui-monospace', '"Cascadia Mono"', 'Consolas', 'monospace'],
+        sans: ['"IBM Plex Mono"', 'ui-monospace', 'monospace'],
       },
       borderRadius: {
         DEFAULT: '0px',
