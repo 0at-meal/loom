@@ -107,8 +107,8 @@ async def test_protected_payment_leaves_pid_and_deficit_state_alone(actuation: A
 
     pid_before = router.pid_state
     allocation_before = router.current_allocation
-    cumulative_before = dict(router._cumulative_target)
-    dispatched_before = dict(router._dispatched_count)
+    cumulative_before = dict(router.policy.cumulative_target)
+    dispatched_before = dict(router.policy.dispatched_count)
 
     clock[0] += 0.1
     res = await router.route(AuthorizeRequest(transaction_id="hv", amount=5000.0))
@@ -118,8 +118,8 @@ async def test_protected_payment_leaves_pid_and_deficit_state_alone(actuation: A
     assert res.smoothed_allocation == allocation_before
     assert router.pid_state == pid_before
     assert router.current_allocation == allocation_before
-    assert router._cumulative_target == cumulative_before
-    assert router._dispatched_count == dispatched_before
+    assert router.policy.cumulative_target == cumulative_before
+    assert router.policy.dispatched_count == dispatched_before
     await client.aclose()
 
 

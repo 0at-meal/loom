@@ -14,13 +14,23 @@ from baseline_router.models import (
     RouteHealthStatus,
     StaticRouteStateSnapshot,
 )
+from baseline_router.policies import (
+    CompetentBreakerPolicy,
+    SlidingWindowUCBPolicy,
+    SRWindowPolicy,
+    StaticBreakerPolicy,
+)
 from baseline_router.router import StaticBaselineRouter
 
 __all__ = [
     "BaselineRouterConfig",
+    "CompetentBreakerPolicy",
     "FailoverPolicyConfig",
     "FailoverThresholdType",
     "RouteHealthStatus",
+    "SRWindowPolicy",
+    "SlidingWindowUCBPolicy",
     "StaticBaselineRouter",
+    "StaticBreakerPolicy",
     "StaticRouteStateSnapshot",
 ]

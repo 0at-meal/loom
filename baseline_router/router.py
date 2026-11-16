@@ -5,7 +5,6 @@ from __future__ import annotations
 import inspect
 import logging
 import time
-from collections import deque
 from typing import TYPE_CHECKING, Any, Literal
 
 import httpx
@@ -13,60 +12,21 @@ import httpx
 from acquirer_sim.models import AuthorizeRequest, AuthorizeResponse
 from baseline_router.models import (
     BaselineRouterConfig,
-    FailoverThresholdType,
     RouteHealthStatus,
     StaticRouteStateSnapshot,
 )
+from baseline_router.policies import StaticBreakerPolicy
 from router_core.models import AcquirerRouteConfig, RoutingResult
-from router_core.state import AcquirerStateSnapshot
+from router_core.policy import DecisionContext, Observation, classify_outcome
+from router_core.state import AcquirerStateSnapshot, Outcome
+
+# Decline codes that mean the acquirer did not process the payment (as in RouterConfig).
+STATIC_TECHNICAL_DECLINE_CODES = frozenset({"ACQUIRER_OUTAGE"})
 
 if TYPE_CHECKING:
     from data_layer.sqlite_logger import MetricsLogger, SQLiteMetricsStore
 
 logger = logging.getLogger("loom.baseline_router")
-
-
-class _MutableRouteState:
-    """Internal mutable tracking for a static route's counters and circuit breaker."""
-
-    __slots__ = (
-        "acquirer_id",
-        "consecutive_failures",
-        "failure_count",
-        "history",
-        "last_updated_at",
-        "priority",
-        "status",
-        "success_count",
-        "total_count",
-        "tripped_at_tx",
-    )
-
-    def __init__(self, acquirer_id: str, priority: int, window_size: int = 20) -> None:
-        self.acquirer_id = acquirer_id
-        self.priority = priority
-        self.status = RouteHealthStatus.HEALTHY
-        self.consecutive_failures = 0
-        self.tripped_at_tx: int | None = None
-        self.success_count = 0
-        self.failure_count = 0
-        self.total_count = 0
-        self.last_updated_at = time.time()
-        self.history: deque[float] = deque(maxlen=window_size)
-
-    def to_snapshot(self) -> StaticRouteStateSnapshot:
-        """Export immutable snapshot of this route's operational state."""
-        return StaticRouteStateSnapshot(
-            acquirer_id=self.acquirer_id,
-            priority=self.priority,
-            status=self.status,
-            consecutive_failures=self.consecutive_failures,
-            tripped_at_tx=self.tripped_at_tx,
-            success_count=self.success_count,
-            failure_count=self.failure_count,
-            total_count=self.total_count,
-            last_updated_at=self.last_updated_at,
-        )
 
 
 class StaticBaselineRouter:
@@ -88,17 +48,13 @@ class StaticBaselineRouter:
         self._routes: dict[str, AcquirerRouteConfig] = {r.acquirer_id: r for r in config.routes}
         self._priority_order: list[str] = list(config.priority_order)
         self._metrics_logger = metrics_logger
-
-        self._route_states: dict[str, _MutableRouteState] = {
-            aid: _MutableRouteState(
-                acquirer_id=aid,
-                priority=idx + 1,
-                window_size=config.failover_policy.window_size,
-            )
-            for idx, aid in enumerate(self._priority_order)
-        }
-
-        self._global_tx_counter = 0
+        # Route selection and breaker state live in the policy (Stage 0); this class is the
+        # async shell: dispatch, response handling and logging.
+        self._policy = StaticBreakerPolicy(
+            priority_order=self._priority_order,
+            failover_policy=config.failover_policy,
+            initial_timestamp=time.time(),
+        )
         self._client = http_client
         self._owns_client = http_client is None
 
@@ -113,9 +69,14 @@ class StaticBaselineRouter:
         return list(self._priority_order)
 
     @property
+    def policy(self) -> StaticBreakerPolicy:
+        """The policy that selects routes and keeps breaker state."""
+        return self._policy
+
+    @property
     def global_tx_counter(self) -> int:
         """Return the total number of transactions routed by this instance."""
-        return self._global_tx_counter
+        return self._policy.global_tx_counter
 
     @property
     def metrics_logger(self) -> Any | None:
@@ -125,7 +86,7 @@ class StaticBaselineRouter:
     @property
     def current_allocation(self) -> dict[str, float]:
         """Return the current static allocation vector."""
-        _selected_id, alloc = self._peek_current_route()
+        _selected_id, alloc = self._policy.peek()
         return alloc
 
     async def start(self) -> None:
@@ -158,90 +119,18 @@ class StaticBaselineRouter:
         """Async context manager exit."""
         await self.close()
 
-    def _peek_current_route(self) -> tuple[str, dict[str, float]]:
-        """Determine which route would be selected right now without state mutation."""
-        # 1. Check if any higher-priority TRIPPED route has completed cooldown
-        cooldown_limit = self._config.failover_policy.cooldown_transactions
-        for aid in self._priority_order:
-            state = self._route_states[aid]
-            if state.status == RouteHealthStatus.TRIPPED and state.tripped_at_tx is not None:
-                if (self._global_tx_counter - state.tripped_at_tx) >= cooldown_limit:
-                    alloc = {k: 1.0 if k == aid else 0.0 for k in self._priority_order}
-                    return aid, alloc
-
-        # 2. Check for route already in PROBATION or HEALTHY in priority order
-        for aid in self._priority_order:
-            state = self._route_states[aid]
-            if state.status in (RouteHealthStatus.HEALTHY, RouteHealthStatus.PROBATION):
-                alloc = {k: 1.0 if k == aid else 0.0 for k in self._priority_order}
-                return aid, alloc
-
-        # 3. Exhaustion Fallback
-        primary_id = self._priority_order[0]
-        alloc = {k: 1.0 if k == primary_id else 0.0 for k in self._priority_order}
-        return primary_id, alloc
-
-    def select_route(self) -> tuple[str, dict[str, float]]:
-        """Evaluate route states and return selected acquirer ID and static allocation vector.
-
-        Returns:
-            tuple[selected_id, allocation_vector] where allocation_vector is a 1-hot
-            indicator dictionary (e.g. {"acquirer_alpha": 1.0, "acquirer_beta": 0.0}).
-        """
-        cooldown_limit = self._config.failover_policy.cooldown_transactions
-
-        # 1. Check if any higher-priority TRIPPED route has completed cooldown
-        for aid in self._priority_order:
-            state = self._route_states[aid]
-            if state.status == RouteHealthStatus.TRIPPED and state.tripped_at_tx is not None:
-                elapsed = self._global_tx_counter - state.tripped_at_tx
-                if elapsed >= cooldown_limit:
-                    if self._config.failover_policy.failback_mode == "snapback":
-                        logger.info(
-                            "Cooldown elapsed (%d >= %d) on %s; snapback to HEALTHY",
-                            elapsed,
-                            cooldown_limit,
-                            aid,
-                        )
-                        state.status = RouteHealthStatus.HEALTHY
-                        state.consecutive_failures = 0
-                        state.tripped_at_tx = None
-                    else:
-                        logger.info(
-                            "Cooldown elapsed (%d >= %d) on %s; dispatching PROBATION probe",
-                            elapsed,
-                            cooldown_limit,
-                            aid,
-                        )
-                        state.status = RouteHealthStatus.PROBATION
-
-                    alloc = {k: 1.0 if k == aid else 0.0 for k in self._priority_order}
-                    return aid, alloc
-
-        # 2. Select first available route in priority order (PROBATION probe or HEALTHY)
-        for aid in self._priority_order:
-            state = self._route_states[aid]
-            if state.status in (RouteHealthStatus.HEALTHY, RouteHealthStatus.PROBATION):
-                alloc = {k: 1.0 if k == aid else 0.0 for k in self._priority_order}
-                return aid, alloc
-
-        # 3. Exhaustion Fallback: If all routes are TRIPPED, fall back to Primary with warning
-        primary_id = self._priority_order[0]
-        logger.warning(
-            "All static routes are TRIPPED; activating exhaustion fallback to primary: %s",
-            primary_id,
-        )
-        alloc = {k: 1.0 if k == primary_id else 0.0 for k in self._priority_order}
-        return primary_id, alloc
-
     async def route(self, request: AuthorizeRequest) -> RoutingResult:
         """Execute static route selection, HTTP authorization dispatch, and state update."""
         t_start = time.perf_counter()
-        self._global_tx_counter += 1
 
-        # 1. Static Selection
+        # 1. Static Selection (advances the breaker's transaction counter)
         t_select_start = time.perf_counter()
-        selected_id, static_allocation = self.select_route()
+        decision = self._policy.decide(
+            DecisionContext(transaction_id=request.transaction_id, amount=request.amount),
+            now=time.time(),
+        )
+        selected_id = decision.acquirer_id
+        static_allocation = dict(decision.propensities)
         t_select_end = time.perf_counter()
         routing_latency_ms = (t_select_end - t_select_start) * 1000.0
 
@@ -249,8 +138,8 @@ class StaticBaselineRouter:
             "Baseline routing decision: tx_id=%s -> selected=%s (tx_seq=%d, status=%s)",
             request.transaction_id,
             selected_id,
-            self._global_tx_counter,
-            self._route_states[selected_id].status.value,
+            self._policy.global_tx_counter,
+            self._policy.route_state(selected_id).status.value,
         )
 
         route_info = self._routes[selected_id]
@@ -309,55 +198,19 @@ class StaticBaselineRouter:
         t_dispatch_end = time.perf_counter()
         acquirer_latency_ms = (t_dispatch_end - t_dispatch_start) * 1000.0
 
-        # 3. Circuit Breaker State Mutation
-        state = self._route_states[selected_id]
-        state.total_count += 1
-        state.last_updated_at = time.time()
-        state.history.append(1.0 if success else 0.0)
-
-        if success:
-            state.success_count += 1
-            state.consecutive_failures = 0
-            if state.status == RouteHealthStatus.PROBATION:
-                logger.info(
-                    "Canary probe succeeded on %s; promoting route to HEALTHY",
-                    selected_id,
-                )
-                state.status = RouteHealthStatus.HEALTHY
-                state.tripped_at_tx = None
-        else:
-            state.failure_count += 1
-            state.consecutive_failures += 1
-
-            if state.status == RouteHealthStatus.PROBATION:
-                logger.warning(
-                    "Canary probe failed on %s; re-tripping circuit breaker and resetting cooldown",
-                    selected_id,
-                )
-                state.status = RouteHealthStatus.TRIPPED
-                state.tripped_at_tx = self._global_tx_counter
-            elif state.status == RouteHealthStatus.HEALTHY:
-                tripped = False
-                policy = self._config.failover_policy
-                if policy.threshold_type == FailoverThresholdType.CONSECUTIVE_FAILURES:
-                    if state.consecutive_failures >= policy.consecutive_failure_threshold:
-                        tripped = True
-                elif policy.threshold_type == FailoverThresholdType.WINDOW_FAILURE_RATE:
-                    if len(state.history) >= policy.window_size:
-                        err_rate = state.history.count(0.0) / len(state.history)
-                        if err_rate >= policy.window_failure_rate_threshold:
-                            tripped = True
-
-                if tripped:
-                    logger.warning(
-                        "Circuit breaker TRIPPED on %s (consecutive_failures=%d, total=%d); "
-                        "failing over to next priority tier",
-                        selected_id,
-                        state.consecutive_failures,
-                        state.total_count,
-                    )
-                    state.status = RouteHealthStatus.TRIPPED
-                    state.tripped_at_tx = self._global_tx_counter
+        # 3. Circuit Breaker State Mutation. The static breaker counts every payment that was
+        # not authorized as a failure (AUDIT F-01); the outcome kind is recorded for the record.
+        observation = (
+            classify_outcome(
+                response_payload.authorized,
+                response_payload.decline_code,
+                STATIC_TECHNICAL_DECLINE_CODES,
+            )
+            if response_payload is not None
+            else Observation(Outcome.TECHNICAL_FAILURE)
+        )
+        self._policy.feedback(decision, observation, now=time.time())
+        state = self._policy.route_state(selected_id)
 
         # 4. Construct State Snapshot & Routing Result Envelope
         health_score = (
@@ -411,13 +264,11 @@ class StaticBaselineRouter:
 
     def get_route_state(self, acquirer_id: str) -> StaticRouteStateSnapshot:
         """Return point-in-time state snapshot for an individual route."""
-        if acquirer_id not in self._route_states:
-            raise KeyError(f"Acquirer route {acquirer_id} not configured in baseline router")
-        return self._route_states[acquirer_id].to_snapshot()
+        return self._policy.route_state(acquirer_id)
 
     def get_all_states(self) -> dict[str, StaticRouteStateSnapshot]:
         """Return point-in-time state snapshots across all configured routes."""
-        return {aid: self._route_states[aid].to_snapshot() for aid in self._priority_order}
+        return self._policy.all_states()
 
     def list_acquirer_ids(self) -> list[str]:
         """Return list of all registered acquirer identifiers in priority order."""
