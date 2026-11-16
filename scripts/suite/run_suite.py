@@ -215,7 +215,10 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
     print(f"\n{elapsed:.0f} s")
     if args.out_json:
         Path(args.out_json).parent.mkdir(parents=True, exist_ok=True)
-        Path(args.out_json).write_text(json.dumps(summary, indent=1) + "\n", encoding="utf-8")
+        # Compact: the indented 200-seed file is over the repo's 500 KB large-file hook.
+        Path(args.out_json).write_text(
+            json.dumps(summary, separators=(",", ":")) + "\n", encoding="utf-8"
+        )
         print(f"Wrote {args.out_json}")
     return summary
 
