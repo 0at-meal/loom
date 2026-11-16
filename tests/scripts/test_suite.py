@@ -23,7 +23,7 @@ from router_core.policy import Decision, DecisionContext, Observation
 from router_core.router import BanditRouter
 from router_core.server import build_router_config, parse_args
 from scripts import compare_psr
-from scripts.suite import run_suite
+from scripts.suite import report, run_suite
 from scripts.suite.des import Arrivals, simulate
 from scripts.suite.metrics import _first_crossing, annual_lost_gmv
 from scripts.suite.policies import (
@@ -320,3 +320,13 @@ def test_run_suite_writes_json(tmp_path: Path) -> None:
     assert math.isfinite(entry["policies"]["oracle"]["psr"]["mean"])
     with pytest.raises(SystemExit):
         run_suite.main(["--seeds", "1"])
+
+    # The report renders every section from this JSON.
+    md = tmp_path / "suite.md"
+    report.main([str(out), "--out", str(md)])
+    text = md.read_text(encoding="utf-8")
+    for heading in ("## Mean PSR", "## Regret vs the oracle", "## Paired comparisons"):
+        assert heading in text
+    assert "`low_tps`" in text
+    assert "Ambiguous retries, all policies and scenarios: **0**" in text
+    assert "Loom served - Competent" in text
