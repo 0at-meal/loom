@@ -11,6 +11,7 @@ A multi-armed bandit (Thompson Sampling) estimates which payment acquirer is hea
 ### Known results and limitations (read this first)
 
 - **Stage 0 scenario suite (26 scenarios, 200 held-out paired seeds, simulator only):** Loom as served **loses** to a competent circuit breaker (approval-aware, half-open probe on the wall clock, one retry after a failure that is safe to retry) in 16 of 26 scenarios, ties in 3 and wins in 7. The losses include every outage shape except a weak secondary (−0.42 to −0.89 pp), capacity-limited backups (up to −3.24 pp), 0.5 TPS (−4.18 pp) and the day-long soaks (−0.47 and −0.50 pp). The wins are a weak secondary (+0.20 pp) and steady state with two close acquirers (+0.05 to +0.37 pp). See [Stage 0 scenario suite](#stage-0-scenario-suite-26-scenarios-200-held-out-paired-seeds).
+- **Stage 1, opt-in (`--fail-fast`: technical gate, one cascade retry, rate floor; same suite and seeds):** against the competent breaker Loom fail-fast wins 17, ties 2 and **loses 7**: both approval gray failures (−0.60 and −0.43 pp), three of the four capacity scenarios (−0.15 to −0.41 pp) and both soaks (−0.14 and −0.15 pp). It wins every technical outage (+0.18 to +0.30 pp), `weak_secondary` (+1.54) and 0.5 TPS (+0.15). The cost is extra hops: 0.16 per payment at 0.5 TPS, where it probes the dead acquirer every 2 s. It is not the served default. See [Stage 1](#stage-1-technical-gate-cascade-retry-rate-floor-opt-in-same-200-held-out-seeds).
 - **Hard outages:** Loom **loses** to a standard 3-consecutive-failure circuit breaker: −3.09 pp PSR over 100 paired seeds (95% CI [−3.74, −2.44]), winning only 14 of 100.
 - **Gray failures (partial brownout):** Loom **beats** the same breaker: +1.97 pp, 95% CI [+1.14, +2.80], when Alpha degrades to 60%.
 - **Healthy acquirers that differ slightly:** Loom keeps sending a large share of traffic to the worse of two close acquirers. With Alpha at 95% and Beta at 94% and no outage, it sends Beta 36.8% of transactions 501–2000 (10 seeds, benchmark configuration; 43.9% in the served configuration), down from about 46% before issuer declines got their own longer-memory belief. `python scripts/steady_state_share.py` reproduces this.
@@ -109,6 +110,57 @@ What the suite shows about Loom as it is today (Stage 0 changed no routing behav
 The proposal's acceptance targets, applied to Loom as it is today, are a starting line for later stages, not a verdict on them. Today, Loom served's lower 95% bound against the competent breaker is at or above −0.15 pp in 10 of 26 scenarios. It ties or beats both SR window and SW-UCB in 14 of 26. It has the lowest soak loss in neither soak.
 
 Not covered: the harness has no admission queue (so `inflight_concurrency` does not exercise `max_in_flight`), the oracle ignores capacity (a policy can beat it in the capacity scenarios), and the SR-window and SW-UCB parameters are our own choices, not values taken from the papers they come from. All of it is simulator evidence.
+
+### Stage 1: technical gate, cascade retry, rate floor (opt-in, same 200 held-out seeds)
+
+Stage 1 of the plan adds three things to Loom, all off by default and switched on together by `python -m router_core.server --fail-fast` (policy `loom_failfast` in the suite):
+
+- a **technical gate** per acquirer: a CUSUM on technical outcomes opens it after two consecutive failures, a 40% brownout in about seven attempts, or attempts left unanswered for 3 × p95 latency. An open acquirer gets no ordinary traffic, only one probe at a time on a wall-clock backoff (1 s doubling, capped at 2 s after a probe that failed safely and 30 s after one that timed out);
+- **one cascade retry** on the best other eligible acquirer after a 503, a technical decline code, a 429 or a router-side send failure. Never after a timeout or an unknown outcome, never a third attempt. Every attempt updates its own acquirer's beliefs and is listed in `RoutingResult.attempts`;
+- an **exploration floor expressed as a rate** (0.45 payments/s per acquirer, the old 3% at 15 TPS), so the share given to the worse acquirer shrinks as traffic grows.
+
+The design, the three changes made on train seeds and the costs are in `docs/decisions-log.md` (entry *[Audit F-01, F-17, F-16, Stage 1]*). Nothing was tuned on test seeds; the defaults were set before this run. The served default is still Loom without these settings.
+
+| Scenario | Loom served PSR % | Loom fail-fast PSR % | Loom bench PSR % | Competent PSR % | Static M=3 PSR % | Oracle PSR % | Loom fail-fast - competent, pp [95% CI] |
+| :-- | :-: | :-: | :-: | :-: | :-: | :-: | :-: |
+| `hard_outage_fast_fail` | 93.38 | 94.48 | 92.88 | 94.27 | 92.89 | 94.70 | +0.21 [+0.19, +0.24] |
+| `hard_outage_timeout` | 93.19 | 94.21 | 92.67 | 93.92 | 83.71 | 94.70 | +0.29 [+0.26, +0.32] |
+| `technical_brownout` | 93.81 | 94.47 | 93.30 | 94.28 | 92.51 | 94.68 | +0.18 [+0.16, +0.20] |
+| `approval_gray_failure` | 93.43 | 93.43 | 93.34 | 94.03 | 90.55 | 94.68 | -0.60 [-0.63, -0.56] |
+| `gradual_approval_degrade` | 93.64 | 93.63 | 93.52 | 94.06 | 91.27 | 94.69 | -0.43 [-0.47, -0.40] |
+| `flapping` | 93.33 | 94.48 | 93.33 | 94.18 | 93.74 | 94.86 | +0.30 [+0.29, +0.32] |
+| `weak_secondary` | 91.27 | 92.61 | 90.40 | 91.07 | 90.21 | 92.89 | +1.54 [+1.49, +1.60] |
+| `steady_gap_0` | 94.99 | 94.99 | 94.99 | 94.99 | 94.99 | 94.99 | +0.00 [+0.00, +0.00] |
+| `steady_gap_0_5pp_right_priority` | 94.85 | 94.84 | 94.81 | 94.79 | 95.00 | 95.01 | +0.05 [+0.04, +0.06] |
+| `steady_gap_0_5pp_wrong_priority` | 94.85 | 94.85 | 94.81 | 94.79 | 94.51 | 95.01 | +0.06 [+0.05, +0.07] |
+| `steady_gap_1pp_right_priority` | 94.80 | 94.81 | 94.69 | 94.63 | 95.00 | 95.00 | +0.18 [+0.16, +0.19] |
+| `steady_gap_1pp_wrong_priority` | 94.79 | 94.80 | 94.68 | 94.61 | 94.00 | 94.99 | +0.19 [+0.17, +0.20] |
+| `steady_gap_3pp_right_priority` | 94.80 | 94.80 | 94.60 | 94.45 | 95.01 | 95.02 | +0.35 [+0.33, +0.38] |
+| `steady_gap_3pp_wrong_priority` | 94.77 | 94.77 | 94.57 | 94.41 | 92.04 | 94.99 | +0.37 [+0.34, +0.39] |
+| `capacity_429_2_acquirers` | 78.03 | 78.10 | 78.19 | 78.51 | 72.55 | 78.41 | -0.41 [-0.43, -0.38] |
+| `capacity_collapse_2_acquirers` | 79.39 | 79.32 | 79.58 | 79.62 | 76.65 | 79.57 | -0.30 [-0.32, -0.28] |
+| `capacity_429_3_acquirers` | 87.55 | 91.58 | 88.05 | 90.80 | 81.02 | 90.88 | +0.79 [+0.76, +0.81] |
+| `capacity_collapse_3_acquirers` | 90.49 | 92.34 | 90.89 | 92.49 | 84.03 | 92.79 | -0.15 [-0.18, -0.12] |
+| `common_mode_issuer_incident` | 86.15 | 86.16 | 86.12 | 86.12 | 86.43 | 86.50 | +0.05 [+0.01, +0.08] |
+| `segment_heterogeneity` | 93.10 | 93.10 | 93.10 | 93.11 | 93.11 | 95.01 | -0.01 [-0.02, +0.00] |
+| `inflight_concurrency` | 93.31 | 94.56 | 93.37 | 94.40 | 85.09 | 94.67 | +0.17 [+0.15, +0.18] |
+| `low_tps` | 90.04 | 94.38 | 88.96 | 94.23 | 93.29 | 94.71 | +0.15 [+0.13, +0.18] |
+| `high_tps` | 93.44 | 94.59 | 93.53 | 94.30 | 80.89 | 94.67 | +0.29 [+0.28, +0.30] |
+| `bursty_tps` | 93.20 | 94.45 | 92.84 | 94.26 | 90.96 | 94.66 | +0.19 [+0.17, +0.21] |
+| `soak_day_gap_0pp` | 89.43 | 89.76 | 89.22 | 89.90 | 88.98 | 90.00 | -0.14 [-0.15, -0.14] |
+| `soak_day_gap_1pp` | 88.88 | 89.23 | 88.67 | 89.37 | 88.87 | 89.88 | -0.15 [-0.15, -0.14] |
+
+What it shows:
+
+- **Against the competent breaker**, Loom fail-fast wins 17 scenarios (95% CI above zero), ties 2 and loses 7. It now wins every technical outage shape (+0.18 to +0.30 pp), `weak_secondary` (+1.54), the 3-acquirer 429 scenario (+0.79) and every load scenario, including 0.5 TPS (+0.15; Loom served: −4.18). It still loses the two approval gray failures (−0.60 and −0.43 pp; the gate reacts only to technical failures, this is Stage 2), both 2-acquirer capacity scenarios (−0.41 and −0.30) and the 3-acquirer capacity collapse (−0.15; capacity is Stage 3), and both soaks (−0.14 and −0.15).
+- **Against Loom served**, fail-fast is better in 14 scenarios (+0.07 to +4.34 pp) and worse in one: `capacity_collapse_2_acquirers`, −0.07 pp [−0.10, −0.05]. `gradual_approval_degrade` is −0.01 [−0.02, −0.00]. The rest are ties.
+- **Failed payments on a dead route** (suite.md, incident dynamics) drop to 0 in the eight scenarios with a fast-failing outage and no capacity collapse (Loom served: 83–682 per run). They are 33.5 and 20.7 in the two capacity-collapse scenarios (Loom served 484.1 and 343.6). In `hard_outage_timeout` they are 21.7 (Loom served 122.0, competent 31.4): the attempts already in flight when the acquirer hangs, plus probes that hang.
+- **Costs.** In `low_tps` (0.5 TPS) a probe is due at almost every arrival during the outage, because a probe that fails safely backs off only 2 s: 0.164 extra hops per payment over the hour and a p99 latency of 344 ms against 299 ms. Those probes still count as first attempts on the dead acquirer, so the suite's *divert* time for that run is 1,205 s; no payment was lost on them. After a timeout outage, recovery is slower than Loom served (34.5 s against 22.2 s to half the old share), because a probe that times out backs off up to 30 s. In the 3-acquirer capacity scenarios about one payment in ten takes a second hop (0.087–0.106).
+- **Acceptance targets.** Lower 95% bound against the competent breaker at or above −0.15 pp: 20 of 26 (Loom served: 10). Ties or beats both SR window and SW-UCB: 23 of 26 (Loom served: 14). Lowest soak loss: neither soak. With equal acquirers Loom fail-fast loses an estimated $29k a year against the oracle (Loom served $47k, SW-UCB $1k); with a 1 pp gap $2.34M (Loom served $2.35M, Static $M=3$ $241k). No ambiguous retries in any scenario.
+
+**Decision overhead** (machine-dependent; development machine, the `--timing` command under [Running the Benchmark Comparison](#7-running-the-benchmark-comparison), 2 test seeds on `hard_outage_fast_fail`, `capacity_429_3_acquirers` and `high_tps`, 1 worker): `decide()` p99 is 160–237 µs for Loom fail-fast (p50 75–83 µs). In the same run Loom served measured 134–157 µs (115–142 µs in the Stage 0 run above), the competent breaker 20–23 µs and Static $M=3$ about 6–7 µs. The gate adds roughly 10–15 µs at p50. The p99 figures come from two seeds each and vary between runs: the `high_tps` p99 for Loom fail-fast was 237 µs as the mean of two seeds whose 95% interval spans several hundred µs.
+
+Not covered: the ledger stores only the last attempt of a cascaded payment (attempt indexes in the ledger are Stage 5). In the live demo the traffic generator waits for each answer, so no other decision runs while an attempt hangs and the overdue check cannot fire before the timeout. In a manual `LATENCY_SPIKE` test the gate opened only once timeouts came back. The suite, which overlaps attempts, measures the overdue path; the demo does not show it.
 
 ---
 
@@ -231,7 +283,7 @@ cp .env.example .env
 > **Configuration Notice**: `.env` keys read through `data_layer/config.py`: `LEDGER_ENABLED`, `SQLITE_*`, `REDIS_ENABLED`, `REDIS_SNAPSHOT_INTERVAL_SEC`, the other `REDIS_*` keys, `KEY_PREFIX` and `REDIS_CHANNEL_*`. `router_core.server` also reads `DECAY_HALF_LIFE_SEC` (default for `--half-life-sec`) and `ROUTER_MAX_IN_FLIGHT` (default for `--max-in-flight`). CLI flags override `.env`. `PID_KP`, `PID_KI`, `PID_KD`, `APP_ENV` and `LOG_LEVEL` are never read. PID gains default to $K_p=0.12, K_i=0.005, K_d=0.25, I_{\text{max}}=1.0, w_{\text{min}}=0.03$ in `PIDConfig` and are overridden via server CLI arguments (`--kp`, `--ki`, `--kd`, `--min-allocation`).
 
 > [!NOTE]
-> **Running the tests:** `pytest` collects and runs 441 tests; CI runs the same suite with coverage, plus the dashboard's 39 Vitest tests (`cd dashboard && npm test`) and its production build. Dependencies are unpinned, and `pyproject.toml` turns warnings into errors, so a new library release can still break collection. A few tests assert wall-clock latency and can fail on a loaded machine.
+> **Running the tests:** `pytest` collects and runs 477 tests; CI runs the same suite with coverage, plus the dashboard's 39 Vitest tests (`cd dashboard && npm test`) and its production build. Dependencies are unpinned, and `pyproject.toml` turns warnings into errors, so a new library release can still break collection. A few tests assert wall-clock latency and can fail on a loaded machine.
 
 ---
 
@@ -289,6 +341,8 @@ The all-in-one launcher [`scripts/run_demo.py`](scripts/run_demo.py) starts the 
 python scripts/run_demo.py --tps 15
 
 # (Optional: Pass --no-traffic if you want to drive transaction traffic manually)
+# (Optional: Pass --fail-fast for the Stage 1 gate, cascade retry and rate floor;
+#  /health then shows each acquirer's gate state)
 ```
 
 ```bash
@@ -309,7 +363,7 @@ For granular debugging, each service can be run in an independent terminal sessi
 python -m acquirer_sim.server --port 8001 --log-level info
 
 # Terminal 2: Loom Router Core Engine (Port 8000)
-python -m router_core.server --port 8000 --log-level info
+python -m router_core.server --port 8000 --log-level info      # add --fail-fast for Stage 1
 
 # Terminal 3: Synthetic Transaction Stream (target 15 TPS for 120s)
 python scripts/generate_transactions.py --tps 15 --duration 120
@@ -404,8 +458,8 @@ python scripts/steady_state_share.py --config served
 # 6. Value-scaled protection with the PID on: high-value payments during an outage (30 seeds, ~1 minute)
 python scripts/value_policy_outage.py
 
-# 7. Stage 0 scenario suite: 26 scenarios x 9 policies x 200 held-out seeds (about 2.3 h on 11 workers)
-python scripts/suite/run_suite.py --policies all --seeds 200 --split test --workers 11 --out-json docs/results/suite.json
+# 7. Scenario suite: 26 scenarios x 10 policies x 200 held-out seeds (about 3.5 h on 10 workers)
+python scripts/suite/run_suite.py --policies all --seeds 200 --split test --workers 10 --out-json docs/results/suite.json
 python scripts/suite/report.py docs/results/suite.json --out docs/results/suite.md
 python scripts/suite/report.py docs/results/suite.json --readme      # the table in this README
 
