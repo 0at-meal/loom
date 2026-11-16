@@ -11,6 +11,13 @@ tell the two apart would send Beta only its 3% exploration floor.
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+if __package__ in (None, ""):
+    # Run as a file: make the repository root importable so ``scripts.compare_psr`` resolves.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 import argparse
 import asyncio
 import statistics
