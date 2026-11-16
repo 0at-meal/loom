@@ -9,6 +9,7 @@ import uuid
 
 import numpy as np
 
+from acquirer_sim.crn import ISSUER, crn_uniform, latency_stream, technical_stream
 from acquirer_sim.models import (
     AcquirerConfig,
     AdminStateResponse,
@@ -21,13 +22,19 @@ from acquirer_sim.models import (
 
 
 class AcquirerOutageHttpException(Exception):
-    """Exception raised when an authorization encounters an HTTP 503 outage failure."""
+    """Raised when an authorization fails at the HTTP level (503 outage, or 429 throttling)."""
 
-    def __init__(self, acquirer_id: str, message: str = "Acquirer service unavailable") -> None:
-        """Initialize outage exception with acquirer identifier."""
+    def __init__(
+        self,
+        acquirer_id: str,
+        message: str = "Acquirer service unavailable",
+        status_code: int = 503,
+    ) -> None:
+        """Initialize outage exception with acquirer identifier and HTTP status."""
         super().__init__(message)
         self.acquirer_id: str = acquirer_id
         self.message: str = message
+        self.status_code: int = status_code
 
 
 class AcquirerSimulator:
@@ -37,12 +44,21 @@ class AcquirerSimulator:
         self,
         config: AcquirerConfig,
         rng: np.random.Generator | None = None,
+        crn_seed: int | None = None,
     ) -> None:
-        """Initialize acquirer simulator instance with initial configuration."""
+        """Initialize acquirer simulator instance with initial configuration.
+
+        With ``crn_seed`` set, every draw is a common random number keyed by
+        ``(crn_seed, transaction_id)`` (``acquirer_sim.crn``) instead of the next value of
+        ``rng``: a payment's issuer draw is then the same on every acquirer and matches
+        ``acquirer_sim.world.World`` with the same seed.
+        """
         self._config: AcquirerConfig = config
         self._acquirer_id: str = config.acquirer_id
         self._base_success_rate: float = config.base_success_rate
         self._latency_config: LatencyConfig = config.latency
+        self._technical_error_rate: float = config.technical_error_rate
+        self._crn_seed: int | None = crn_seed
 
         self._outage_active: bool = False
         self._outage_behavior: OutageBehavior = OutageBehavior.RETURN_DECLINE
@@ -108,18 +124,40 @@ class AcquirerSimulator:
             self._outage_active = active
             self._outage_behavior = behavior
 
+    @property
+    def technical_error_rate(self) -> float:
+        """Return the background HTTP 503 probability outside outages."""
+        return self._technical_error_rate
+
+    def set_technical_error_rate(self, rate: float) -> None:
+        """Update the background HTTP 503 probability in [0.0, 1.0]."""
+        if not (0.0 <= rate <= 1.0):
+            raise ValueError(f"technical_error_rate must be in [0.0, 1.0], got {rate}")
+        with self._lock:
+            self._technical_error_rate = rate
+
+    def _uniform(self, transaction_id: str, stream: str) -> float:
+        """Next uniform draw: a common random number when crn_seed is set, else from rng."""
+        if self._crn_seed is not None:
+            return crn_uniform(self._crn_seed, transaction_id, stream)
+        return float(self._rng.uniform(0.0, 1.0))
+
     def set_latency_config(self, config: LatencyConfig) -> None:
         """Update the latency configuration."""
         with self._lock:
             self._latency_config = config
 
-    def calculate_latency(self) -> float:
+    def calculate_latency(self, transaction_id: str | None = None) -> float:
         """Calculate artificial processing latency in milliseconds."""
         base = self._latency_config.base_ms
         jitter = self._latency_config.jitter_ms
         delay = base
         if jitter > 0.0:
-            delay += float(self._rng.uniform(-jitter, jitter))
+            if self._crn_seed is not None and transaction_id is not None:
+                u = crn_uniform(self._crn_seed, transaction_id, latency_stream(self._acquirer_id))
+                delay += jitter * (2.0 * u - 1.0)
+            else:
+                delay += float(self._rng.uniform(-jitter, jitter))
 
         if self._outage_active and self._outage_behavior == OutageBehavior.LATENCY_SPIKE:
             delay += self._latency_config.outage_spike_ms
@@ -128,7 +166,7 @@ class AcquirerSimulator:
 
     async def execute_authorization(self, request: AuthorizeRequest) -> AuthorizeResponse:
         """Simulate authorization delay and return probabilistic or outage outcome."""
-        simulated_delay_ms = self.calculate_latency()
+        simulated_delay_ms = self.calculate_latency(request.transaction_id)
         if simulated_delay_ms > 0.0:
             await asyncio.sleep(simulated_delay_ms / 1000.0)
 
@@ -144,6 +182,16 @@ class AcquirerSimulator:
                 raise AcquirerOutageHttpException(
                     acquirer_id=self._acquirer_id,
                     message="Acquirer currently unavailable due to operational outage (HTTP 503)",
+                )
+            if self._outage_behavior == OutageBehavior.HTTP_429:
+                with self._lock:
+                    self._total_requests += 1
+                    self._declined_count += 1
+                    self._outage_declines += 1
+                raise AcquirerOutageHttpException(
+                    acquirer_id=self._acquirer_id,
+                    message="Acquirer is throttling requests (HTTP 429)",
+                    status_code=429,
                 )
 
             # Both RETURN_DECLINE and LATENCY_SPIKE produce standard decline payload
@@ -164,8 +212,20 @@ class AcquirerSimulator:
                 timestamp=server_timestamp,
             )
 
+        # Background technical errors (drawn only when enabled, so default runs are unchanged)
+        if self._technical_error_rate > 0.0:
+            u_tech = self._uniform(request.transaction_id, technical_stream(self._acquirer_id))
+            if u_tech < self._technical_error_rate:
+                with self._lock:
+                    self._total_requests += 1
+                    self._declined_count += 1
+                raise AcquirerOutageHttpException(
+                    acquirer_id=self._acquirer_id,
+                    message="Acquirer technical error (HTTP 503)",
+                )
+
         # Normal probabilistic execution
-        u = float(self._rng.uniform(0.0, 1.0))
+        u = self._uniform(request.transaction_id, ISSUER)
         if u < self._base_success_rate:
             with self._lock:
                 self._total_requests += 1
@@ -249,10 +309,15 @@ class MultiAcquirerSimulator:
         default_base_rate: float = 0.95,
         default_latency: LatencyConfig | None = None,
         seed: int | None = None,
+        crn_seed: int | None = None,
     ) -> None:
-        """Initialize multi-acquirer coordinator with optional default routes."""
+        """Initialize multi-acquirer coordinator with optional default routes.
+
+        ``crn_seed`` switches every acquirer to common random numbers (see AcquirerSimulator).
+        """
         self._default_base_rate: float = default_base_rate
         self._default_latency: LatencyConfig = default_latency or LatencyConfig()
+        self._crn_seed: int | None = crn_seed
         self._seed: int | None = seed
         self._seed_counter: int = seed if seed is not None else 0
         self._lock: threading.Lock = threading.Lock()
@@ -274,7 +339,9 @@ class MultiAcquirerSimulator:
         with self._lock:
             if config.acquirer_id in self._simulators:
                 raise ValueError(f"Acquirer '{config.acquirer_id}' is already registered")
-            simulator = AcquirerSimulator(config=config, rng=self._create_rng())
+            simulator = AcquirerSimulator(
+                config=config, rng=self._create_rng(), crn_seed=self._crn_seed
+            )
             self._simulators[config.acquirer_id] = simulator
             return simulator
 
@@ -297,6 +364,7 @@ class MultiAcquirerSimulator:
                 self._simulators[acquirer_id] = AcquirerSimulator(
                     config=cfg,
                     rng=self._create_rng(),
+                    crn_seed=self._crn_seed,
                 )
             return self._simulators[acquirer_id]
 
