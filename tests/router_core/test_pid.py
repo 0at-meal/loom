@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import random
+
 import pytest
 from pydantic import ValidationError
 
@@ -387,3 +389,30 @@ class TestNonFiniteInputsAreRejected:
             dt = float("nan")
         with pytest.raises(ValueError, match="finite"):
             calculate_pid_step(target, current, PIDState.initialize(["a", "b"]), PIDConfig(), dt)
+
+
+def test_per_acquirer_floors_hold_and_the_vector_sums_to_one() -> None:
+    """Stage 1: a gated acquirer's floor is 0, the others keep theirs (fuzzed)."""
+    rnd = random.Random(7)
+    for _ in range(2000):
+        ids = ["a", "b", "c"]
+        weights = {k: rnd.uniform(-0.5, 1.5) for k in ids}
+        floors = {"a": 0.0, "b": rnd.uniform(0, 0.1), "c": rnd.uniform(0, 0.1)}
+        out = project_to_bounded_simplex(weights, floors=floors)
+        assert abs(sum(out.values()) - 1.0) < 1e-9
+        for k in ids:
+            assert out[k] >= floors[k] - 1e-12
+
+
+def test_floors_none_is_the_uniform_floor_projection() -> None:
+    w = {"a": 0.9, "b": 0.12, "c": -0.02}
+    assert project_to_bounded_simplex(w, min_floor=0.03) == project_to_bounded_simplex(
+        w, min_floor=0.03, floors=None
+    )
+
+
+def test_invalid_floors_are_rejected() -> None:
+    with pytest.raises(ValueError):
+        project_to_bounded_simplex({"a": 0.5, "b": 0.5}, floors={"a": 0.6, "b": 0.5})
+    with pytest.raises(ValueError):
+        project_to_bounded_simplex({"a": 0.5, "b": 0.5}, floors={"a": 0.1})
