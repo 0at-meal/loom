@@ -39,6 +39,13 @@ from scripts.suite.scenarios import AMOUNT, SCENARIOS, run_seeds, select
 
 # Paired comparisons reported for every scenario: (first, second); difference = first - second.
 COMPARISONS: list[tuple[str, str]] = [
+    ("loom_longmem", "competent"),
+    ("loom_longmem", "loom_failfast"),
+    ("loom_longmem", "sr_window"),
+    ("loom_longmem", "sw_ucb"),
+    ("loom_longmem_warm", "competent"),
+    ("loom_longmem_warm", "loom_longmem"),
+    ("loom_longmem_warm", "static_m3"),
     ("loom_failfast", "competent"),
     ("loom_failfast", "loom_served"),
     ("loom_failfast", "sr_window"),
@@ -153,6 +160,62 @@ def aggregate(rows: list[dict[str, Any]], policies: list[str], seeds: list[int])
     return out
 
 
+def merge_from(summary: dict[str, Any], old: dict[str, Any]) -> list[str]:
+    """Add policies that only ``old`` ran to ``summary`` (mutates); return the names added.
+
+    Only valid because runs are deterministic per split, seed and code version, so the check
+    comes first: every policy in both must have identical per-scenario results in both, and
+    the split, seeds and scenarios must match. Comparisons between two added policies are
+    copied; comparisons that need a new policy's per-seed values are only in ``summary``.
+    """
+    for key in ("split", "n_seeds", "seeds", "reference"):
+        if summary[key] != old[key]:
+            raise ValueError(f"cannot merge: {key} differs ({summary[key]} vs {old[key]})")
+    if set(summary["scenarios"]) != set(old["scenarios"]):
+        raise ValueError("cannot merge: the two runs cover different scenarios")
+    shared = [p for p in summary["policies"] if p in old["policies"]]
+    for name, entry in summary["scenarios"].items():
+        prev = old["scenarios"][name]
+        for pol in shared:
+            if entry["policies"][pol] != prev["policies"][pol] and not _same_except_timing(
+                entry["policies"][pol], prev["policies"][pol]
+            ):
+                raise ValueError(
+                    f"cannot merge: {pol} on {name} differs from the old run, so the code "
+                    "it depends on changed; rerun every policy"
+                )
+    added = [p for p in old["policies"] if p not in summary["policies"]]
+    for name, entry in summary["scenarios"].items():
+        prev = old["scenarios"][name]
+        for pol in added:
+            entry["policies"][pol] = prev["policies"][pol]
+            if pol in prev["regret_vs_oracle"]:
+                entry["regret_vs_oracle"][pol] = prev["regret_vs_oracle"][pol]
+            if "annual_lost_gmv" in prev and pol in prev["annual_lost_gmv"]:
+                entry.setdefault("annual_lost_gmv", {})[pol] = prev["annual_lost_gmv"][pol]
+        for key, comp in prev["comparisons"].items():
+            if key not in entry["comparisons"] and (
+                comp["first"] in added or comp["second"] in added
+            ):
+                if comp["first"] in summary["policies"] and comp["second"] in summary["policies"]:
+                    continue
+                entry["comparisons"][key] = comp
+    order = list(POLICIES)
+    summary["policies"] = sorted(
+        [*summary["policies"], *added], key=lambda p: order.index(p) if p in order else len(order)
+    )
+    summary["merged_from"] = {"policies": added}
+    return added
+
+
+def _same_except_timing(a: dict[str, Any], b: dict[str, Any]) -> bool:
+    """Equal apart from machine-dependent decision timings."""
+    skip = {"decide_p50_us", "decide_p99_us"}
+    return {k: v for k, v in a.items() if k not in skip} == {
+        k: v for k, v in b.items() if k not in skip
+    }
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Command-line options."""
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
@@ -167,6 +230,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--timing", action="store_true", help="record decide() wall time")
     parser.add_argument("--out-json", default=None, help="write the summary here")
+    parser.add_argument(
+        "--merge-from",
+        default=None,
+        help=(
+            "an earlier summary JSON on the same split and seeds: copy in the policies only it "
+            "ran, after checking that every policy in both reproduced exactly"
+        ),
+    )
     return parser
 
 
@@ -215,6 +286,17 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
         "timing": args.timing,
         "scenarios": aggregate(rows, policies, seeds),
     }
+    if args.merge_from:
+        old = json.loads(Path(args.merge_from).read_text(encoding="utf-8"))
+        try:
+            added = merge_from(summary, old)
+        except ValueError:
+            if args.out_json:  # keep hours of runs: write what was run, unmerged
+                keep = Path(args.out_json).with_suffix(".unmerged.json")
+                keep.write_text(json.dumps(summary, separators=(",", ":")) + "\n", "utf-8")
+                print(f"Merge refused; wrote the unmerged summary to {keep}")
+            raise
+        print(f"Merged {', '.join(added) or 'nothing'} from {args.merge_from}")
     print(format_table(summary))
     print(f"\n{elapsed:.0f} s")
     if args.out_json:

@@ -29,9 +29,13 @@ from scripts.suite.metrics import _first_crossing, annual_lost_gmv
 from scripts.suite.policies import (
     BENCH_HALF_LIFE_SEC,
     POLICIES,
+    WARM_OBSERVATIONS,
     bench_router_config,
     build_policy,
     failfast_router_config,
+    longmem_router_config,
+    longmem_warm_router_config,
+    previous_day_priors,
     served_router_config,
 )
 from scripts.suite.scenarios import SCENARIOS, TEST_SEED_BASE, Scenario, Window, run_seeds
@@ -67,8 +71,12 @@ async def _http_run(
     transport = httpx.ASGITransport(app=sim_app)
     async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
         router: Any
-        if router_kind in ("loom_bench", "loom_failfast"):
-            make = bench_router_config if router_kind == "loom_bench" else failfast_router_config
+        if router_kind in ("loom_bench", "loom_failfast", "loom_longmem"):
+            make = {
+                "loom_bench": bench_router_config,
+                "loom_failfast": failfast_router_config,
+                "loom_longmem": longmem_router_config,
+            }[router_kind]
             config = make([A, B], policy_seed)
             for r in config.routes:
                 r.base_url = "http://testserver"
@@ -104,7 +112,9 @@ async def _http_run(
     return out
 
 
-@pytest.mark.parametrize("policy_name", ["loom_bench", "loom_failfast", "static_m3"])
+@pytest.mark.parametrize(
+    "policy_name", ["loom_bench", "loom_failfast", "loom_longmem", "static_m3"]
+)
 @pytest.mark.parametrize("seed", [42, 7])
 async def test_des_matches_http_path(
     policy_name: str, seed: int, caplog: pytest.LogCaptureFixture
@@ -120,7 +130,7 @@ async def test_des_matches_http_path(
     http_trace = await _http_run(policy_name, crn_seed=seed, policy_seed=777)
     assert des_trace == http_trace
     # The outage really happened and was routed around.
-    if policy_name == "loom_failfast":
+    if policy_name in ("loom_failfast", "loom_longmem"):
         # Retried on B instead of lost.
         assert sum(1 for a, ok in des_trace[50:100] if a == (A, B)) > 0
     else:
@@ -146,6 +156,20 @@ def test_failfast_config_matches_the_server_flag(monkeypatch: pytest.MonkeyPatch
     assert mine.pid_config == served.pid_config
     assert mine.gate_config == served.gate_config is not None
     assert mine.cascade is served.cascade is True
+    assert [r.state_config for r in mine.routes] == [r.state_config for r in served.routes]
+    assert mine.value_scaled_config == served.value_scaled_config is None
+
+
+def test_longmem_config_matches_the_server_flags(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The suite's 'loom_longmem' is `python -m router_core.server --fail-fast --long-memory`."""
+    monkeypatch.delenv("DECAY_HALF_LIFE_SEC", raising=False)
+    served = build_router_config(parse_args(["--fail-fast", "--long-memory"]))
+    mine = longmem_router_config([r.acquirer_id for r in served.routes], seed=1)
+    assert mine.pid_config == served.pid_config
+    assert mine.gate_config == served.gate_config is not None
+    assert mine.cascade is served.cascade is True
+    assert mine.allocation_draws == served.allocation_draws is not None
+    assert mine.withhold_gated_failures is served.withhold_gated_failures is True
     assert [r.state_config for r in mine.routes] == [r.state_config for r in served.routes]
     assert mine.value_scaled_config == served.value_scaled_config is None
 
@@ -351,3 +375,68 @@ def test_run_suite_writes_json(tmp_path: Path) -> None:
     assert "`low_tps`" in text
     assert "Ambiguous retries, all policies and scenarios: **0**" in text
     assert "Loom served - Competent" in text
+
+
+def test_previous_day_priors_are_a_noisy_ledger_of_the_starting_rates() -> None:
+    """'loom_longmem_warm' starts from Binomial draws at each acquirer's t=0 approval rate."""
+    scenario = SCENARIOS["segment_heterogeneity"]
+    world = scenario.build_world(1)
+    priors = previous_day_priors(world, scenario.priority, 11)
+    assert priors == previous_day_priors(world, scenario.priority, 11)  # deterministic
+    for aid in scenario.priority:
+        truth = sum(s.share * world.approval_rate(aid, s.name, 0.0) for s in world.segments)
+        p = priors[aid]
+        assert p["observations"] == WARM_OBSERVATIONS
+        assert abs(p["rate"] - truth) < 4 * (truth * (1 - truth) / WARM_OBSERVATIONS) ** 0.5
+    cfg = longmem_warm_router_config(scenario.priority, world, 11)
+    rates = {r.acquirer_id: r.state_config.warm_approval_rate for r in cfg.routes}
+    assert rates == {aid: priors[aid]["rate"] for aid in scenario.priority}
+
+
+def test_warm_start_routes_to_the_better_acquirer_from_the_first_minute() -> None:
+    """1 pp gap, wrong priority: the warm policy favours the better acquirer at once."""
+    scenario = _small(SCENARIOS["steady_gap_1pp_wrong_priority"], 60.0)
+    shares = {}
+    for name in ("loom_longmem", "loom_longmem_warm"):
+        world = scenario.build_world(2)
+        policy = build_policy(name, scenario.priority, world, scenario.policy_seed(2))
+        result = simulate(world, policy, scenario.arrival_times(2))
+        first = [p.attempts[0].acquirer_id for p in result.payments]
+        shares[name] = first.count(A) / len(first)
+    assert shares["loom_longmem_warm"] > 0.85
+    assert shares["loom_longmem_warm"] > shares["loom_longmem"] + 0.1
+
+
+def _low_tps_run(tmp_path: Path, name: str, policies: str, *extra: str) -> dict[str, Any]:
+    out = tmp_path / name
+    args = ["--scenarios", "low_tps", "--seeds", "2", "--split", "train", "--workers", "1"]
+    run_suite.main([*args, "--policies", policies, "--out-json", str(out), *extra])
+    data: dict[str, Any] = json.loads(out.read_text(encoding="utf-8"))
+    return data
+
+
+def test_merge_from_adds_old_policies_after_checking_reproduction(tmp_path: Path) -> None:
+    """--merge-from copies policies only the old run had; shared ones must match exactly."""
+    old = _low_tps_run(tmp_path, "old.json", "loom_served,competent")
+    merged = _low_tps_run(
+        tmp_path, "new.json", "static_m3,competent", "--merge-from", str(tmp_path / "old.json")
+    )
+    entry = merged["scenarios"]["low_tps"]
+    assert merged["policies"] == ["loom_served", "static_m3", "competent", "oracle"]
+    assert merged["merged_from"] == {"policies": ["loom_served"]}
+    assert (
+        entry["policies"]["loom_served"] == old["scenarios"]["low_tps"]["policies"]["loom_served"]
+    )
+    assert "loom_served_vs_competent" in entry["comparisons"]
+    assert "competent_vs_static_m3" in entry["comparisons"]
+
+
+def test_merge_from_refuses_when_a_shared_policy_changed(tmp_path: Path) -> None:
+    """A shared policy whose numbers differ means the code changed: no merge."""
+    old = _low_tps_run(tmp_path, "old.json", "loom_served,competent")
+    old["scenarios"]["low_tps"]["policies"]["competent"]["psr"]["mean"] += 1e-9
+    with pytest.raises(ValueError, match="differs"):
+        run_suite.merge_from(
+            _low_tps_run(tmp_path, "new.json", "competent"),
+            old,
+        )
