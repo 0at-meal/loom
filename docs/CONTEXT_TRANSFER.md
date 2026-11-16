@@ -2,6 +2,18 @@
 
 *Handoff for continuing Loom in a fresh Claude Code setup (new account, no prior sessions or memory). Written 2026-10-24 against branch `audit-value-dispatch-dashboard`, local HEAD `caf3784`.*
 
+> **Update (2026-11-16).** Several things below are out of date; the rest of the file is the 2026-10-24 snapshot, kept as written.
+>
+> - **PRs.** PR #7 (Phase 4b) and PR #8 (Phase 5: Stage 0 of [`docs/001-router_enhancements.md`](001-router_enhancements.md), F-01, F-15, F-30) are merged into `main`. `main` is the working base; §3's unpushed commits and §10's starter prompt no longer apply.
+> - **What Stage 0 added:**
+>   - every routing decision now lives in a sync policy (`router_core/policy.py`, `baseline_router/policies.py`);
+>   - a competent breaker with a wall-clock probe and one safe retry, an SR window, SW-UCB and a clairvoyant oracle;
+>   - a simulated world with capacity limits, 429s, timeouts and segments (`acquirer_sim/world.py`);
+>   - a 26-scenario suite, pre-registered in the decisions log (`scripts/suite/`).
+> - **Results.** They are in [`docs/results/suite.md`](results/suite.md). On 200 held-out paired seeds, Loom as served loses to the competent breaker in 16 of 26 scenarios, ties in 3 and wins in 7 (steady state with close acquirers, and a weak secondary). The PID never helps, including with capacity-limited backups. So §8 steps 2 and 3 are done, and §7's rows for F-01, F-08 and F-30 are out of date: the AUDIT status note has the current reading.
+> - **Next.** Stage 1 of the proposal, measured against the committed `docs/results/suite.json`. Tune on train seeds (`--split train`) only.
+> - **Tests.** 441 Python tests (89% coverage) and 39 Vitest tests.
+
 Read this file first, then the files in [§9](#9-what-to-read-and-in-what-order). Everything here can be checked against the repo; where this file and the code disagree, the code wins.
 
 ---
@@ -29,7 +41,7 @@ Read this file first, then the files in [§9](#9-what-to-read-and-in-what-order)
 | Git author | Niraj Jadhav |
 | Python | 3.11 (`.venv/` in repo root, not committed) |
 | Node | 20 (CI), Vite 5 + React 18 + Tailwind 3 + Vitest 2 dashboard |
-| Tests | 358 Python tests (`pytest`), 27+ Vitest tests (`dashboard/`); ~87% coverage |
+| Tests | 441 Python tests (`pytest`), 39 Vitest tests (`dashboard/`); 89% coverage (358 / 27+ / ~87% at this handoff) |
 
 ### Layout
 
