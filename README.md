@@ -10,6 +10,7 @@ A multi-armed bandit (Thompson Sampling) estimates which payment acquirer is hea
 
 ### Known results and limitations (read this first)
 
+- **Stage 0 scenario suite (26 scenarios, 200 held-out paired seeds, simulator only):** Loom as served **loses** to a competent circuit breaker (approval-aware, half-open probe on the wall clock, one retry after a failure that is safe to retry) in 16 of 26 scenarios, ties in 3 and wins in 7. The losses include every outage shape except a weak secondary (−0.42 to −0.89 pp), capacity-limited backups (up to −3.24 pp), 0.5 TPS (−4.18 pp) and the day-long soaks (−0.47 and −0.50 pp). The wins are a weak secondary (+0.20 pp) and steady state with two close acquirers (+0.05 to +0.37 pp). See [Stage 0 scenario suite](#stage-0-scenario-suite-26-scenarios-200-held-out-paired-seeds).
 - **Hard outages:** Loom **loses** to a standard 3-consecutive-failure circuit breaker: −3.09 pp PSR over 100 paired seeds (95% CI [−3.74, −2.44]), winning only 14 of 100.
 - **Gray failures (partial brownout):** Loom **beats** the same breaker: +1.97 pp, 95% CI [+1.14, +2.80], when Alpha degrades to 60%.
 - **Healthy acquirers that differ slightly:** Loom keeps sending a large share of traffic to the worse of two close acquirers. With Alpha at 95% and Beta at 94% and no outage, it sends Beta 36.8% of transactions 501–2000 (10 seeds, benchmark configuration; 43.9% in the served configuration), down from about 46% before issuer declines got their own longer-memory belief. `python scripts/steady_state_share.py` reproduces this.
@@ -50,10 +51,64 @@ Seed 42 above is one draw. The table below comes from `python scripts/compare_ps
 ### Reading the Numbers
 
 1. **The +1000 bps result is against the $M=1$ breaker, a weak baseline.** At seed 42 a single routine issuer decline (`DO_NOT_HONOR`) on Beta at Tx 57 trips Beta; with both routes tripped, the exhaustion fallback sends Tx 58–86 to the dead primary, collapsing outage PSR to 38.00% and global PSR to 76.00% (Loom: 86.00%). That breaker counts issuer declines as route failures and falls back to a route it knows is dead. Loom no longer does: it books `DO_NOT_HONOR` against a separate approval belief, not against the acquirer's health.
-2. **Against the standard $M=3$ breaker, Loom loses**: 86.00% vs 92.00% at seed 42, −3.09 pp across 100 seeds. Loom's ramp absorbed 11 failures on Alpha during the outage: +7 over the $M=3$ static cliff (4) and +8 over the raw bandit (3). The simulator gives backup acquirers unlimited capacity, so any benefit from avoiding a 100% traffic shift is not measured anywhere in this repo.
+2. **Against the standard $M=3$ breaker, Loom loses**: 86.00% vs 92.00% at seed 42, −3.09 pp across 100 seeds. Loom's ramp absorbed 11 failures on Alpha during the outage: +7 over the $M=3$ static cliff (4) and +8 over the raw bandit (3). This benchmark gives backup acquirers unlimited capacity. The Stage 0 suite's capacity scenarios do limit them (below). There, Loom beats Static $M=3$ but loses to the competent breaker.
 3. **Smoothing, and what it costs.** The tuned PID ($K_p=0.12, K_i=0.005, K_d=0.25, I_{\text{max}}=1.0$) keeps the largest per-transaction change in allocation weight between 11.62% and 12.45% across 100 seeds. It does not reduce route flips: with deficit actuation consecutive transactions alternate acquirers (12.13 outage flips on average, vs 7.13 for the raw bandit and 3.01 for static $M=3$). The weight curve is not monotonic; it can move toward the failed acquirer for a few transactions after the outage starts. The PID costs 1.45 pp of PSR vs the raw bandit.
 4. **Recovered acquirers come back slowly.** In Phase 3 (raw bandit, per-observation decay), recovered Alpha received 0 of the 50 recovery transactions because unselected arms never updated. Beliefs now decay on the clock, so Alpha's outage evidence fades even without traffic: at seed 42 PID Loom sends Alpha 6 of the 50 recovery transactions (2 under per-observation decay) and the raw bandit 13 (0 before); across 100 seeds the means are 5.79 and 7.67. Alpha's weight climbs from the 0.03 floor back to 0.14 by Tx 150, so routing is only partly restored within the benchmark window.
 5. **Real-time telemetry (local loopback, single runs).** `POST /route` → WebSocket frame receipt: mean 8.20 ms, p95 11.87 ms (Phase 7 script, 150 serial transactions, no warmup; includes the routing request). Pure server-to-client push: mean 0.58 ms, max 1.98 ms (91 frames on the live demo). Operator outage trigger round-trip: 30.78 ms (one sample). WebSocket reconnect + `BOOTSTRAP` frame: 3.80 ms with a Python client; the dashboard's own reconnect backoff starts at ≥500 ms, and `BOOTSTRAP` carries current in-memory beliefs only.
+
+### Stage 0 scenario suite (26 scenarios, 200 held-out paired seeds)
+
+Stage 0 of [`docs/001-router_enhancements.md`](docs/001-router_enhancements.md) measures Loom before changing it. It is a discrete-event harness (`scripts/suite/`) that drives the same policy objects the routers use against a simulated world. That world has a failure taxonomy (503, technical declines, 429, timeouts), capacity limits, segments and incident timelines. The 26 scenarios and every baseline parameter were registered in `docs/decisions-log.md` before any result existed, and nothing was tuned. Seeds 1,000,000–1,000,199 are held out (tuning, when it starts, uses seeds 0–199). Every policy sees the same arrivals and the same random draws per seed, so the differences are paired. The baselines are:
+
+- static $M=3$: the existing breaker;
+- competent: approval-aware, with a half-open probe on the wall clock and one retry when the failure is safe to retry. It is run with and without the retry;
+- SR window: a success-rate window;
+- SW-UCB: a sliding-window UCB;
+- a clairvoyant oracle that knows each acquirer's true rate but ignores capacity.
+
+Full tables (regret, every pairwise comparison, divert/restore times, dead-route failures) are in [`docs/results/suite.md`](docs/results/suite.md). The table below shows mean PSR and the paired difference against the competent breaker.
+
+| Scenario | Loom served PSR % | Loom bench PSR % | Competent PSR % | Static M=3 PSR % | Oracle PSR % | Loom - competent, pp [95% CI] |
+| :-- | :-: | :-: | :-: | :-: | :-: | :-: |
+| `hard_outage_fast_fail` | 93.38 | 92.88 | 94.27 | 92.89 | 94.70 | -0.89 [-0.91, -0.86] |
+| `hard_outage_timeout` | 93.19 | 92.67 | 93.92 | 83.71 | 94.70 | -0.74 [-0.77, -0.70] |
+| `technical_brownout` | 93.81 | 93.30 | 94.28 | 92.51 | 94.68 | -0.47 [-0.49, -0.45] |
+| `approval_gray_failure` | 93.43 | 93.34 | 94.03 | 90.55 | 94.68 | -0.60 [-0.64, -0.56] |
+| `gradual_approval_degrade` | 93.64 | 93.52 | 94.06 | 91.27 | 94.69 | -0.42 [-0.46, -0.38] |
+| `flapping` | 93.33 | 93.33 | 94.18 | 93.74 | 94.86 | -0.85 [-0.88, -0.82] |
+| `weak_secondary` | 91.27 | 90.40 | 91.07 | 90.21 | 92.89 | +0.20 [+0.14, +0.26] |
+| `steady_gap_0` | 94.99 | 94.99 | 94.99 | 94.99 | 94.99 | +0.00 [+0.00, +0.00] |
+| `steady_gap_0_5pp_right_priority` | 94.85 | 94.81 | 94.79 | 95.00 | 95.01 | +0.05 [+0.04, +0.06] |
+| `steady_gap_0_5pp_wrong_priority` | 94.85 | 94.81 | 94.79 | 94.51 | 95.01 | +0.06 [+0.05, +0.07] |
+| `steady_gap_1pp_right_priority` | 94.80 | 94.69 | 94.63 | 95.00 | 95.00 | +0.17 [+0.16, +0.19] |
+| `steady_gap_1pp_wrong_priority` | 94.79 | 94.68 | 94.61 | 94.00 | 94.99 | +0.18 [+0.16, +0.19] |
+| `steady_gap_3pp_right_priority` | 94.80 | 94.60 | 94.45 | 95.01 | 95.02 | +0.35 [+0.33, +0.38] |
+| `steady_gap_3pp_wrong_priority` | 94.77 | 94.57 | 94.41 | 92.04 | 94.99 | +0.37 [+0.34, +0.39] |
+| `capacity_429_2_acquirers` | 78.03 | 78.19 | 78.51 | 72.55 | 78.41 | -0.48 [-0.49, -0.46] |
+| `capacity_collapse_2_acquirers` | 79.39 | 79.58 | 79.62 | 76.65 | 79.57 | -0.23 [-0.24, -0.21] |
+| `capacity_429_3_acquirers` | 87.55 | 88.05 | 90.80 | 81.02 | 90.88 | -3.24 [-3.28, -3.21] |
+| `capacity_collapse_3_acquirers` | 90.49 | 90.89 | 92.49 | 84.03 | 92.79 | -2.00 [-2.03, -1.96] |
+| `common_mode_issuer_incident` | 86.15 | 86.12 | 86.12 | 86.43 | 86.50 | +0.03 [-0.00, +0.07] |
+| `segment_heterogeneity` | 93.10 | 93.10 | 93.11 | 93.11 | 95.01 | -0.01 [-0.02, +0.00] |
+| `inflight_concurrency` | 93.31 | 93.37 | 94.40 | 85.09 | 94.67 | -1.09 [-1.10, -1.08] |
+| `low_tps` | 90.04 | 88.96 | 94.23 | 93.29 | 94.71 | -4.18 [-4.28, -4.08] |
+| `high_tps` | 93.44 | 93.53 | 94.30 | 80.89 | 94.67 | -0.85 [-0.86, -0.84] |
+| `bursty_tps` | 93.20 | 92.84 | 94.26 | 90.96 | 94.66 | -1.06 [-1.09, -1.04] |
+| `soak_day_gap_0pp` | 89.43 | 89.22 | 89.90 | 88.98 | 90.00 | -0.47 [-0.48, -0.47] |
+| `soak_day_gap_1pp` | 88.88 | 88.67 | 89.37 | 88.87 | 89.88 | -0.50 [-0.50, -0.49] |
+
+What the suite shows about Loom as it is today (Stage 0 changed no routing behaviour):
+
+- **Against the competent breaker**, Loom served loses in 16 scenarios (95% CI entirely below zero), ties in 3 and wins in 7 (the steady-gap scenarios and `weak_secondary`). It wins only in steady state, where the breaker sends more traffic to the worse acquirer than Loom does: regret against the oracle is 0.21–0.58 pp for the breaker and 0.15–0.22 pp for Loom. It loses in every outage, capacity, load and soak scenario except `weak_secondary`.
+- **Against Static $M=3$**, Loom served wins 17, ties 3 and loses 6. This includes `hard_outage_fast_fail`: +0.49 pp, where the 150-transaction benchmark above shows −3.09 pp. The suite's outage lasts 3 minutes (about 2,700 payments), and the static breaker re-probes the dead primary every 30 transactions for the whole of it, which adds up to 172 failed payments on the dead route against Loom's 104. In the benchmark's 50-transaction outage, the static breaker pays only its first trip. Static $M=3$ still beats Loom in the three steady-gap scenarios where its priority order happens to be right. It also beats Loom under `flapping`, in the common-mode issuer incident, and at 0.5 TPS, where 30 transactions is a 60 s cooldown.
+- **The PID costs PSR everywhere it is measurable**: Loom served minus Loom without the PID is negative in 21 scenarios and a tie in 5. It is never positive.
+- **Day-long soak scored with the audit's revenue model** ($1B GMV a year, 50% recovered, 2 h + 2 h of outage and 20 h of gray failure a year): with equal acquirers, Loom served loses an estimated $47k a year against the oracle and SW-UCB $1k. With a 1 pp gap, Loom served loses $2.35M, the competent breaker $2.16M, and Static $M=3$ $241k, because its fixed priority is the better acquirer and it pays no exploration cost. The steady 1 pp gap dominates every adaptive policy's loss.
+- **No policy made an ambiguous retry** (a retry after a timeout or unknown outcome) in any scenario.
+- **Decision overhead**: `decide()` p99 is 115–142 µs for Loom served on the development machine (`--timing`, 2 seeds on three scenarios, machine-dependent). The static breaker takes about 6 µs.
+
+The proposal's acceptance targets, applied to Loom as it is today, are a starting line for later stages, not a verdict on them. Today, Loom served's lower 95% bound against the competent breaker is at or above −0.15 pp in 10 of 26 scenarios. It ties or beats both SR window and SW-UCB in 14 of 26. It has the lowest soak loss in neither soak.
+
+Not covered: the harness has no admission queue (so `inflight_concurrency` does not exercise `max_in_flight`), the oracle ignores capacity (a policy can beat it in the capacity scenarios), and the SR-window and SW-UCB parameters are our own choices, not values taken from the papers they come from. All of it is simulator evidence.
 
 ---
 
@@ -176,7 +231,7 @@ cp .env.example .env
 > **Configuration Notice**: `.env` keys read through `data_layer/config.py`: `LEDGER_ENABLED`, `SQLITE_*`, `REDIS_ENABLED`, `REDIS_SNAPSHOT_INTERVAL_SEC`, the other `REDIS_*` keys, `KEY_PREFIX` and `REDIS_CHANNEL_*`. `router_core.server` also reads `DECAY_HALF_LIFE_SEC` (default for `--half-life-sec`) and `ROUTER_MAX_IN_FLIGHT` (default for `--max-in-flight`). CLI flags override `.env`. `PID_KP`, `PID_KI`, `PID_KD`, `APP_ENV` and `LOG_LEVEL` are never read. PID gains default to $K_p=0.12, K_i=0.005, K_d=0.25, I_{\text{max}}=1.0, w_{\text{min}}=0.03$ in `PIDConfig` and are overridden via server CLI arguments (`--kp`, `--ki`, `--kd`, `--min-allocation`).
 
 > [!NOTE]
-> **Running the tests:** `pytest` collects and runs 358 tests; CI runs the same suite with coverage, plus the dashboard's 39 Vitest tests (`cd dashboard && npm test`) and its production build. Dependencies are unpinned, and `pyproject.toml` turns warnings into errors, so a new library release can still break collection. A few tests assert wall-clock latency and can fail on a loaded machine.
+> **Running the tests:** `pytest` collects and runs 437 tests; CI runs the same suite with coverage, plus the dashboard's 39 Vitest tests (`cd dashboard && npm test`) and its production build. Dependencies are unpinned, and `pyproject.toml` turns warnings into errors, so a new library release can still break collection. A few tests assert wall-clock latency and can fail on a loaded machine.
 
 ---
 
@@ -348,6 +403,14 @@ python scripts/steady_state_share.py --config served
 
 # 6. Value-scaled protection with the PID on: high-value payments during an outage (30 seeds, ~1 minute)
 python scripts/value_policy_outage.py
+
+# 7. Stage 0 scenario suite: 26 scenarios x 9 policies x 200 held-out seeds (about 2.3 h on 11 workers)
+python scripts/suite/run_suite.py --policies all --seeds 200 --split test --workers 11 --out-json docs/results/suite.json
+python scripts/suite/report.py docs/results/suite.json --out docs/results/suite.md
+python scripts/suite/report.py docs/results/suite.json --readme      # the table in this README
+
+# 8. Decision overhead (machine-dependent)
+python scripts/suite/run_suite.py --policies all --scenarios hard_outage_fast_fail,capacity_429_3_acquirers,high_tps --seeds 2 --split test --workers 1 --timing
 ```
 
 ---
@@ -412,7 +475,7 @@ loom/
 - [`baseline_router/`](baseline_router/): Isolated static reference router (`router.py`, `models.py`) implementing priority-tier failover and circuit-breaker debouncing for comparison.
 - [`dashboard/`](dashboard/): Vite + React live mission-control user interface (`src/App.jsx`, `src/components/`, `src/hooks/useLoomTelemetry.js`).
 - [`scripts/`](scripts/): Operational scripts, synthetic transaction generator (`generate_transactions.py`), benchmark runners (`run_qa_baseline_scenario.py`, `compare_psr.py`), and all-in-one cluster launcher (`run_demo.py`).
-- [`tests/`](tests/): 358 automated Python tests mirroring the source hierarchy (`tests/router_core/`, `tests/acquirer_sim/`, `tests/data_layer/`, `tests/baseline_router/`, `tests/dashboard/`, `tests/scripts/`). `tests/dashboard/` contains Python backend tests for the Phase 7 scenarios; the React code's tests live in `dashboard/src/__tests__/` (`npm test`).
+- [`tests/`](tests/): 437 automated Python tests mirroring the source hierarchy (`tests/router_core/`, `tests/acquirer_sim/`, `tests/data_layer/`, `tests/baseline_router/`, `tests/dashboard/`, `tests/scripts/`). `tests/dashboard/` contains Python backend tests for the Phase 7 scenarios; the React code's tests live in `dashboard/src/__tests__/` (`npm test`).
 - [`docs/`](docs/): Architectural contracts, decision records, specs, and role personas.
 
 ---
@@ -549,9 +612,9 @@ What it costs:
 - **Transaction-clocked control**: The PID steps once per transaction ($\Delta t = 1.0$), not per wall-clock second, so ramp time and memory scale inversely with traffic volume.
 - **Exploration Floor Reliability Tax**: The 3% floor keeps sending 3% of traffic to a failing route for the whole outage.
 - **Idempotency is per process and in memory**: a `transaction_id` is remembered for 24 h (at most 100,000 IDs, oldest evicted first). A completed duplicate gets the stored result with `replayed: true`, a duplicate still in flight gets HTTP 409, and the same ID with a different body gets HTTP 422. Entries are lost on restart and not shared across processes.
-- **Single-Shot Routing Without Inline Cascading**: Each transaction goes to a single acquirer, with no retry on a second acquirer.
+- **Single-Shot Routing Without Inline Cascading**: Each transaction goes to a single acquirer, with no retry on a second acquirer. In the Stage 0 suite, one retry after a safe failure is worth +0.13 pp to the competent breaker on a fast-fail outage and about +10 pp with three capacity-limited acquirers.
 - **In-flight lag, bounded by an admission limit**: at most `max_in_flight` payments (default 50) are dispatched at once; the rest wait for a slot and then decide with fresher beliefs. In the audit's experiment (200 concurrent payments during a 503 outage on Alpha, 10 seeds, `python scripts/concurrency_inflight.py --seeds 10`), the dead acquirer receives 39.9 (stochastic actuation) / 28.6 (deficit) payments, down from 122.7 / 84.8 with no limit (`--max-in-flight 0`); routed one at a time it receives 14.5 / 10.6. The limit caps throughput at `max_in_flight` ÷ acquirer latency (for example 50 / 0.3 s ≈ 166 TPS), and waiting time is reported as `queue_wait_ms`.
-- **Unconstrained Mock Capacity**: The simulator never rate-limits, so the effect of shifting 100% of traffic onto a backup acquirer is not modelled.
+- **Capacity is modelled only in the suite**: the HTTP simulator never rate-limits by default. The Stage 0 harness's world (`acquirer_sim/world.py`) gives acquirers a capacity that, once exceeded, either answers 429 or slows down and fails. The capacity scenarios use it; the 150-transaction benchmark does not.
 - **Value-scaled protection (opt-in) trades exploration for safety**: protected high-value payments never probe a recovered acquirer and leave more of the exploration to low-value payments; see [Value-Scaled Exploration](#value-scaled-exploration-phase-8-opt-in).
 - **Dashboard sees only what reaches it**: frames dropped for a slow client, or missed while it was disconnected, are counted and marked but not recovered, so the dashboard's PSR covers received frames only. Frames are numbered in completion order, and the numbering restarts with the router process (each process has its own `stream_id`).
 
@@ -563,7 +626,7 @@ Per the PRD roadmap and architectural risks log:
 
 1. **Shared state for several router processes**: beliefs, idempotency and the admission limit are per process; Redis holds only snapshots and events.
 2. **Map real decline codes**: technical vs issuer classification exists, but only for the simulator's two codes.
-3. **Secondary Capacity Throttling**: connection-pool limits and HTTP 429 rate limiting on simulated backup gateways, so the herd-migration argument for smoothing can actually be measured.
+3. **Router changes from `docs/001-router_enhancements.md`, Stages 1–5**: Stage 0 (policy core, baselines, scenario suite) is in place; the routing changes are not started. Capacity limits now exist in the suite's world, and with them the competent breaker still beats Loom.
 4. **Time-based probing**: decay is now on the wall clock; the exploration floor is still a share of traffic, and the PID still steps once per transaction.
 5. **Distributed Infrastructure Topology**: Redis Sentinel / ElastiCache and PostgreSQL / ClickHouse for multi-node deployments.
 6. **Adaptive admission limit**: size `max_in_flight` from observed acquirer latency instead of a fixed number. (Virtual loss was measured in PR #5 and not adopted: it only spread load in a burst and cost healthy authorizations.)

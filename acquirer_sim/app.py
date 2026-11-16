@@ -31,8 +31,12 @@ def create_app(
     default_base_rate: float = 0.95,
     default_latency: LatencyConfig | None = None,
     seed: int | None = None,
+    crn_seed: int | None = None,
 ) -> FastAPI:
-    """Create and configure a FastAPI application instance representing one or more acquirers."""
+    """Create and configure a FastAPI application instance representing one or more acquirers.
+
+    ``crn_seed`` makes every draw a common random number keyed by transaction id.
+    """
     app = FastAPI(
         title="Loom Simulated Acquirer Service",
         description=(
@@ -48,6 +52,7 @@ def create_app(
         default_base_rate=default_base_rate,
         default_latency=default_latency,
         seed=seed,
+        crn_seed=crn_seed,
     )
 
     # Attach registry to application state for inspection
@@ -61,9 +66,9 @@ def create_app(
     async def outage_http_exception_handler(
         _request: Request, exc: AcquirerOutageHttpException
     ) -> JSONResponse:
-        """Handle HTTP 503 outage exceptions from simulator."""
+        """Handle HTTP 503 outage and 429 throttling exceptions from the simulator."""
         return JSONResponse(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            status_code=exc.status_code,
             content={
                 "detail": exc.message,
                 "acquirer_id": exc.acquirer_id,

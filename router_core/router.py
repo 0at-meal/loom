@@ -15,13 +15,17 @@ import numpy as np
 from acquirer_sim.models import AuthorizeRequest, AuthorizeResponse
 from router_core.bandit import BanditStateRegistry
 from router_core.models import AcquirerRouteConfig, RouterConfig, RoutingResult
-from router_core.pid import PIDConfig, PIDDiagnostics, PIDState, calculate_pid_step
-from router_core.state import AcquirerStateSnapshot, Outcome
-from router_core.value_policy import (
-    ValueScaledExplorationConfig,
-    apply_value_scaled_policy,
-    best_posterior_mean,
+from router_core.pid import PIDDiagnostics, PIDState
+from router_core.policy import (
+    DecisionContext,
+    FailureKind,
+    LoomPolicy,
+    Observation,
+    classify_outcome,
+    failure_for_status,
 )
+from router_core.state import AcquirerStateSnapshot, Outcome
+from router_core.value_policy import ValueScaledExplorationConfig
 
 if TYPE_CHECKING:
     from data_layer.redis_pubsub import AsyncEventPublisher, EventPublisher
@@ -56,18 +60,18 @@ class BanditRouter:
         self._clock: Callable[[], float] = clock if clock is not None else time.time
         self._routes: dict[str, AcquirerRouteConfig] = {r.acquirer_id: r for r in config.routes}
         self._technical_codes = frozenset(config.technical_decline_codes)
-        self._registry = registry if registry is not None else BanditStateRegistry()
         self._event_publisher = event_publisher
         self._metrics_logger = metrics_logger
-        for r in config.routes:
-            if r.acquirer_id not in self._registry.list_acquirer_ids():
-                self._registry.register_acquirer(
-                    acquirer_id=r.acquirer_id,
-                    config=r.state_config,
-                    initial_timestamp=self._clock(),
-                )
-
-        self._rng = rng if rng is not None else np.random.default_rng(config.seed)
+        # Every routing decision and belief update is made by the policy (Stage 0); this class
+        # is the async shell around it: admission, dispatch, classification, side effects.
+        self._policy = LoomPolicy(
+            config=config,
+            registry=registry,
+            rng=rng if rng is not None else np.random.default_rng(config.seed),
+            initial_timestamp=self._clock(),
+        )
+        self._registry = self._policy.registry
+        self._rng = self._policy.rng
         # A caller-supplied client is shared by every route and never closed here.
         # Otherwise each acquirer gets its own pool (a bulkhead, AUDIT F-16).
         self._client = http_client
@@ -86,33 +90,20 @@ class BanditRouter:
         self._waited = 0
         self._max_wait_ms = 0.0
 
-        # Phase 4 PID state initialization
-        self._pid_config: PIDConfig | None = config.pid_config
-        self._pid_state: PIDState | None = None
-        self._current_allocation: dict[str, float] = {}
-        self._cumulative_target: dict[str, float] = {}
-        self._dispatched_count: dict[str, int] = {}
-        self._last_diagnostics: PIDDiagnostics | None = None
-
-        # Phase 8 Value-Scaled Exploration policy configuration
-        self._value_scaled_config: ValueScaledExplorationConfig | None = config.value_scaled_config
-
-        if self._pid_config is not None:
-            acquirer_ids = [r.acquirer_id for r in config.routes]
-            self._pid_state = PIDState.initialize(acquirer_ids)
-            self._current_allocation = dict(self._pid_state.previous_allocation)
-            self._cumulative_target = {aid: 0.0 for aid in acquirer_ids}
-            self._dispatched_count = {aid: 0 for aid in acquirer_ids}
-
     @property
     def config(self) -> RouterConfig:
         """Return the configuration parameters for this router."""
         return self._config
 
     @property
+    def policy(self) -> LoomPolicy:
+        """The policy that makes every routing decision and belief update."""
+        return self._policy
+
+    @property
     def value_scaled_config(self) -> ValueScaledExplorationConfig | None:
         """Return the value-scaled exploration policy configuration if set."""
-        return self._value_scaled_config
+        return self._policy.value_scaled_config
 
     @property
     def registry(self) -> BanditStateRegistry:
@@ -143,17 +134,17 @@ class BanditRouter:
     @property
     def current_allocation(self) -> dict[str, float]:
         """Return current actual smoothed allocation vector across acquirers."""
-        return dict(self._current_allocation)
+        return self._policy.current_allocation
 
     @property
     def pid_state(self) -> PIDState | None:
         """Return internal snapshot of PID state if PID is configured."""
-        return self._pid_state
+        return self._policy.pid_state
 
     @property
     def last_diagnostics(self) -> PIDDiagnostics | None:
         """Return diagnostics from the most recent PID step."""
-        return self._last_diagnostics
+        return self._policy.last_diagnostics
 
     async def start(self) -> None:
         """Create one pooled HTTP client per acquirer unless a client was supplied."""
@@ -196,31 +187,7 @@ class BanditRouter:
 
     def select_route(self, amount: float = 0.0) -> tuple[str, dict[str, float]]:
         """Sample Beta beliefs across all candidate routes and select argmax arm."""
-        raw_samples = self._registry.sample_all(rng=self._rng, now=self._clock())
-        if (
-            self._value_scaled_config is not None
-            and self._value_scaled_config.enabled
-            and amount > 0.0
-        ):
-            states = self._registry.get_all_states()
-            means = {aid: s.expected_psr for aid, s in states.items()}
-            adjusted_samples, _ = apply_value_scaled_policy(
-                samples=raw_samples,
-                posterior_means=means,
-                amount=amount,
-                config=self._value_scaled_config,
-            )
-            if self._value_scaled_config.protects(amount):
-                return best_posterior_mean(means), adjusted_samples
-            selected_id = max(
-                adjusted_samples.keys(),
-                key=lambda aid: (adjusted_samples[aid], aid),
-            )
-            return selected_id, adjusted_samples
-
-        # Deterministic tie-breaking: max by sample value, then by acquirer_id
-        selected_id = max(raw_samples.keys(), key=lambda aid: (raw_samples[aid], aid))
-        return selected_id, raw_samples
+        return self._policy.select_route(now=self._clock(), amount=amount)
 
     def in_flight_status(self) -> dict[str, Any]:
         """Admission counters for /health."""
@@ -257,90 +224,16 @@ class BanditRouter:
         """Execute end-to-end routing decision, acquirer dispatch, and state update."""
         t_start = time.perf_counter()
 
-        # 1. Perception, Value-Scaled Policy, PID Smoothing & Selection
+        # 1. Decision: perception, value-scaled policy, PID smoothing and actuation
         t_sample_start = time.perf_counter()
-        raw_samples = self._registry.sample_all(rng=self._rng, now=self._clock())
-        effective_samples = raw_samples
-        adjusted_samples: dict[str, float] | None = None
-        shrinkage: float | None = None
-        protected_id: str | None = None
-
-        if (
-            self._value_scaled_config is not None
-            and self._value_scaled_config.enabled
-            and request.amount > 0.0
-        ):
-            states = self._registry.get_all_states()
-            means = {aid: s.expected_psr for aid, s in states.items()}
-            adjusted_samples, shrinkage = apply_value_scaled_policy(
-                samples=raw_samples,
-                posterior_means=means,
-                amount=request.amount,
-                config=self._value_scaled_config,
-            )
-            effective_samples = adjusted_samples
-            if self._value_scaled_config.protects(request.amount):
-                # High-value payment (AUDIT F-10): send it to the best posterior mean. It
-                # stays out of the allocation stream, so the PID state and the deficit
-                # counters are left exactly as the other payments set them.
-                protected_id = best_posterior_mean(means)
-
-        target_allocation: dict[str, float] | None = None
-        smoothed_allocation: dict[str, float] | None = None
-        diagnostics: PIDDiagnostics | None = None
-
-        if protected_id is not None:
-            selected_id = protected_id
-            target_allocation = {aid: 1.0 if aid == selected_id else 0.0 for aid in raw_samples}
-            if self._pid_config is not None:
-                smoothed_allocation = dict(self._current_allocation)
-            else:
-                smoothed_allocation = dict(target_allocation)
-        elif self._pid_config is not None and self._pid_state is not None:
-            # Thompson sampling target allocation using effective samples
-            win_id = max(effective_samples.keys(), key=lambda aid: (effective_samples[aid], aid))
-            target_allocation = {aid: 1.0 if aid == win_id else 0.0 for aid in effective_samples}
-
-            # PID smoothing step
-            step_result = calculate_pid_step(
-                target_allocation=target_allocation,
-                current_allocation=self._current_allocation,
-                state=self._pid_state,
-                config=self._pid_config,
-                dt=1.0,
-            )
-            self._current_allocation = step_result.smoothed_allocation
-            self._pid_state = step_result.next_state
-            self._last_diagnostics = step_result.diagnostics
-            smoothed_allocation = dict(self._current_allocation)
-            diagnostics = step_result.diagnostics
-
-            # Discrete Actuation (Stochastic or Deficit Round-Robin)
-            if self._pid_config.actuation_mode == "deficit":
-                for aid in self._routes:
-                    self._cumulative_target[aid] += self._current_allocation[aid]
-                selected_id = max(
-                    sorted(self._routes.keys()),
-                    key=lambda aid: (
-                        self._cumulative_target[aid] - self._dispatched_count[aid],
-                        aid,
-                    ),
-                )
-                self._dispatched_count[selected_id] += 1
-            else:
-                keys = sorted(self._current_allocation.keys())
-                probs = [self._current_allocation[k] for k in keys]
-                selected_id = str(self._rng.choice(keys, p=probs))
-        else:
-            # Winner-take-all argmax hard-switch (Phase 3 baseline using effective samples)
-            selected_id = max(
-                effective_samples.keys(),
-                key=lambda aid: (effective_samples[aid], aid),
-            )
-            smoothed_allocation = {
-                aid: 1.0 if aid == selected_id else 0.0 for aid in effective_samples
-            }
-            target_allocation = dict(smoothed_allocation)
+        decision, trace = self._policy.decide_traced(
+            DecisionContext(transaction_id=request.transaction_id, amount=request.amount),
+            now=self._clock(),
+        )
+        selected_id = decision.acquirer_id
+        raw_samples = trace.raw_samples
+        adjusted_samples = trace.adjusted_samples
+        shrinkage = trace.shrinkage
 
         t_sample_end = time.perf_counter()
         routing_latency_ms = (t_sample_end - t_sample_start) * 1000.0
@@ -356,7 +249,7 @@ class BanditRouter:
                 sample_str,
                 adj_str,
                 shrinkage or 0.0,
-                protected_id is not None,
+                trace.value_protected,
             )
         else:
             logger.info(
@@ -376,9 +269,7 @@ class BanditRouter:
 
         t_dispatch_start = time.perf_counter()
         status: Literal["AUTHORIZED", "DECLINED", "ERROR"]
-        authorized: bool
-        success: bool
-        outcome: Outcome | None
+        observation: Observation
         response_payload: AuthorizeResponse | None = None
         error_msg: str | None = None
 
@@ -397,75 +288,59 @@ class BanditRouter:
                         f"Acquirer HTTP 200 with an unreadable body: {exc}"
                     ) from exc
                 response_payload = payload
-                authorized = payload.authorized
-                success = payload.authorized  # True if AUTHORIZED, False if DECLINED
-                status = "AUTHORIZED" if success else "DECLINED"
-                if success:
-                    outcome = Outcome.AUTHORIZED
-                elif payload.decline_code in self._technical_codes:
-                    outcome = Outcome.TECHNICAL_FAILURE
-                else:
-                    # Issuer declines (e.g. DO_NOT_HONOR) say nothing about the acquirer
-                    outcome = Outcome.ISSUER_DECLINE
-            elif resp.status_code == 503:
-                status = "ERROR"
-                authorized = False
-                success = False
-                outcome = Outcome.TECHNICAL_FAILURE
-                error_msg = f"Acquirer HTTP 503 Outage: {resp.text}"
-            elif resp.status_code == 422:
-                # The router validated the request, so a 422 is an integration fault on this
-                # route: book it against the acquirer instead of failing the payment call.
-                logger.error(
-                    "Acquirer rejected schema (HTTP 422): tx_id=%s payload=%s resp=%s",
-                    request.transaction_id,
-                    request.model_dump(),
-                    resp.text,
+                status = "AUTHORIZED" if payload.authorized else "DECLINED"
+                observation = classify_outcome(
+                    payload.authorized, payload.decline_code, self._technical_codes
                 )
-                status = "ERROR"
-                authorized = False
-                success = False
-                outcome = Outcome.TECHNICAL_FAILURE
-                error_msg = f"Acquirer rejected schema (HTTP 422): {resp.text}"
             else:
                 status = "ERROR"
-                authorized = False
-                success = False
-                outcome = Outcome.TECHNICAL_FAILURE
-                error_msg = f"Acquirer HTTP {resp.status_code}: {resp.text}"
+                observation = Observation(
+                    Outcome.TECHNICAL_FAILURE, failure_for_status(resp.status_code)
+                )
+                if resp.status_code == 503:
+                    error_msg = f"Acquirer HTTP 503 Outage: {resp.text}"
+                elif resp.status_code == 422:
+                    # The router validated the request, so a 422 is an integration fault on
+                    # this route: book it against the acquirer instead of failing the call.
+                    logger.error(
+                        "Acquirer rejected schema (HTTP 422): tx_id=%s payload=%s resp=%s",
+                        request.transaction_id,
+                        request.model_dump(),
+                        resp.text,
+                    )
+                    error_msg = f"Acquirer rejected schema (HTTP 422): {resp.text}"
+                else:
+                    error_msg = f"Acquirer HTTP {resp.status_code}: {resp.text}"
 
         except httpx.PoolTimeout as err:
             # The router had no free connection: the request never reached the acquirer,
             # so it is not evidence about the acquirer (AUDIT F-16).
             self.pool_timeouts += 1
             status = "ERROR"
-            authorized = False
-            success = False
-            outcome = None
+            observation = Observation(None, FailureKind.NOT_SENT)
             error_msg = f"Router connection pool exhausted for {selected_id}: PoolTimeout ({err})"
         except (httpx.TransportError, UnexpectedAcquirerResponse) as err:
             # Timeouts, connection and protocol errors, and unreadable 200 bodies
             status = "ERROR"
-            authorized = False
-            success = False
-            outcome = Outcome.TECHNICAL_FAILURE
+            observation = Observation(
+                Outcome.TECHNICAL_FAILURE,
+                FailureKind.TIMEOUT
+                if isinstance(err, httpx.TimeoutException)
+                else FailureKind.AMBIGUOUS,
+            )
             error_msg = f"Transport error to {selected_id}: {type(err).__name__} ({err})"
 
         t_dispatch_end = time.perf_counter()
         acquirer_latency_ms = (t_dispatch_end - t_dispatch_start) * 1000.0
+        authorized = observation.authorized
+        success = authorized
+        outcome = observation.outcome
 
         # 3. State feedback. The acquirer has already answered, so a failure here must not
         # turn an authorized payment into an error for the caller (AUDIT F-07).
         try:
-            if outcome is None:
-                updated_snapshot = self._registry.get_state(selected_id)
-            else:
-                updated_snapshot = self._registry.record_outcome(
-                    acquirer_id=selected_id,
-                    success=success,
-                    timestamp=self._clock(),
-                    outcome=outcome,
-                )
+            self._policy.feedback(decision, observation, now=self._clock())
+            updated_snapshot = self._registry.get_state(selected_id)
         except Exception as exc:  # noqa: BLE001 - best-effort after dispatch
             logger.error(
                 "State update failed after dispatch: tx_id=%s acquirer=%s outcome=%s: %s",
@@ -512,12 +387,12 @@ class BanditRouter:
             total_latency_ms=total_latency_ms,
             queue_wait_ms=queue_wait_ms,
             state_snapshot=updated_snapshot,
-            smoothed_allocation=smoothed_allocation,
-            target_allocation=target_allocation,
-            pid_diagnostics=diagnostics,
+            smoothed_allocation=trace.smoothed_allocation,
+            target_allocation=trace.target_allocation,
+            pid_diagnostics=trace.pid_diagnostics,
             adjusted_samples=adjusted_samples,
             exploration_shrinkage=shrinkage,
-            value_protected=protected_id is not None,
+            value_protected=trace.value_protected,
             timestamp=time.time(),
         )
 

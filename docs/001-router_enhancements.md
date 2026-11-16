@@ -1,5 +1,7 @@
 # Loom v2: from "loses to a breaker" to a router that is hard to beat
 
+> **Implementation note (2026-11-16).** Stage 0 is implemented on branch `audit-policy-harness`: the policy core (`router_core/policy.py`), the baselines as policies (`baseline_router/policies.py`), the simulator world (`acquirer_sim/world.py`) and the scenario suite (`scripts/suite/`). Its measured starting line is in `docs/results/suite.md`. Stages 1–5 are not started. The status line below and the spike numbers are as written on 2026-11-15; the spike numbers are still estimates from uncommitted code, not results.
+
 > **Status: proposal, not implemented.** Written 2026-11-15 against branch `audit-value-dispatch-dashboard` (HEAD `6e39b95`). No code, decisions-log entry or benchmark in the repo reflects this plan yet. The spike numbers below come from a throwaway in-memory simulation that is not committed, so they are estimates, not reproducible results.
 
 ## Context

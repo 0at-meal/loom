@@ -14,6 +14,7 @@ class OutageBehavior(StrEnum):
     RETURN_DECLINE = "RETURN_DECLINE"  # HTTP 200 with status=DECLINED (default payment behavior)
     HTTP_503 = "HTTP_503"  # HTTP 503 Service Unavailable (gateway failure)
     LATENCY_SPIKE = "LATENCY_SPIKE"  # Delays past the router's 2 s timeout, then declines
+    HTTP_429 = "HTTP_429"  # HTTP 429 Too Many Requests (throttled; not processed)
 
 
 class LatencyConfig(BaseModel):
@@ -65,6 +66,16 @@ class AcquirerConfig(BaseModel):
     latency: LatencyConfig = Field(
         default_factory=LatencyConfig,
         description="Latency simulation parameters.",
+    )
+    technical_error_rate: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Probability that a request outside an outage fails with HTTP 503 (background "
+            "technical errors). 0 draws nothing, so seeded runs are unchanged."
+        ),
+        examples=[0.0],
     )
 
 

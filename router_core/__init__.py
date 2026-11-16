@@ -10,6 +10,14 @@ from router_core.pid import (
     calculate_pid_step,
     project_to_bounded_simplex,
 )
+from router_core.policy import (
+    Decision,
+    DecisionContext,
+    FailureKind,
+    LoomPolicy,
+    Observation,
+    RoutingPolicy,
+)
 from router_core.router import BanditRouter
 from router_core.state import (
     AcquirerState,
@@ -28,11 +36,17 @@ __all__ = [
     "AcquirerStateSnapshot",
     "BanditRouter",
     "BanditStateRegistry",
+    "Decision",
+    "DecisionContext",
+    "FailureKind",
+    "LoomPolicy",
+    "Observation",
     "PIDConfig",
     "PIDDiagnostics",
     "PIDState",
     "PIDStepResult",
     "RouterConfig",
+    "RoutingPolicy",
     "RoutingResult",
     "ValueScaledExplorationConfig",
     "apply_value_scaled_policy",
