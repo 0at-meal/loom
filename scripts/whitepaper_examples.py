@@ -10,6 +10,13 @@ Section 8 call ``scripts/compare_psr.py`` with in-memory ledgers, so nothing is 
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+if __package__ in (None, ""):
+    # Run as a file: make the repository root importable so ``scripts.compare_psr`` resolves.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 import asyncio
 import logging
 import math

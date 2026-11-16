@@ -231,7 +231,7 @@ cp .env.example .env
 > **Configuration Notice**: `.env` keys read through `data_layer/config.py`: `LEDGER_ENABLED`, `SQLITE_*`, `REDIS_ENABLED`, `REDIS_SNAPSHOT_INTERVAL_SEC`, the other `REDIS_*` keys, `KEY_PREFIX` and `REDIS_CHANNEL_*`. `router_core.server` also reads `DECAY_HALF_LIFE_SEC` (default for `--half-life-sec`) and `ROUTER_MAX_IN_FLIGHT` (default for `--max-in-flight`). CLI flags override `.env`. `PID_KP`, `PID_KI`, `PID_KD`, `APP_ENV` and `LOG_LEVEL` are never read. PID gains default to $K_p=0.12, K_i=0.005, K_d=0.25, I_{\text{max}}=1.0, w_{\text{min}}=0.03$ in `PIDConfig` and are overridden via server CLI arguments (`--kp`, `--ki`, `--kd`, `--min-allocation`).
 
 > [!NOTE]
-> **Running the tests:** `pytest` collects and runs 437 tests; CI runs the same suite with coverage, plus the dashboard's 39 Vitest tests (`cd dashboard && npm test`) and its production build. Dependencies are unpinned, and `pyproject.toml` turns warnings into errors, so a new library release can still break collection. A few tests assert wall-clock latency and can fail on a loaded machine.
+> **Running the tests:** `pytest` collects and runs 441 tests; CI runs the same suite with coverage, plus the dashboard's 39 Vitest tests (`cd dashboard && npm test`) and its production build. Dependencies are unpinned, and `pyproject.toml` turns warnings into errors, so a new library release can still break collection. A few tests assert wall-clock latency and can fail on a loaded machine.
 
 ---
 
@@ -475,7 +475,7 @@ loom/
 - [`baseline_router/`](baseline_router/): Isolated static reference router (`router.py`, `models.py`) implementing priority-tier failover and circuit-breaker debouncing for comparison.
 - [`dashboard/`](dashboard/): Vite + React live mission-control user interface (`src/App.jsx`, `src/components/`, `src/hooks/useLoomTelemetry.js`).
 - [`scripts/`](scripts/): Operational scripts, synthetic transaction generator (`generate_transactions.py`), benchmark runners (`run_qa_baseline_scenario.py`, `compare_psr.py`), and all-in-one cluster launcher (`run_demo.py`).
-- [`tests/`](tests/): 437 automated Python tests mirroring the source hierarchy (`tests/router_core/`, `tests/acquirer_sim/`, `tests/data_layer/`, `tests/baseline_router/`, `tests/dashboard/`, `tests/scripts/`). `tests/dashboard/` contains Python backend tests for the Phase 7 scenarios; the React code's tests live in `dashboard/src/__tests__/` (`npm test`).
+- [`tests/`](tests/): 441 automated Python tests mirroring the source hierarchy (`tests/router_core/`, `tests/acquirer_sim/`, `tests/data_layer/`, `tests/baseline_router/`, `tests/dashboard/`, `tests/scripts/`). `tests/dashboard/` contains Python backend tests for the Phase 7 scenarios; the React code's tests live in `dashboard/src/__tests__/` (`npm test`).
 - [`docs/`](docs/): Architectural contracts, decision records, specs, and role personas.
 
 ---
