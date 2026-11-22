@@ -35,6 +35,7 @@ npm --prefix dashboard run dev          # http://localhost:5173 (proxies /api an
 python -m acquirer_sim.server --port 8001      # or each service on its own
 python -m router_core.server --port 8000       # flags: --no-pid --kp --ki --kd --min-allocation
                                                #   --half-life-sec --max-in-flight --no-ledger --redis
+                                               #   --fail-fast (Stage 1 gate + cascade + rate floor; opt-in)
 uvicorn router_core.app:app --reload           # auto-reload (default three-acquirer topology)
 python scripts/simulate_outage.py --acquirer-id acquirer_alpha --action trigger|clear|pulse
 
@@ -46,7 +47,7 @@ python scripts/steady_state_share.py [--config served]     # ~10 min
 python scripts/value_policy_outage.py                      # Phase 8 protection, 30 seeds
 python scripts/concurrency_inflight.py --seeds 10
 
-# Stage 0 scenario suite (discrete-event, all policies, paired seeds; ~1 h on 11 workers at 200)
+# Scenario suite (discrete-event, all policies incl. loom_failfast, paired seeds; ~3.5 h on 10 workers at 200)
 python scripts/suite/run_suite.py --policies all --seeds 200 --split test --out-json docs/results/suite.json
 python scripts/suite/report.py docs/results/suite.json --out docs/results/suite.md
 python scripts/suite/run_suite.py --scenarios low_tps --seeds 2 --split train --workers 1   # quick check

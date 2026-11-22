@@ -7,6 +7,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from acquirer_sim.models import AuthorizeResponse
+from router_core.gate import GateConfig
 from router_core.pid import PIDConfig, PIDDiagnostics
 from router_core.state import AcquirerStateConfig, AcquirerStateSnapshot, Outcome
 from router_core.value_policy import ValueScaledExplorationConfig
@@ -105,6 +106,38 @@ class RouterConfig(BaseModel):
             "decline is attributed to the issuer and only lowers the approval belief."
         ),
     )
+    gate_config: GateConfig | None = Field(
+        default=None,
+        description=(
+            "Stage 1 technical gate (CUSUM breaker with wall-clock probes). None: no gate, "
+            "every acquirer is always eligible."
+        ),
+    )
+    cascade: bool = Field(
+        default=False,
+        description=(
+            "Stage 1: after a failure that certainly was not processed (fast 5xx, technical "
+            "decline code, 429, no free connection), retry once on the best other eligible "
+            "acquirer. Never after a timeout or an ambiguous answer."
+        ),
+    )
+
+
+class RoutingAttempt(BaseModel):
+    """One dispatch of a payment to an acquirer (a payment has one, or two with a cascade)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    attempt: int = Field(..., ge=1)
+    acquirer_id: str
+    reason: str = Field(..., description="Why the policy chose this acquirer.")
+    status: Literal["AUTHORIZED", "DECLINED", "ERROR"]
+    outcome: Outcome | None = None
+    failure: str | None = Field(
+        default=None, description="FAST_FAIL, THROTTLED, TIMEOUT, AMBIGUOUS or NOT_SENT."
+    )
+    acquirer_latency_ms: float = Field(..., ge=0.0)
+    error_message: str | None = None
 
 
 class RoutingResult(BaseModel):
@@ -220,6 +253,13 @@ class RoutingResult(BaseModel):
         description=(
             "True when the Phase 8 policy sent this payment to the acquirer with the highest "
             "posterior mean, bypassing the PID and the allocation draw (AUDIT F-10)."
+        ),
+    )
+    attempts: list[RoutingAttempt] = Field(
+        default_factory=list,
+        description=(
+            "Every dispatch made for this payment, in order. selected_acquirer, status and "
+            "outcome describe the last one; each attempt updated its acquirer's beliefs."
         ),
     )
     timestamp: float = Field(

@@ -12,9 +12,14 @@ import uvicorn
 
 from data_layer.config import DataLayerConfig
 from router_core.app import create_router_app
+from router_core.gate import GateConfig
 from router_core.models import AcquirerRouteConfig, RouterConfig
 from router_core.pid import PIDConfig
 from router_core.state import DEFAULT_HALF_LIFE_SEC, AcquirerStateConfig
+
+# 3% of 15 TPS, the traffic level the 3% floor was tuned at (Phase 4 Ticket B): the same floor
+# there, a smaller share at higher TPS (Stage 1 decisions-log entry).
+FAIL_FAST_FLOOR_RATE_PER_SEC = 0.45
 
 
 def parse_args(args: list[str] | None = None) -> argparse.Namespace:
@@ -120,6 +125,15 @@ def parse_args(args: list[str] | None = None) -> argparse.Namespace:
         help="SQLite ledger file (default: $SQLITE_DB_PATH, else loom_metrics.db)",
     )
     parser.add_argument(
+        "--fail-fast",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help=(
+            "Stage 1: technical gate with wall-clock probes, one cascade retry after a safe "
+            "failure, and a rate-based exploration floor (default: off)"
+        ),
+    )
+    parser.add_argument(
         "--redis",
         action=argparse.BooleanOptionalAction,
         default=None,
@@ -167,6 +181,7 @@ def build_router_config(parsed: argparse.Namespace) -> RouterConfig:
             )
         )
 
+    fail_fast = bool(getattr(parsed, "fail_fast", False))
     pid_config: PIDConfig | None = None
     if getattr(parsed, "pid", True):
         pid_config = PIDConfig(
@@ -174,6 +189,7 @@ def build_router_config(parsed: argparse.Namespace) -> RouterConfig:
             ki=getattr(parsed, "ki", 0.005),
             kd=getattr(parsed, "kd", 0.25),
             min_allocation=getattr(parsed, "min_allocation", 0.03),
+            floor_rate_per_sec=FAIL_FAST_FLOOR_RATE_PER_SEC if fail_fast else None,
         )
 
     max_in_flight = getattr(parsed, "max_in_flight", None)
@@ -183,6 +199,8 @@ def build_router_config(parsed: argparse.Namespace) -> RouterConfig:
         routes=routes,
         pid_config=pid_config,
         max_in_flight=max_in_flight if max_in_flight > 0 else None,
+        gate_config=GateConfig() if fail_fast else None,
+        cascade=fail_fast,
     )
 
 

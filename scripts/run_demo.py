@@ -6,7 +6,7 @@ Boots:
 3. Background Synthetic Transaction Generator (15 TPS continuous stream)
 
 Usage:
-    python scripts/run_demo.py [--tps 15] [--no-traffic]
+    python scripts/run_demo.py [--tps 15] [--no-traffic] [--fail-fast]
 """
 
 from __future__ import annotations
@@ -23,7 +23,9 @@ import httpx
 import uvicorn
 
 from acquirer_sim.app import app as sim_app
-from router_core.app import app as router_app
+from router_core.app import app as default_router_app
+from router_core.app import create_router_app
+from router_core.server import build_router_config, parse_args
 
 logging.basicConfig(
     level=logging.INFO,
@@ -68,13 +70,26 @@ def main() -> None:
         action="store_true",
         help="Start servers without auto traffic",
     )
+    parser.add_argument(
+        "--fail-fast",
+        action="store_true",
+        help="Run the router as `python -m router_core.server --fail-fast` (Stage 1)",
+    )
     args = parser.parse_args()
+    router_app = (
+        create_router_app(config=build_router_config(parse_args(["--fail-fast"])))
+        if args.fail_fast
+        else default_router_app
+    )
 
     print("=" * 80)
     print(" LOOM MISSION CONTROL // ALL-IN-ONE DEMO CLUSTER LAUNCHER")
     print("=" * 80)
     print(" 1. Acquirer Simulator:   http://127.0.0.1:8001")
-    print(" 2. Loom Router Engine:   http://127.0.0.1:8000")
+    print(
+        " 2. Loom Router Engine:   http://127.0.0.1:8000"
+        + (" (fail-fast)" if args.fail_fast else "")
+    )
     print(" 3. WebSocket Telemetry:  ws://127.0.0.1:8000/ws/telemetry")
     print(" 4. React Dashboard UI:   http://localhost:5173")
     print("=" * 80)

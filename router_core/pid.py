@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Literal
 
@@ -63,6 +64,15 @@ class PIDConfig(BaseModel):
         ge=0.0,
         lt=0.20,
         description="Exploration floor w_min per acquirer to prevent dormant route starvation.",
+    )
+    floor_rate_per_sec: float | None = Field(
+        default=None,
+        gt=0.0,
+        description=(
+            "Stage 1: express the exploration floor as payments per second instead of a share. "
+            "Each acquirer's floor becomes min(min_allocation, floor_rate_per_sec / arrival "
+            "rate), so the traffic it costs no longer grows with TPS. None keeps the share."
+        ),
     )
     actuation_mode: Literal["stochastic", "deficit"] = Field(
         default="stochastic",
@@ -132,18 +142,52 @@ def _require_finite(name: str, values: dict[str, float]) -> None:
         raise ValueError(f"{name} must be finite, got {bad}")
 
 
+def _project_with_floors(
+    weights: dict[str, float], floors: Mapping[str, float]
+) -> dict[str, float]:
+    """Projection of ``project_to_bounded_simplex`` with a separate floor per acquirer."""
+    _require_finite("floors", dict(floors))
+    if set(floors) != set(weights):
+        raise ValueError(f"floors {sorted(floors)} do not match weights {sorted(weights)}")
+    if any(f < 0.0 for f in floors.values()) or sum(floors.values()) >= 1.0:
+        raise ValueError(f"floors must be >= 0 and sum to < 1, got {dict(floors)}")
+    k = len(weights)
+    clamped = {aid: max(floors[aid], w) for aid, w in weights.items()}
+    s = sum(clamped.values())
+    if abs(s - 1.0) <= 1e-12:
+        return {aid: w / s for aid, w in clamped.items()}
+    if s > 1.0:
+        excess = s - 1.0
+        headroom = sum(clamped[aid] - floors[aid] for aid in clamped)
+        result = {
+            aid: w - excess * (w - floors[aid]) / headroom if headroom > 0.0 else 1.0 / k
+            for aid, w in clamped.items()
+        }
+    else:
+        deficit = 1.0 - s
+        result = {aid: w + deficit * (w / s if s > 0 else 1.0 / k) for aid, w in clamped.items()}
+    total = sum(result.values())
+    return {aid: max(floors[aid], w / total) for aid, w in result.items()}
+
+
 def project_to_bounded_simplex(
     weights: dict[str, float],
     min_floor: float = 0.0,
+    floors: Mapping[str, float] | None = None,
 ) -> dict[str, float]:
     """Project an unconstrained allocation vector onto the probability simplex with a minimum floor.
 
     Ensures that for all i:
         w_i >= min_floor and sum(w_i) == 1.0
 
+    ``floors``, when given, replaces ``min_floor`` with one floor per acquirer (Stage 1: zero
+    for an acquirer whose gate is open, a rate-based floor for the others).
+
     Raises ValueError for NaN or infinite weights rather than mapping them to the floor.
     """
     _require_finite("weights", weights)
+    if floors is not None and len(weights) > 1:
+        return _project_with_floors(weights, floors)
     k = len(weights)
     if k == 0:
         return {}
@@ -200,6 +244,7 @@ def calculate_pid_step(
     state: PIDState,
     config: PIDConfig,
     dt: float = 1.0,
+    floors: Mapping[str, float] | None = None,
 ) -> PIDStepResult:
     """Calculate one discrete PID smoothing step as a pure, deterministic function.
 
@@ -208,7 +253,8 @@ def calculate_pid_step(
     - Zero-sum invariant: sum(e_i) == 0.0, sum(w_i) == 1.0.
     - Anti-windup clamping to [-config.integral_max, +config.integral_max].
     - Zero derivative kick when config.derivative_on_measurement is True.
-    - Bounded simplex projection enforcing w_i >= config.min_allocation.
+    - Bounded simplex projection enforcing w_i >= config.min_allocation, or w_i >= floors[i]
+      when per-acquirer ``floors`` are given.
     """
     if not math.isfinite(dt):
         raise ValueError(f"dt must be finite, got {dt}")
@@ -309,6 +355,7 @@ def calculate_pid_step(
     smoothed_allocation = project_to_bounded_simplex(
         weights=pre_projection,
         min_floor=config.min_allocation,
+        floors=floors,
     )
 
     # 7. Construct immutable results

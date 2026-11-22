@@ -2,6 +2,27 @@
 
 *Handoff for continuing Loom in a fresh Claude Code setup (new account, no prior sessions or memory). Written 2026-10-24 against branch `audit-value-dispatch-dashboard`, local HEAD `caf3784`.*
 
+> **Update (2026-11-16, Stage 1).** Stage 1 of the proposal is implemented on branch `audit-fail-fast`. A PR into `main` is open and not merged at this writing.
+>
+> - **What it adds** (all opt-in, `python -m router_core.server --fail-fast`, suite policy `loom_failfast`; the served default is unchanged):
+>   - a per-acquirer technical gate (`router_core/gate.py`: CUSUM, overdue-attempt evidence, one probe at a time on a wall-clock backoff);
+>   - one cascade retry after a safe failure, with `RoutingResult.attempts`;
+>   - per-acquirer floors and a rate floor in `router_core/pid.py`.
+>
+>   The design and the three train-seed changes are in the decisions-log entry *[Audit F-01, F-17, F-16, Stage 1]*.
+> - **Results** (200 held-out seeds, `docs/results/suite.md`): against the competent breaker Loom fail-fast wins 17, ties 2 and loses 7 of 26 scenarios.
+>   - The losses are both approval gray failures, `capacity_429_2_acquirers`, `capacity_collapse_2_acquirers`, `capacity_collapse_3_acquirers` and both soaks.
+>   - The −0.15 pp acceptance margin is met in 20 of 26 scenarios.
+>   - The costs are 0.16 extra hops per payment at 0.5 TPS, and a slower restore after a timeout outage (34.5 s against 22.2 s).
+> - **Known gaps.**
+>   - The ledger stores only the last attempt of a cascaded payment (Stage 5).
+>   - The demo's serial traffic generator never exercises the overdue check.
+>   - Decision overhead (machine-dependent, `--timing`, 2 test seeds, 3 scenarios): `decide()` p99 160–237 µs for `loom_failfast`, against 134–157 µs for Loom served in the same run. The two-seed p99 is noisy.
+> - **Next.**
+>   - Decide whether `--fail-fast` becomes the served default; that needs its own decisions-log entry.
+>   - Then Stage 2: approval change detection, which addresses the gray-failure losses.
+> - **Tests.** 477 Python tests (89% coverage) and 39 Vitest tests.
+
 > **Update (2026-11-16).** Several things below are out of date; the rest of the file is the 2026-10-24 snapshot, kept as written.
 >
 > - **PRs.** PR #7 (Phase 4b) and PR #8 (Phase 5: Stage 0 of [`docs/001-router_enhancements.md`](001-router_enhancements.md), F-01, F-15, F-30) are merged into `main`. `main` is the working base; §3's unpushed commits and §10's starter prompt no longer apply.

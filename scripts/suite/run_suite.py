@@ -39,6 +39,10 @@ from scripts.suite.scenarios import AMOUNT, SCENARIOS, run_seeds, select
 
 # Paired comparisons reported for every scenario: (first, second); difference = first - second.
 COMPARISONS: list[tuple[str, str]] = [
+    ("loom_failfast", "competent"),
+    ("loom_failfast", "loom_served"),
+    ("loom_failfast", "sr_window"),
+    ("loom_failfast", "sw_ucb"),
     ("loom_served", "competent"),
     ("loom_bench", "competent"),
     ("loom_served", "static_m3"),
