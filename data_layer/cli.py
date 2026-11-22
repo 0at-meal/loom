@@ -7,6 +7,7 @@ runtime state inspection, and safe demo rehearsal resets:
     python -m data_layer.cli status
     python -m data_layer.cli inspect-state
     python -m data_layer.cli reset-demo
+    python -m data_layer.cli export-priors --out priors.json   # Stage 2 warm start
 """
 
 from __future__ import annotations
@@ -587,6 +588,82 @@ def cmd_reset_demo(
 
 
 # ==============================================================================
+# Subcommand: export-priors
+# ==============================================================================
+def export_priors(db_path: str, hours: float, now: float | None = None) -> dict[str, Any]:
+    """Per-acquirer issuer approval counts from the ledger's last ``hours`` (read-only).
+
+    Counts rows booked AUTHORIZED or ISSUER_DECLINE (technical failures say nothing about
+    the issuer). ``window_sec`` is the span the counted rows cover, used by the router to
+    spread them over time when it seeds its approval beliefs (Stage 2 warm start).
+    """
+    if hours <= 0.0:
+        raise ValueError(f"hours must be > 0, got {hours}")
+    if not os.path.exists(db_path):
+        raise FileNotFoundError(db_path)
+    end = time.time() if now is None else now
+    since = end - hours * 3600.0
+    # mode=ro: the ledger is append-only and this command must never write to it.
+    conn = sqlite3.connect(f"file:{pathlib.Path(db_path).resolve().as_posix()}?mode=ro", uri=True)
+    try:
+        rows = conn.execute(
+            """
+            SELECT chosen_acquirer,
+                   SUM(outcome = 'AUTHORIZED'),
+                   SUM(outcome = 'ISSUER_DECLINE'),
+                   MIN(timestamp)
+            FROM transactions
+            WHERE outcome IN ('AUTHORIZED', 'ISSUER_DECLINE') AND timestamp >= ?
+            GROUP BY chosen_acquirer
+            ORDER BY chosen_acquirer
+            """,
+            (since,),
+        ).fetchall()
+    finally:
+        conn.close()
+    acquirers: dict[str, Any] = {}
+    first = end
+    for acquirer_id, approved, declined, earliest in rows:
+        n = int(approved) + int(declined)
+        acquirers[str(acquirer_id)] = {
+            "approved": int(approved),
+            "issuer_declined": int(declined),
+            "observations": n,
+            "approval_rate": int(approved) / n,
+        }
+        first = min(first, float(earliest))
+    return {
+        "generated_at": end,
+        "hours": hours,
+        "window_sec": max(1.0, end - first),
+        "acquirers": acquirers,
+    }
+
+
+def cmd_export_priors(
+    db_path: str | None = None,
+    hours: float = 24.0,
+    out: str | None = None,
+    config: DataLayerConfig | None = None,
+) -> int:
+    """Write approval priors from the ledger as JSON (stdout, or ``out``) for --priors."""
+    cfg = config or DataLayerConfig()
+    target_db = db_path or cfg.sqlite_db_path
+    try:
+        priors = export_priors(target_db, hours)
+    except (sqlite3.Error, OSError, ValueError) as exc:
+        print(f"[ERROR] Could not export priors from '{target_db}': {exc}", file=sys.stderr)
+        return 1
+    text = json.dumps(priors, indent=2) + "\n"
+    if out:
+        pathlib.Path(out).write_text(text, encoding="utf-8")
+        print(f"Wrote priors for {len(priors['acquirers'])} acquirer(s) to {out}")
+    else:
+        print(text, end="")
+    return 0
+
+
+# ==============================================================================
 # Main CLI Parser & Dispatcher
 # ==============================================================================
 def create_parser() -> argparse.ArgumentParser:
@@ -674,6 +751,19 @@ def create_parser() -> argparse.ArgumentParser:
         help="Do not touch SQLite database.",
     )
 
+    # export-priors
+    priors_parser = subparsers.add_parser(
+        "export-priors",
+        help="Export per-acquirer issuer approval counts from the ledger (read-only).",
+    )
+    priors_parser.add_argument("--db-path", default=None, help="Path to SQLite database file.")
+    priors_parser.add_argument(
+        "--hours", type=float, default=24.0, help="Look back this many hours (default: 24)."
+    )
+    priors_parser.add_argument(
+        "--out", default=None, help="Write the JSON here instead of to stdout."
+    )
+
     return parser
 
 
@@ -703,6 +793,10 @@ def main(args: list[str] | None = None) -> int:
             force=parsed_args.force,
             skip_redis=parsed_args.skip_redis,
             skip_sqlite=parsed_args.skip_sqlite,
+        )
+    elif parsed_args.command == "export-priors":
+        return cmd_export_priors(
+            db_path=parsed_args.db_path, hours=parsed_args.hours, out=parsed_args.out
         )
     else:
         parser.print_help()

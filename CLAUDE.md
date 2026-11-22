@@ -36,6 +36,8 @@ python -m acquirer_sim.server --port 8001      # or each service on its own
 python -m router_core.server --port 8000       # flags: --no-pid --kp --ki --kd --min-allocation
                                                #   --half-life-sec --max-in-flight --no-ledger --redis
                                                #   --fail-fast (Stage 1 gate + cascade + rate floor; opt-in)
+                                               #   --long-memory (Stage 2 multi-timescale beliefs; opt-in)
+                                               #   --priors FILE (Stage 2 warm start from export-priors)
 uvicorn router_core.app:app --reload           # auto-reload (default three-acquirer topology)
 python scripts/simulate_outage.py --acquirer-id acquirer_alpha --action trigger|clear|pulse
 
@@ -51,10 +53,13 @@ python scripts/concurrency_inflight.py --seeds 10
 python scripts/suite/run_suite.py --policies all --seeds 200 --split test --out-json docs/results/suite.json
 python scripts/suite/report.py docs/results/suite.json --out docs/results/suite.md
 python scripts/suite/run_suite.py --scenarios low_tps --seeds 2 --split train --workers 1   # quick check
+python scripts/suite/run_suite.py --policies loom_longmem,competent --merge-from docs/results/suite.json ...
+                                                 # reuse unchanged policies; refuses if a shared one moved
 python -m tests.router_core.loom_golden --write   # re-record golden traces (only on purpose)
 
 # Data layer CLI
 python -m data_layer.cli init-db | ping | status | inspect-state | reset-demo --force
+python -m data_layer.cli export-priors --hours 24 --out priors.json   # read-only ledger export
 ```
 
 Redis is optional everywhere (`docker compose up -d redis`); tests use `fakeredis`, and the router only touches Redis with `--redis`.

@@ -66,6 +66,12 @@ class BanditStateRegistry:
             for acquirer_id, state in self._acquirers.items()
         }
 
+    def sample_psr_draws(
+        self, rng: np.random.Generator, now: float, n: int
+    ) -> dict[str, np.ndarray]:
+        """``n`` independent Thompson draws of each acquirer's success chance, decayed to now."""
+        return {aid: state.sample_psr_many(rng, n, now) for aid, state in self._acquirers.items()}
+
     def get_state(self, acquirer_id: str, now: float | None = None) -> AcquirerStateSnapshot:
         """Return state snapshot for a single acquirer."""
         state = self._acquirers.get(acquirer_id)

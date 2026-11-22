@@ -18,7 +18,13 @@ import numpy as np
 from router_core.bandit import BanditStateRegistry
 from router_core.gate import TechnicalGate
 from router_core.models import RouterConfig
-from router_core.pid import PIDConfig, PIDDiagnostics, PIDState, calculate_pid_step
+from router_core.pid import (
+    PIDConfig,
+    PIDDiagnostics,
+    PIDState,
+    calculate_pid_step,
+    project_to_bounded_simplex,
+)
 from router_core.state import AcquirerStateSnapshot, Outcome
 from router_core.value_policy import (
     ValueScaledExplorationConfig,
@@ -193,7 +199,9 @@ class LoomPolicy:
     acquirers out of the allocation and probes them on the wall clock, one cascade retry
     (``RouterConfig.cascade``) and an exploration floor expressed as a rate
     (``PIDConfig.floor_rate_per_sec``). With all three off, decisions are bit-for-bit the
-    Stage 0 ones.
+    Stage 0 ones. Stage 2 adds, also off unless configured: a win-probability PID setpoint
+    from ``RouterConfig.allocation_draws`` joint draws, multi-timescale beliefs (in the
+    registry's ``AcquirerStateConfig``) and ``withhold_gated_failures``.
     """
 
     name = "loom"
@@ -361,7 +369,13 @@ class LoomPolicy:
         blocked = self._blocked()
 
         # 1. Perception, Value-Scaled Policy, PID Smoothing & Selection
-        raw_samples = self._registry.sample_all(rng=self._rng, now=now)
+        draws: dict[str, np.ndarray] | None = None
+        if self._config.allocation_draws is not None:
+            # Stage 2: one batch of joint draws; its first row is the reported sample.
+            draws = self._registry.sample_psr_draws(self._rng, now, self._config.allocation_draws)
+            raw_samples = {aid: float(d[0]) for aid, d in draws.items()}
+        else:
+            raw_samples = self._registry.sample_all(rng=self._rng, now=now)
         effective_samples = raw_samples
         adjusted_samples: dict[str, float] | None = None
         shrinkage: float | None = None
@@ -433,14 +447,26 @@ class LoomPolicy:
             propensities = one_hot(self._acquirer_ids, selected_id)
         elif self._pid_config is not None and self._pid_state is not None:
             eligible = [aid for aid in self._acquirer_ids if aid not in blocked]
-            # Thompson sampling target allocation using effective samples
-            if blocked:
-                win_id = max(eligible, key=lambda aid: (effective_samples[aid], aid))
-            else:
-                win_id = max(
-                    effective_samples.keys(), key=lambda aid: (effective_samples[aid], aid)
+            floors = self._floors(blocked)
+            if draws is not None:
+                # Stage 2: win probabilities over many joint draws, made feasible (floors)
+                # before the PID, so the PID tracks a reachable setpoint (AUDIT F-25).
+                target_allocation = project_to_bounded_simplex(
+                    self._win_probabilities(draws, eligible, ctx.amount),
+                    min_floor=self._pid_config.min_allocation,
+                    floors=floors,
                 )
-            target_allocation = {aid: 1.0 if aid == win_id else 0.0 for aid in effective_samples}
+            else:
+                # Thompson sampling target allocation using effective samples
+                if blocked:
+                    win_id = max(eligible, key=lambda aid: (effective_samples[aid], aid))
+                else:
+                    win_id = max(
+                        effective_samples.keys(), key=lambda aid: (effective_samples[aid], aid)
+                    )
+                target_allocation = {
+                    aid: 1.0 if aid == win_id else 0.0 for aid in effective_samples
+                }
 
             # PID smoothing step
             step_result = calculate_pid_step(
@@ -449,7 +475,7 @@ class LoomPolicy:
                 state=self._pid_state,
                 config=self._pid_config,
                 dt=1.0,
-                floors=self._floors(blocked),
+                floors=floors,
             )
             self._current_allocation = step_result.smoothed_allocation
             self._pid_state = step_result.next_state
@@ -524,6 +550,26 @@ class LoomPolicy:
         )
         return decision, trace
 
+    def _win_probabilities(
+        self, draws: Mapping[str, np.ndarray], eligible: list[str], amount: float
+    ) -> dict[str, float]:
+        """Share of the joint Thompson draws each eligible acquirer wins.
+
+        With value scaling on, every draw is blended toward the posterior means by
+        lambda(amount) first, as the single-draw setpoint does.
+        """
+        matrix = np.stack([draws[aid] for aid in eligible], axis=1)
+        n = matrix.shape[0]
+        cfg = self._value_scaled_config
+        if cfg is not None and cfg.enabled and amount > 0.0:
+            lam = cfg.calculate_shrinkage(amount)
+            states = self._registry.get_all_states()
+            means = np.array([states[aid].expected_psr for aid in eligible])
+            matrix = (1.0 - lam) * matrix + lam * means
+        wins = np.bincount(np.argmax(matrix, axis=1), minlength=len(eligible))
+        shares = {aid: float(wins[i]) / n for i, aid in enumerate(eligible)}
+        return {aid: shares.get(aid, 0.0) for aid in self._acquirer_ids}
+
     def _blocked(self) -> frozenset[str]:
         """Acquirers that may not get ordinary traffic now: gated ones, unless all are gated.
 
@@ -562,9 +608,17 @@ class LoomPolicy:
 
         An observation without an outcome (router-side failure) is not evidence and is
         ignored by the beliefs. With a gate, the attempt is also applied to its CUSUM, probe
-        or overdue tracking.
+        or overdue tracking; with ``withhold_gated_failures``, a technical failure of a probe
+        or of an acquirer whose gate is not closed goes to the gate only.
         """
-        if observation.outcome is not None:
+        gate = self._gate
+        withheld = (
+            self._config.withhold_gated_failures
+            and gate is not None
+            and observation.outcome == Outcome.TECHNICAL_FAILURE
+            and (decision.reason == "gate_probe" or not gate.is_closed(decision.acquirer_id))
+        )
+        if observation.outcome is not None and not withheld:
             self._registry.record_outcome(
                 acquirer_id=decision.acquirer_id,
                 success=observation.authorized,

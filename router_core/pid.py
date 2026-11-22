@@ -74,6 +74,14 @@ class PIDConfig(BaseModel):
             "rate), so the traffic it costs no longer grows with TPS. None keeps the share."
         ),
     )
+    strict_integral_clamp: bool = Field(
+        default=False,
+        description=(
+            "Stage 2 (AUDIT F-25): after the zero-sum centring, scale the integral vector "
+            "back so no entry exceeds integral_max. Off keeps the original clamp-then-centre, "
+            "which lets an entry reach about 1.3 x integral_max with three or more acquirers."
+        ),
+    )
     actuation_mode: Literal["stochastic", "deficit"] = Field(
         default="stochastic",
         description=(
@@ -325,6 +333,12 @@ def calculate_pid_step(
 
     mean_clamped_i = sum(clamped_integral.values()) / k
     accumulated_error = {aid: clamped_integral[aid] - mean_clamped_i for aid in keys}
+    # Centring can push one entry past the clamp when K >= 3 (AUDIT F-25); scaling the
+    # centred vector back keeps it zero-sum and every entry within +/- integral_max.
+    peak = max(abs(v) for v in accumulated_error.values())
+    if config.strict_integral_clamp and peak > config.integral_max:
+        scale = config.integral_max / peak
+        accumulated_error = {aid: v * scale for aid, v in accumulated_error.items()}
     i_term = {aid: config.ki * accumulated_error[aid] for aid in keys}
 
     # 4. Derivative term and derivative kick mitigation

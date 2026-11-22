@@ -21,16 +21,20 @@ from typing import Any
 
 LOOM = "loom_served"
 FAILFAST = "loom_failfast"
+LONGMEM = "loom_longmem"
+LONGMEM_WARM = "loom_longmem_warm"
 # Policies the acceptance criteria are applied to, when present in the JSON.
-CANDIDATES = (LOOM, FAILFAST)
+CANDIDATES = (LOOM, FAILFAST, LONGMEM, LONGMEM_WARM)
 COMPETENT = "competent"
 # Acceptance criterion 1 of the proposal: lower CI bound of (Loom - competent) >= -0.15 pp.
 TIE_MARGIN_PP = -0.15
-DYNAMICS_POLICIES = (LOOM, FAILFAST, "loom_bench", COMPETENT, "static_m3")
+DYNAMICS_POLICIES = (LOOM, FAILFAST, LONGMEM, "loom_bench", COMPETENT, "static_m3")
 SHORT = {
     "loom_served": "Loom served",
     "loom_bench": "Loom bench",
     "loom_failfast": "Loom fail-fast",
+    "loom_longmem": "Loom long-memory",
+    "loom_longmem_warm": "Loom long-memory warm",
     "loom_raw": "Loom no PID",
     "static_m3": "Static M=3",
     "competent": "Competent",
@@ -227,9 +231,9 @@ def acceptance(data: dict[str, Any]) -> list[str]:
 
 def readme_table(data: dict[str, Any]) -> list[str]:
     """Compact table for the README: PSR of the main policies and Loom - competent."""
-    main = (LOOM, FAILFAST, "loom_bench", COMPETENT, "static_m3", "oracle")
+    main = (LOOM, FAILFAST, LONGMEM, LONGMEM_WARM, COMPETENT, "static_m3", "oracle")
     pols = [p for p in main if p in data["policies"]]
-    cand = FAILFAST if FAILFAST in data["policies"] else LOOM
+    cand = next((c for c in (LONGMEM, FAILFAST) if c in data["policies"]), LOOM)
     rows = []
     for name, e in data["scenarios"].items():
         c = e["comparisons"].get(f"{cand}_vs_{COMPETENT}")
@@ -270,8 +274,12 @@ def render(data: dict[str, Any]) -> str:
         "The criteria are the targets of `docs/001-router_enhancements.md` for the finished "
         "redesign, applied here to each stage as it stands: *Loom served* is the served "
         "default (Stage 0 behaviour), *Loom fail-fast* adds Stage 1 (technical gate, one "
-        "cascade retry, rate floor; `python -m router_core.server --fail-fast`). Criterion 2 "
-        "(wins with the CI excluding 0) is read from the paired tables below.",
+        "cascade retry, rate floor; `python -m router_core.server --fail-fast`), *Loom "
+        "long-memory* adds Stage 2 (multi-timescale beliefs, win-probability setpoint; "
+        "`--fail-fast --long-memory`), and *Loom long-memory warm* starts that from a "
+        "simulated previous day's ledger (`--priors`; see `previous_day_priors` in "
+        "`scripts/suite/policies.py`). Criterion 2 (wins with the CI excluding 0) is read from "
+        "the paired tables below.",
         *acceptance(data),
         "",
         "## Mean PSR (%)",

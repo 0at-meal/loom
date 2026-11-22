@@ -244,6 +244,11 @@ class World:
         """The timeline."""
         return self._events
 
+    @property
+    def segments(self) -> tuple[Segment, ...]:
+        """Issuer segments with their traffic shares (one default segment if none given)."""
+        return self._segments
+
     def profile(self, acquirer_id: str) -> AcquirerProfile:
         """Steady-state profile of an acquirer."""
         return self._profiles[acquirer_id]

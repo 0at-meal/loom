@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 
+import numpy as np
+
 from acquirer_sim.world import World
 from baseline_router.models import FailoverPolicyConfig
 from baseline_router.policies import (
@@ -27,7 +29,11 @@ from router_core.policy import (
     RoutingPolicy,
     one_hot,
 )
-from router_core.server import FAIL_FAST_FLOOR_RATE_PER_SEC
+from router_core.server import (
+    FAIL_FAST_FLOOR_RATE_PER_SEC,
+    apply_long_memory,
+    apply_warm_priors,
+)
 from router_core.state import DEFAULT_HALF_LIFE_SEC, AcquirerStateConfig
 
 # compare_psr.py's benchmark configuration (kept in step by tests/scripts/test_suite.py).
@@ -135,6 +141,44 @@ def failfast_router_config(ids: Sequence[str], seed: int) -> RouterConfig:
     )
 
 
+def longmem_router_config(ids: Sequence[str], seed: int) -> RouterConfig:
+    """Fail-fast plus Stage 2 (``python -m router_core.server --fail-fast --long-memory``)."""
+    return apply_long_memory(failfast_router_config(ids, seed))
+
+
+# Warm start for 'loom_longmem_warm': a simulated previous day's ledger holding this many
+# issuer outcomes per acquirer (half a day at 1 TPS), spread over 24 h.
+WARM_OBSERVATIONS = 43_200
+WARM_WINDOW_SEC = 86_400.0
+
+
+def previous_day_priors(world: World, ids: Sequence[str], seed: int) -> dict[str, dict[str, float]]:
+    """What ``export-priors`` would give after a steady previous day in this world.
+
+    Per acquirer, Binomial(WARM_OBSERVATIONS, steady approval rate at t=0, averaged over
+    issuer segments by share). Only the scenario's starting rates are used, never its
+    incidents; the draw has its own stream so other policies' draws are unchanged.
+    """
+    rng = np.random.default_rng(np.random.SeedSequence([seed, 3]))
+    out: dict[str, dict[str, float]] = {}
+    for aid in ids:
+        rate = sum(s.share * world.approval_rate(aid, s.name, 0.0) for s in world.segments)
+        approved = int(rng.binomial(WARM_OBSERVATIONS, rate))
+        out[aid] = {
+            "rate": min(max(approved / WARM_OBSERVATIONS, 1e-4), 1.0 - 1e-4),
+            "observations": float(WARM_OBSERVATIONS),
+            "window_sec": WARM_WINDOW_SEC,
+        }
+    return out
+
+
+def longmem_warm_router_config(ids: Sequence[str], world: World, seed: int) -> RouterConfig:
+    """``loom_longmem`` started with ``--priors`` from a simulated previous day."""
+    return apply_warm_priors(
+        longmem_router_config(ids, seed), previous_day_priors(world, ids, seed)
+    )
+
+
 def raw_router_config(ids: Sequence[str], seed: int) -> RouterConfig:
     """Served half-life without the PID: raw Thompson winner-take-all."""
     return RouterConfig(routes=_routes(ids, DEFAULT_HALF_LIFE_SEC), pid_config=None, seed=seed)
@@ -154,6 +198,12 @@ POLICIES: dict[str, PolicyFactory] = {
     "loom_bench": lambda ids, w, s: _named(LoomPolicy(bench_router_config(ids, s)), "loom_bench"),
     "loom_failfast": lambda ids, w, s: _named(
         LoomPolicy(failfast_router_config(ids, s)), "loom_failfast"
+    ),
+    "loom_longmem": lambda ids, w, s: _named(
+        LoomPolicy(longmem_router_config(ids, s)), "loom_longmem"
+    ),
+    "loom_longmem_warm": lambda ids, w, s: _named(
+        LoomPolicy(longmem_warm_router_config(ids, w, s)), "loom_longmem_warm"
     ),
     "loom_raw": lambda ids, w, s: _named(LoomPolicy(raw_router_config(ids, s)), "loom_raw"),
     "static_m3": lambda ids, w, s: _named(

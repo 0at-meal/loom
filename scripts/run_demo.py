@@ -6,7 +6,8 @@ Boots:
 3. Background Synthetic Transaction Generator (15 TPS continuous stream)
 
 Usage:
-    python scripts/run_demo.py [--tps 15] [--no-traffic] [--fail-fast]
+    python scripts/run_demo.py [--tps 15] [--no-traffic] [--fail-fast] [--long-memory]
+                               [--priors priors.json]
 """
 
 from __future__ import annotations
@@ -75,10 +76,25 @@ def main() -> None:
         action="store_true",
         help="Run the router as `python -m router_core.server --fail-fast` (Stage 1)",
     )
+    parser.add_argument(
+        "--long-memory",
+        action="store_true",
+        help="Add the router's --long-memory (Stage 2: multi-timescale beliefs)",
+    )
+    parser.add_argument(
+        "--priors",
+        default=None,
+        help="Pass --priors to the router (export-priors JSON; Stage 2 warm start)",
+    )
     args = parser.parse_args()
+    router_flags = (
+        (["--fail-fast"] if args.fail_fast else [])
+        + (["--long-memory"] if args.long_memory else [])
+        + (["--priors", args.priors] if args.priors else [])
+    )
     router_app = (
-        create_router_app(config=build_router_config(parse_args(["--fail-fast"])))
-        if args.fail_fast
+        create_router_app(config=build_router_config(parse_args(router_flags)))
+        if router_flags
         else default_router_app
     )
 
@@ -88,7 +104,7 @@ def main() -> None:
     print(" 1. Acquirer Simulator:   http://127.0.0.1:8001")
     print(
         " 2. Loom Router Engine:   http://127.0.0.1:8000"
-        + (" (fail-fast)" if args.fail_fast else "")
+        + (f" ({' '.join(router_flags)})" if router_flags else "")
     )
     print(" 3. WebSocket Telemetry:  ws://127.0.0.1:8000/ws/telemetry")
     print(" 4. React Dashboard UI:   http://localhost:5173")
